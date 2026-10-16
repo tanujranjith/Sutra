@@ -496,7 +496,8 @@ test('mobile Sync dialog fits the dynamic viewport and keeps actions touchable',
   expect(layout.top).toBeGreaterThanOrEqual(0);
   expect(layout.bottom).toBeLessThanOrEqual(layout.viewportHeight + 1);
   expect(layout.inputFontSize).toBeGreaterThanOrEqual(16);
-  expect(layout.shortestAction).toBeGreaterThanOrEqual(44);
+  // Ignore sub-hundredth-pixel layout rounding, not undersized touch targets.
+  expect(Math.round(layout.shortestAction * 100) / 100).toBeGreaterThanOrEqual(44);
   expect(layout.documentOverflow).toBeLessThanOrEqual(2);
 });
 

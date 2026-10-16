@@ -85,7 +85,9 @@ test('Settings search supports results, recovery, clear, and keyboard focus', as
   await expect(page.locator('#settingsSearchClearBtn')).toBeVisible();
   await expect(page.locator('#settingsSearchShortcut')).toBeHidden();
 
-  await page.fill('#settingsSearchInput', 'zzzz-no-setting');
+  // Both terms are absent from the Settings index; avoid common words such
+  // as "no" that can validly produce partial matches.
+  await page.fill('#settingsSearchInput', 'purple elephant');
   await expect(page.locator('#settingsSearchEmpty')).toBeVisible();
   await expect(page.locator('#settingsSearchHint')).toHaveText('0 matches across 0 categories.');
   await page.locator('#settingsSearchEmptyClearBtn').click();
@@ -142,7 +144,9 @@ test('Settings search understands everyday phrases and typos, then focuses the r
   const autosaveTrigger = autosave.locator('xpath=..').locator('.nf-select-trigger');
   await expect(autosaveTrigger).toBeFocused();
   await autosaveTrigger.click();
-  await page.getByRole('option', { name: '8 s', exact: true }).click();
+  // The enhancer keeps the native select beside its custom listbox. Choose
+  // the visible custom option that the student interacted with.
+  await page.locator('.nf-select-menu.is-open').getByRole('option', { name: '8 s', exact: true }).click();
   await expect(autosave.locator('xpath=ancestor::*[@data-setting-item]')).toHaveClass(/is-dirty/);
 
   await page.fill('#settingsSearchInput', 'backup password');
@@ -218,7 +222,7 @@ test('Settings mobile hierarchy stays contained and keeps the canonical Save and
   await page.locator('[data-settings-nav="data"]').click();
   await expect(page.locator('[data-settings-section="data"]')).toBeVisible();
   await page.locator('#settingsBackToCategories').click();
-  await page.fill('#settingsSearchInput', 'zzzz-no-setting');
+  await page.fill('#settingsSearchInput', 'purple elephant');
   await expect(page.locator('#settingsSearchEmpty')).toBeVisible();
   await expect(page.locator('#settingsBackToCategories')).toBeVisible();
   await page.locator('#settingsBackToCategories').click();

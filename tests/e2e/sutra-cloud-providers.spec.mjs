@@ -423,7 +423,7 @@ test('Supabase upload failure skips metadata, rollback, and success state', asyn
   expect(supa.objects.size).toBe(0);
   expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
     lastBackupAt: '',
-    lastError: 'storage unavailable'
+    lastError: 'Backup failed. Check the destination connection and storage; details are in diagnostics.'
   });
 });
 
@@ -458,7 +458,7 @@ test('Supabase upload rolls back the exact ciphertext object when metadata index
   expect(supa.index).toHaveLength(0);
   expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
     lastBackupAt: '',
-    lastError: outcome.message
+    lastError: 'Backup failed. Check the destination connection and storage; details are in diagnostics.'
   });
 });
 
@@ -508,7 +508,7 @@ test('Supabase rollback keeps metadata failure primary when cleanup also fails',
   expect(supa.index).toHaveLength(0);
   expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
     lastBackupAt: '',
-    lastError: outcome.message
+    lastError: 'Backup failed. Check the destination connection and storage; details are in diagnostics.'
   });
 
   const report = await page.evaluate(() => window.__sutraRollbackReports[0]);

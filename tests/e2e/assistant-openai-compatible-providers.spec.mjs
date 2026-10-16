@@ -153,8 +153,8 @@ test('NVIDIA, Mistral, and Together chat requests use their audited OpenAI-compa
 
 test('an explicit max_tokens rejection retries OpenAI-compatible requests with the named alias', async ({ page }) => {
   const fixtures = [
-    { id: 'openai', endpoint: 'https://api.openai.com/v1/chat/completions', key: 'openai-token-compat-test-key' },
-    { id: 'groq', endpoint: 'https://api.groq.com/openai/v1/chat/completions', key: 'groq-token-compat-test-key' }
+    { id: 'openai', endpoint: 'https://api.openai.com/v1/chat/completions', key: 'openai-token-compat-test-key', model: 'gpt-4o-mini' },
+    { id: 'groq', endpoint: 'https://api.groq.com/openai/v1/chat/completions', key: 'groq-token-compat-test-key', model: 'llama-3.3-70b-versatile' }
   ];
   const requests = [];
   const attempts = new Map();
@@ -192,10 +192,10 @@ test('an explicit max_tokens rejection retries OpenAI-compatible requests with t
   for (const fixture of fixtures) {
     await page.evaluate(provider => {
       window.SutraProviderMeta.saveSessionKey(provider.id, provider.key);
-      window.SutraProviderMeta.selectModel(provider.id, 'gpt-6-luna');
+      window.SutraProviderMeta.selectModel(provider.id, provider.model);
     }, fixture);
     const result = await page.evaluate(() => window.SutraIntelligenceBridge.extractStructured({ userText: 'Return a small JSON object.' }));
-    expect(result).toMatchObject({ ok: true, value: { ok: true }, provider: fixture.id, model: 'gpt-6-luna' });
+    expect(result).toMatchObject({ ok: true, value: { ok: true }, provider: fixture.id, model: fixture.model });
 
     const providerRequests = requests.filter(request => request.provider === fixture.id).map(request => request.body);
     expect(providerRequests).toHaveLength(2);
@@ -289,7 +289,7 @@ test('an unrelated OpenAI-compatible 400 does not trigger a parameter rewrite re
   await openAssistant(page);
   await page.evaluate(() => {
     window.SutraProviderMeta.saveSessionKey('openai', 'openai-token-compat-test-key');
-    window.SutraProviderMeta.selectModel('openai', 'gpt-6-luna');
+    window.SutraProviderMeta.selectModel('openai', 'gpt-4o-mini');
   });
   const result = await page.evaluate(() => window.SutraIntelligenceBridge.extractStructured({ userText: 'Return a small JSON object.' }));
 

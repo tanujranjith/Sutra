@@ -40,17 +40,14 @@ async function openApp(page) {
 }
 
 async function configureProvider(page, { provider, key, model }) {
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
   await page.evaluate(({ provider, key, model }) => {
-    localStorage.setItem('chat_provider', provider);
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
-    sessionStorage.setItem(provider + '_api_key', key);
-    const ps = document.getElementById('chatProviderSelect');
-    if (ps) ps.value = provider;
-    const custom = document.getElementById('chatCustomModelInput');
-    const sel = document.getElementById('chatModelSelect');
-    if (sel) sel.value = '';
-    if (custom) custom.value = model || '';
+    window.SutraProviderMeta.saveSessionKey(provider, key);
+    window.SutraProviderMeta.selectModel(provider, model || '');
   }, { provider, key, model });
+  await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel()))
+    .toEqual({ provider, model: model || '' });
 }
 
 // Non-streaming stub (no `.body`) so the deterministic non-stream usage path runs.

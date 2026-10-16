@@ -63,21 +63,15 @@ async function openApp(page) {
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('intelligence-harness-ready'));
 }
 
-// Configure a provider + model and skip the (already-covered) consent modal.
-// The provider-change handler repopulates the model fields asynchronously, so
-// the custom model must be set AFTER that settles (and verified).
+// Configure a provider + model through the same provider-scoped API the request
+// path reads, then verify the active selection before exercising the harness.
 async function armProvider(page, provider, model) {
-  await page.evaluate((p) => {
-    sessionStorage.setItem(`${p}_api_key`, 'mock-key-for-tests');
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
+  await page.evaluate(({ provider: p, model: m }) => {
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
-    const sel = document.getElementById('chatProviderSelect');
-    if (sel) { sel.value = p; sel.dispatchEvent(new Event('change', { bubbles: true })); }
-  }, provider);
-  await page.waitForTimeout(300);
-  await page.evaluate((m) => {
-    const custom = document.getElementById('chatCustomModelInput');
-    if (custom) { custom.value = m; custom.dispatchEvent(new Event('input', { bubbles: true })); }
-  }, model);
+    window.SutraProviderMeta.saveSessionKey(p, 'mock-key-for-tests');
+    window.SutraProviderMeta.selectModel(p, m);
+  }, { provider, model });
   await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel().model)).toBe(model);
 }
 

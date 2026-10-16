@@ -54,17 +54,12 @@ async function openApp(page) {
 }
 
 async function armProvider(page, provider, model) {
-  await page.evaluate((p) => {
-    sessionStorage.setItem(`${p}_api_key`, 'mock-key-for-tests');
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
+  await page.evaluate(({ provider: p, model: mdl }) => {
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
-    const sel = document.getElementById('chatProviderSelect');
-    if (sel) { sel.value = p; sel.dispatchEvent(new Event('change', { bubbles: true })); }
-  }, provider);
-  await page.waitForTimeout(300);
-  await page.evaluate((mdl) => {
-    const custom = document.getElementById('chatCustomModelInput');
-    if (custom) { custom.value = mdl; custom.dispatchEvent(new Event('input', { bubbles: true })); }
-  }, model);
+    window.SutraProviderMeta.saveSessionKey(p, 'mock-key-for-tests');
+    window.SutraProviderMeta.selectModel(p, mdl);
+  }, { provider, model });
   await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel().model)).toBe(model);
 }
 

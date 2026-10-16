@@ -128,6 +128,8 @@ test('full Assistant retains task evidence across Stateful URL follow-ups and di
   await sources.locator('summary').click();
   await sources.getByRole('button', { name: 'Open source Orchid protocol worksheet' }).click();
   await expect.poll(() => page.evaluate(() => window.__assistantOpenedSources)).toContain('task:orchid-task');
+  await page.locator('#taskModal').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('#taskModal')).toBeHidden();
   await page.evaluate(() => window.setActiveView('assistantview'));
   await expect(page.locator('#asstInput')).toBeVisible();
   const reopenedComparison = page.locator('#asstMessages .asst-msg.assistant').last().locator('.assistant-sources');

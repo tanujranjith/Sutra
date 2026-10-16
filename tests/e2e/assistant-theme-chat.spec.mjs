@@ -132,7 +132,7 @@ test('Create your own theme uses the full Assistant provider chat, keeps preview
   await expect(firstCard.locator('.ai-theme-chat-title')).toHaveText(THEME_OK.name);
   await expect(page.locator('#asstSendBtn')).toHaveAccessibleName('Send message');
   await expect(page.locator('#asstSendBtn')).not.toHaveClass(/is-stop/);
-  await expect(firstCard.getByRole('button', { name: 'Preview' })).toBeVisible();
+  await expect(firstCard.getByRole('button', { name: 'Preview', exact: true })).toBeVisible();
   await expect(firstCard.getByRole('button', { name: 'Apply theme' })).toBeVisible();
   await expect(firstCard.getByRole('button', { name: 'Revert preview' })).toBeDisabled();
 
@@ -145,7 +145,7 @@ test('Create your own theme uses the full Assistant provider chat, keeps preview
   expect(initialState.previewing).toBe(false);
   expect(initialState.customThemes).toHaveLength(0);
 
-  await firstCard.getByRole('button', { name: 'Preview' }).click();
+  await firstCard.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(firstCard.locator('.ai-theme-chat-status')).toContainText('is previewing');
   await expect(firstCard.getByRole('button', { name: 'Revert preview' })).toBeEnabled();
   expect(await page.evaluate(() => window.SutraThemeAI.isPreviewing())).toBe(true);

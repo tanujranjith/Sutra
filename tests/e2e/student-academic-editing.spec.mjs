@@ -15,6 +15,21 @@ async function openApp(page) {
 
 test('Application Sheets switch, accept entries, and retain entries after reload', async ({ page }) => {
   await openApp(page);
+  // College is an optional pack on a fresh Student workspace. Enable it using
+  // the same preference control as a student before opening its navigation.
+  await page.evaluate(() => window.setActiveView('settings'));
+  const mobileCategory = page.locator('#settingsCategorySelect');
+  if (await mobileCategory.isVisible()) {
+    await mobileCategory.selectOption('advanced');
+  } else {
+    const advancedGroup = page.locator('#settingsAdvancedGroup');
+    if (!(await advancedGroup.evaluate(node => node.open))) await advancedGroup.locator('summary').click();
+    await page.locator('#view-settings [data-settings-nav="advanced"]').click();
+  }
+  const collegeToggle = page.locator('#featureToggleListSettings input[data-feature-view="collegeapp"]');
+  await collegeToggle.check();
+  await expect(collegeToggle).toBeChecked();
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('application-sheets-pack'));
   await page.evaluate(() => window.setActiveView('collegeapp'));
   await page.locator('[data-collegeapp-page="sheets"]:visible').first().click();
   const sheets = page.locator('#collegeappPage-sheets');

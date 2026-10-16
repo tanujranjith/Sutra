@@ -30,17 +30,14 @@ async function openApp(page, { openPanel = true } = {}) {
 }
 
 async function configureProvider(page, { provider = 'gemini', model = 'gemini-2.5-flash' } = {}) {
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
   await page.evaluate(({ provider, model }) => {
-    localStorage.setItem('chat_provider', provider);
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
-    sessionStorage.setItem(provider + '_api_key', 'mock-session-key-123456789');
-    const providerSelect = document.getElementById('chatProviderSelect');
-    if (providerSelect) providerSelect.value = provider;
-    const select = document.getElementById('chatModelSelect');
-    const custom = document.getElementById('chatCustomModelInput');
-    if (select) select.value = '';
-    if (custom) custom.value = model;
+    window.SutraProviderMeta.saveSessionKey(provider, 'mock-session-key-123456789');
+    window.SutraProviderMeta.selectModel(provider, model);
   }, { provider, model });
+  await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel()))
+    .toEqual({ provider, model });
 }
 
 async function send(page, text) {
