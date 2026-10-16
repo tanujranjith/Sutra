@@ -31,22 +31,36 @@ A page that matches both title and body appears once, typed as *Page*; the
 
 ## Behavior
 
-- Case-insensitive, partial-word, and in-order subsequence matching
-  (`apbio` finds *AP Biology*). Title matches outrank breadcrumb, metadata,
-  and deep body matches. Multi-word queries require meaningful token coverage
-  (both words for two-word searches and at least 65% for longer searches), so
-  a specific query does not fill the list with records matching one common
-  word. Complete phrase matches still rank first; due-soon homework/tasks rank
-  above far-out work and completed work ranks lower.
+- Core records use case-insensitive, partial-word, and in-order subsequence
+  matching (`apbio` finds *AP Biology*), plus one-edit typo recovery for tokens
+  of at least four characters. Exact title matches rank ahead of typo title
+  matches, which rank ahead of deep body matches. Multi-word queries require
+  meaningful token coverage (both words for two-word searches and at least 65%
+  for longer searches), so a specific query does not fill the list with records
+  matching one common word. Complete phrase matches still rank first; due-soon
+  homework/tasks rank above far-out work and completed work ranks lower.
+- Fuzzy work is bounded: token matching uses at most the first 256 query
+  characters and 12 tokens; typo recovery accepts tokens of 4–64 characters
+  and inspects at most the first 20,000 characters of a field or note body;
+  field subsequence matching uses the same 20,000-character bound. Direct
+  literal word matches still scan the complete field/body, and complete
+  title/body phrase matching retains its full search range. Long note rendering
+  is unchanged.
 - Metadata alone qualifies non-page records: homework/tasks match by due date
   and priority, timeline by date/time/category, and attachments by kind, MIME
   type, and size. Pages still qualify only through title/location (Pages) or
   note body (Notes), never through metadata.
 - Filter chips are ordinary toggle buttons (`aria-pressed`), all keyboard
   reachable; results follow the listbox/combobox keyboard model
-  (`↑`/`↓`/`Home`/`End`/`Enter` with `aria-activedescendant`).
+  (`↑`/`↓`/`Home`/`End`/`Enter` with `aria-activedescendant`). Keyboard
+  navigation refreshes a pending debounced query before acting on a result.
 - Results are deduplicated per entity, capped (60 in All, 40 per filter), and
-  rendered with contextual snippets and `<mark>`-highlighted matches.
+  rendered with contextual snippets and safely escaped `<mark>` highlights for
+  literal, subsequence, and one-edit typo matches.
+- Settings shortcuts retain their owning Settings ranker relevance when they
+  enter global search as prematched results; this score is capped at 300, while
+  strong direct title matches can rank higher. Other prematched sources keep
+  their existing modest generic rank.
 - Input is debounced (140 ms). All data is read from in-memory canonical state
   — no IndexedDB reads, no network requests, no cloud service.
 - **Recent searches** (last 25, stored in `appSettings.recentSearches`) show on
