@@ -2838,27 +2838,15 @@
     <div class="cc-page" data-pending="false" data-settings-mobile-view="categories">
         <header class="cc-page-header">
             <div class="cc-page-header-text">
-                <span class="cc-eyebrow">Settings</span>
                 <h1 class="cc-title">Settings</h1>
-                <p class="cc-subtitle">Start with everyday workspace controls. Deeper tools stay tucked away until you need them.</p>
-            </div>
-            <div class="cc-page-header-meta">
-                <div class="cc-status" id="settingsStatusPill" data-state="saved" role="status" aria-live="polite">
-                    <span class="cc-status-dot" aria-hidden="true"></span>
-                    <span class="cc-status-text">Saved locally</span>
-                </div>
-                <p class="cc-last-applied">Last applied <span id="settingsLastAppliedLabel">in this session</span></p>
-                <div class="cc-page-header-actions">
-                    <button type="button" class="cc-btn cc-btn-ghost" id="settingsRevertBtnTop">Revert</button>
-                    <button type="button" class="cc-btn cc-btn-primary" id="settingsApplyBtnTop">Save Changes</button>
-                </div>
+                <p class="cc-subtitle">Make Sutra feel like home.</p>
             </div>
         </header>
 
         <div class="cc-discovery">
             <div class="cc-search" role="search">
                 <i class="fas fa-magnifying-glass cc-search-icon" aria-hidden="true"></i>
-                <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search settings, e.g. backup or motion" aria-label="Search all settings" aria-describedby="settingsSearchHint" autocomplete="off" />
+                <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search settings…" aria-label="Search all settings" aria-describedby="settingsSearchHint" autocomplete="off" />
                 <kbd class="cc-search-shortcut" id="settingsSearchShortcut" aria-hidden="true">/</kbd>
                 <button type="button" class="cc-search-clear" id="settingsSearchClearBtn" aria-label="Clear settings search" title="Clear search" hidden>
                     <i class="fas fa-xmark" aria-hidden="true"></i>
@@ -2869,24 +2857,24 @@
             <div class="cc-mobile-nav" aria-label="Settings categories (mobile)">
                 <label class="cc-mobile-label" for="settingsCategorySelect">Category</label>
                 <select id="settingsCategorySelect" class="modal-input cc-mobile-select" aria-label="Settings category">
-                <optgroup label="Essentials">
+                <optgroup label="Personalization">
                     <option value="appearance">Appearance</option>
                     <option value="layout">Layout</option>
                     <option value="editor">Editor</option>
                     <option value="notes">Notes & Formatting</option>
                 </optgroup>
-                <optgroup label="Planning &amp; learning">
+                <optgroup label="Productivity">
                     <option value="tasks">Tasks</option>
                     <option value="calendar">Calendar</option>
                     <option value="homework">To-do</option>
                     <option value="study">Study</option>
                 </optgroup>
-                <optgroup label="Services &amp; safety">
+                <optgroup label="Services">
                     <option value="assistant">Assistant</option>
                     <option value="integrations">Integrations</option>
                     <option value="notifications">Notifications</option>
                     <option value="accessibility">Accessibility</option>
-                    <option value="data">Data</option>
+                    <option value="data">Data &amp; Backup</option>
                 </optgroup>
                 <optgroup label="Advanced &amp; packs">
                     <option value="business">Business</option>
@@ -2901,7 +2889,7 @@
             <aside class="cc-sidebar" aria-label="Settings categories">
                 <nav class="cc-sidebar-nav" id="settingsNavList">
                     <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">Essentials</span>
+                        <span class="cc-sidebar-group-label">Personalization</span>
                         <button type="button" class="cc-sidebar-item active" data-settings-nav="appearance">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-palette"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -2932,7 +2920,7 @@
                         </button>
                     </div>
                     <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">Planning &amp; learning</span>
+                        <span class="cc-sidebar-group-label">Productivity</span>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="tasks">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-list-check"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -2963,7 +2951,7 @@
                         </button>
                     </div>
                     <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">Services &amp; safety</span>
+                        <span class="cc-sidebar-group-label">Services</span>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="assistant">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-wand-magic-sparkles"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -2995,7 +2983,7 @@
                         <button type="button" class="cc-sidebar-item" data-settings-nav="data">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-database"></i></span>
                             <span class="cc-sidebar-item-text">
-                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Data</span>
+                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Data &amp; Backup</span>
                                 <span class="cc-sidebar-item-copy">Backup &amp; export</span>
                             </span>
                         </button>
@@ -3037,12 +3025,25 @@
                 <div class="cc-sidebar-foot">
                     <details class="cc-sidebar-utilities">
                         <summary>Reset options</summary>
+                        <button type="button" class="cc-btn cc-btn-quiet cc-btn-block" id="settingsResetSectionBtn">Reset section</button>
                         <button type="button" class="cc-btn cc-btn-quiet cc-btn-block" id="settingsResetAllBtn">Reset all categories</button>
                     </details>
                 </div>
             </aside>
 
             <main class="cc-main">
+                <div class="cc-page-header-meta">
+                <div class="cc-status" id="settingsStatusPill" data-state="saved" role="status" aria-live="polite">
+                    <span class="cc-status-dot" aria-hidden="true"></span>
+                    <span class="cc-status-text">Saved locally</span>
+                </div>
+                <p class="cc-last-applied">Last applied <span id="settingsLastAppliedLabel">in this session</span></p>
+                <div class="cc-page-header-actions">
+                    <button type="button" class="cc-btn cc-btn-ghost" id="settingsRevertBtnTop">Revert</button>
+                    <button type="button" class="cc-btn cc-btn-primary" id="settingsApplyBtnTop">Save Changes</button>
+                </div>
+                </div>
+
                 <button type="button" class="cc-btn cc-btn-ghost" id="settingsBackToCategories"><i class="fas fa-chevron-left" aria-hidden="true"></i> All Settings</button>
                 <div class="cc-search-empty" id="settingsSearchEmpty" hidden>
                     <span class="cc-search-empty-icon" aria-hidden="true"><i class="fas fa-magnifying-glass"></i></span>
@@ -3055,22 +3056,23 @@
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
                             <h2 class="cc-section-title">Appearance</h2>
-                            <p class="cc-section-copy">Set the visual foundation, then tune material intensity and interface detail.</p>
+                            <p class="cc-section-copy">A calmer space to get things done.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="appearance">Reset</button>
                     </header>
 
-                    <div class="cc-group">
-                        <span class="cc-group-title">Visual foundation</span>
+                    <div class="cc-group cc-appearance-foundation">
                         <div class="cc-row" data-setting-item>
                             <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-palette"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Theme</span>
-                                <span class="cc-row-help">Open the theme panel to choose your palette.</span>
+                                <span class="cc-row-help">Choose a color theme. Theme changes apply immediately.</span>
                             </div>
                             <div class="cc-row-control">
-                                <button type="button" class="cc-btn cc-btn-ghost" onclick="toggleThemePanel(); event.stopPropagation();">
-                                    <i class="fa-solid fa-palette"></i> Open Theme Panel
+                                <span class="cc-theme-palette" id="settingsThemePalette" aria-hidden="true"></span>
+                                <span class="cc-theme-current" id="settingsThemeCurrent">Default</span>
+                                <button type="button" class="cc-btn cc-btn-ghost" id="settingsChooseThemeBtn" title="Theme selections apply immediately" onclick="toggleThemePanel(); event.stopPropagation();">
+                                    Choose theme
                                 </button>
                             </div>
                         </div>
@@ -3078,7 +3080,7 @@
                             <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-table-cells"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Density</span>
-                                <span class="cc-row-help">Spacing rhythm across surfaces.</span>
+                                <span class="cc-row-help">Control how much space elements take up.</span>
                             </div>
                             <div class="cc-row-control">
                                 <div class="cc-segmented" data-pref-path="appearance.density" role="radiogroup" aria-label="Density">
@@ -3092,7 +3094,7 @@
                             <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-circle-half-stroke"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Contrast</span>
-                                <span class="cc-row-help">Boost or soften the separation between layers.</span>
+                                <span class="cc-row-help">Adjust the contrast level for better readability.</span>
                             </div>
                             <div class="cc-row-control">
                                 <div class="cc-segmented" data-pref-path="appearance.contrast" role="radiogroup" aria-label="Contrast">
@@ -3104,8 +3106,9 @@
                         </div>
                     </div>
 
-                    <div class="cc-group">
-                        <span class="cc-group-title">Material &amp; shape</span>
+                    <details class="cc-appearance-details" id="settingsSurfaceDepth">
+                        <summary><span>Surface &amp; depth</span><span class="cc-details-copy" id="settingsSurfaceSummary">Glass · Rounded · Medium shadow</span><i class="fas fa-chevron-right" aria-hidden="true"></i></summary>
+                        <div class="cc-group">
                         <div class="cc-row" data-setting-item>
                             <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-layer-group"></i></span>
                             <div class="cc-row-text">
@@ -3163,10 +3166,11 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="cc-group">
-                        <span class="cc-group-title">Interface detail</span>
+                        </div>
+                    </details>
+                    <details class="cc-appearance-details" id="settingsInterfaceDetails">
+                        <summary><span>Interface details</span><span class="cc-details-copy">Icons, sidebar, motion, and quotes</span><i class="fas fa-chevron-right" aria-hidden="true"></i></summary>
+                        <div class="cc-group">
                         <div class="cc-row" data-setting-item>
                             <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-icons"></i></span>
                             <div class="cc-row-text">
@@ -3219,7 +3223,8 @@
                                 <button type="button" class="cc-btn cc-btn-ghost" id="openQuoteManagerBtn">Manage quotes</button>
                             </div>
                         </div>
-                    </div>
+                        </div>
+                    </details>
                 </section>
 
                 <section class="cc-section" data-settings-section="layout">
@@ -4598,56 +4603,38 @@
                     <div class="mods-tabpanel" data-mods-panel="recovery" id="modsRecoveryPanel" hidden></div>
                     <input type="file" id="modsCssImportInput" accept=".css,application/json,.json" hidden>
                 </section>
-            </main>
-
-            <aside class="cc-preview-rail" aria-label="Live preview">
-                <div class="cc-preview">
-                    <div class="cc-preview-head">
-                        <div class="cc-preview-head-text">
-                            <span class="cc-preview-eyebrow">Live preview</span>
-                            <h3 class="cc-preview-title" id="settingsPreviewCategory">Appearance</h3>
-                        </div>
-                        <span class="cc-preview-chip" id="settingsPreviewMotion">Motion full</span>
-                    </div>
-                    <div class="cc-preview-frame">
+                <details class="cc-preview-rail cc-workspace-preview" aria-label="Live preview" open>
+                    <summary class="cc-workspace-preview-summary">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                        <span><strong>Preview workspace</strong><span>Pending appearance changes appear here before you save.</span></span>
+                        <i class="fas fa-chevron-up cc-preview-chevron" aria-hidden="true"></i>
+                    </summary>
+                    <div class="cc-preview">
                         <div id="settingsPreviewSurface" class="cc-preview-surface" data-density="comfortable" data-contrast="standard" data-card-style="glass" data-corner-style="rounded" data-shadow="medium" data-blur="medium" data-sidebar-style="glass" data-icon-size="medium">
-                            <div class="cc-preview-toolbar"><span></span><span></span><span></span></div>
                             <div class="cc-preview-layout">
                                 <div class="cc-preview-mini-sidebar">
-                                    <div class="cc-preview-mini-line"></div>
-                                    <div class="cc-preview-mini-line"></div>
-                                    <div class="cc-preview-mini-line short"></div>
+                                    <div class="cc-preview-brand"><img src="assets/brand/sutra/generated/sutra-icon-64.png" width="22" height="22" alt="" /> <strong>Sutra</strong></div>
+                                    <span class="cc-preview-nav active"><i class="fas fa-house" aria-hidden="true"></i>Home</span>
+                                    <span class="cc-preview-nav"><i class="far fa-square-check" aria-hidden="true"></i>To-do</span>
+                                    <span class="cc-preview-nav"><i class="fas fa-plus" aria-hidden="true"></i>Create</span>
+                                    <span class="cc-preview-nav"><i class="far fa-calendar" aria-hidden="true"></i>Timeline</span>
+                                    <span class="cc-preview-nav"><i class="fas fa-graduation-cap" aria-hidden="true"></i>College</span>
+                                    <span class="cc-preview-nav"><i class="fas fa-leaf" aria-hidden="true"></i>Life</span>
                                 </div>
                                 <div class="cc-preview-mini-content">
-                                    <div class="cc-preview-mini-card">
-                                        <div class="cc-preview-mini-title" id="settingsPreviewDensity">Comfortable density</div>
-                                        <div class="cc-preview-mini-copy" id="settingsPreviewContrast">Standard contrast with balanced separation.</div>
-                                    </div>
-                                    <div class="cc-preview-mini-card muted">
-                                        <div class="cc-preview-mini-title" id="settingsPreviewCardStyle">Glass cards</div>
-                                        <div class="cc-preview-mini-copy" id="settingsPreviewCorner">Rounded corners</div>
-                                    </div>
+                                    <div class="cc-preview-today"><h3>Today</h3><p>Focus on what matters.</p></div>
+                                    <div class="cc-preview-mini-card"><i class="far fa-square" aria-hidden="true"></i><div><strong>Biology reading</strong><span><i class="fas fa-book-open" aria-hidden="true"></i> Read Chapter 4</span></div><span class="cc-preview-study">Study</span></div>
+                                    <div class="cc-preview-mini-card"><i class="far fa-file-lines" aria-hidden="true"></i><div><strong>Study notes</strong><span>Photosynthesis key points…</span></div><i class="fas fa-chevron-right" aria-hidden="true"></i></div>
                                 </div>
+                                <div class="cc-preview-focus cc-preview-mini-card"><strong><i class="fas fa-circle" aria-hidden="true"></i> Focus</strong><div class="cc-preview-timer">25:00</div><span class="cc-preview-focus-action"><i class="fas fa-play" aria-hidden="true"></i> Start Focus</span></div>
                             </div>
                         </div>
+                        <div class="cc-preview-state" aria-live="polite"><span id="settingsPreviewDensity">Comfortable density</span><span id="settingsPreviewContrast">Standard contrast</span><span id="settingsPreviewCardStyle">Glass cards</span><span id="settingsPreviewCorner">Rounded corners</span><span id="settingsPreviewMotion">Motion full</span></div>
+                        <div class="cc-preview-layout-state"><span>Default view: <strong id="settingsPreviewView">Home</strong></span><span>Timeline: <strong id="settingsPreviewTimeline">Comfortable</strong></span><span>Task sort: <strong id="settingsPreviewTaskSort">Urgency first</strong></span></div>
+                        <span class="sr-only" id="settingsPreviewCategory">Appearance</span>
                     </div>
-                    <p class="cc-preview-explain">This preview reflects pending changes. The rest of Sutra stays calm until you save.</p>
-                    <div class="cc-preview-stats">
-                        <div class="cc-preview-stat">
-                            <span>Default view</span>
-                            <strong id="settingsPreviewView">Home</strong>
-                        </div>
-                        <div class="cc-preview-stat">
-                            <span>Timeline density</span>
-                            <strong id="settingsPreviewTimeline">Comfortable</strong>
-                        </div>
-                        <div class="cc-preview-stat">
-                            <span>Task sort</span>
-                            <strong id="settingsPreviewTaskSort">Urgency first</strong>
-                        </div>
-                    </div>
-                </div>
-            </aside>
+                </details>
+            </main>
         </div>
 
         <div class="cc-action-bar" id="settingsActionBar" data-pending="false" aria-live="polite">
@@ -4656,7 +4643,6 @@
                 <span id="settingsUnsavedText">No pending changes</span>
             </div>
             <div class="cc-action-buttons">
-                <button type="button" class="cc-btn cc-btn-ghost" id="settingsResetSectionBtn">Reset section</button>
                 <button type="button" class="cc-btn cc-btn-ghost" id="settingsRevertBtn">Revert</button>
                 <button type="button" class="cc-btn cc-btn-primary" id="settingsApplyBtn">Save Changes</button>
             </div>
@@ -7589,6 +7575,7 @@
     <script src="src/features/notes/authoring-tools.js?v=20261015-writing1"></script>
     <script src="src/features/notes/editor-v2.js?v=20261015-writing1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20261011-header-flow4"></script>
+    <script src="src/features/workspace/settings-presentation.js?v=20261015-settings3"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
          Other served/PWA browsers use the smaller module + real worker path. -->
@@ -7616,7 +7603,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261015-settings-planning1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261015-settings-writing-help2"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -8037,7 +8024,7 @@
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/features/global-search.css?v=20260917-search-focus1">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20261001-mobile-data-actions1">
-    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20261015-settings2">
+    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20261015-settings-option3-qa4">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
@@ -8071,7 +8058,7 @@
     <link rel="stylesheet" href="styles/features/content-timeline-hosts.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/canvas-workbench-polish.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/folder-workspace.css?v=20261001-folders7">
-    <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261015-settings-clearance1">
+    <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261015-settings-option3-qa4">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

@@ -51,11 +51,11 @@ test('Peach preview shows three separated rounded color swatches', async ({ page
   expect(geometry.swatches[2].left - geometry.swatches[1].right).toBeGreaterThanOrEqual(1);
 });
 
-test('Settings "Open Theme Panel" opens the panel and it stays open (no immediate close)', async ({ page }) => {
+test('Settings "Choose theme" opens the panel and it stays open (no immediate close)', async ({ page }) => {
   await openApp(page);
   // Click the real Settings trigger (it carries event.stopPropagation()).
   const stayedOpen = await page.evaluate(() => {
-    const btn = [...document.querySelectorAll('button')].find(b => /Open Theme Panel/i.test(b.textContent || ''));
+    const btn = document.getElementById('settingsChooseThemeBtn');
     if (!btn) return 'no-button';
     btn.click();
     return document.getElementById('themePanel').classList.contains('active');

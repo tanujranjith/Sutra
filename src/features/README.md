@@ -19,6 +19,10 @@ globals have legacy aliases that point at the same object (e.g. `sutraAssistant`
 
 ## When adding a feature
 
+`workspace/settings-presentation.js` loads after the core and enhances the
+canonical Settings DOM only: preset palette labels and searchable Appearance
+disclosures. It adds no globals, stored preferences, or alternative save path.
+
 1. Put the file in the closest group (or add a new group folder + update this table).
 2. Add the `<script src="src/features/<group>/<file>.js?v=…">` to `Sutra.html` in
    the correct **load-order position** (most features load just before `app.js`).

@@ -29,7 +29,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 8. ~~Ctrl+Shift+V plain-text paste.~~
 9. ~~Paged boundaries, text placement, tables, manual breaks, and editor zoom.~~
 10. ~~Class/activity recognition, ambiguity correction, and manual destination choice.~~
-11. Backups: scheduled arrival and full restore of notes, tasks, images, and attachments. Open: provider setup/private passphrase and file-upload blocker.
+11. Backups: scheduled arrival and full restore of notes, tasks, images, and attachments. Open: provider setup/private passphrase and complete encrypted backup round-trip. File uploads now work.
 12. Browser/OS notifications: delivery, correct destination, and deduplication. Partial: in-app Send test toast appeared. Actual Windows notification delivery was not observed.
 13. ~~Application Sheets tabs, Add Row, editing, persistence, and checkbox labels.~~
 14. ~~SAT/ACT dates and countdown boundaries.~~
@@ -61,11 +61,42 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 40. Spreadsheet importer: XLSX values/formulas and cached offline use. Partial: native Sheets import, recalculation, reload, and cached import with the QA server stopped passed. General Import Workspace / Docs imported the numbers into a note but left the formula-result cell blank for the exported workbook. That route remains open.
 41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Partial: malformed JSON and corrupt .sutra rejection preserved the existing task; missing required attachment bytes produced a persistent incomplete-restore warning. Simulated workspace/attachment write failures remain for controlled CI fixtures.
 42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Open: controlled CI/service fixtures required; remote data/configuration not changed.
-43. Help/tutorial: current instructions, rendering, and navigation. Partial: Help opens and contains current workspace contracts; visible raw &amp; text and coverage of new writing commands still need review. No comprehensive link/tutorial pass completed.
+43. Help/tutorial: current instructions, rendering, and navigation. Partial: refreshed Settings and explicit writing-command instructions render; the known double-escaped customization heading now displays a normal ampersand. Comprehensive tutorial/link and table-of-contents navigation review remains open.
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
 46. Save-conflict investigation: a later disposable Timeline edit raised a storage-mismatch warning. Its writer/source is unconfirmed. A single-tab planned block survived reload, but concurrent-tab save safety remains open.
-47. Settings option 3 redesign: implementation received from GPT-6.1 Sol high; parent diff review, visual comparison, responsive checks, and Save/Revert/reload validation pending. The earlier approval of item 31 does not validate this replacement layout.
+47. ~~Settings option 3 redesign: independently reviewed, compared with the selected mockup, and checked in Chrome on desktop, tablet, and 390px/320px phones; staged preview, Revert, Save/reload, searchable disclosures, and Dark theme verified.~~
+
+## Settings and Help follow-up
+
+The parent independently reviewed the GPT-6.1 Sol high implementation and two
+Luna xhigh results (read-only Settings review and bounded Help text update).
+Visual comparison found sidebar footer overlap and a cramped layout; parent
+corrected the rail, typography, inherited gutter, and shrinking navigation.
+Manual phone hit testing then caught the redesigned sticky footer below the
+visible navigation; parent switched the phone bar to a fixed, clearance-aware
+position with reserved document space and added a CI regression at 320x568.
+
+Chrome verification: staged density changed only the preview; Revert restored
+the persisted baseline; Save set Compact and reload retained it. Comfortable was
+restored by a real phone Save. At 390x844, Save was y706–750; at 320x568 it was
+y430–474, above the navigation at y492. Center hit testing returned
+settingsApplyBtn at both widths. Expanded controls were at least 44px high, and
+document scroll width equaled viewport width. Tablet 960x900 kept all 16
+categories and no horizontal overflow. Search revealed Blur inside its closed
+disclosure and clearing restored the original state. Global Dark preset rendered
+readable Settings, then Default was restored in this QA origin.
+
+The Help compatibility layer now documents the current Settings and explicit
+/grammar, /spelling, /rephrase contracts. Parent reviewed the additions and
+corrected only the known double-escaped built-in customization label. Chrome
+confirmed both heading occurrences display a normal ampersand, with no literal
+&amp; remaining in the generated Help text. Its tutorial/TOC review is not complete.
+
+Design comparison and screenshots: ignored .tmp/qa-2026-10-15/settings-option3/.
+See design-qa.md for comparison scope and intentional theme/shell differences.
+Required CSP/cache/asset generators ran. Core app.js was not edited. Unit/E2E and
+broad validation remain for GitHub CI; no provider spending or remote actions.
 
 ## Import retry evidence — October 15, 2026
 

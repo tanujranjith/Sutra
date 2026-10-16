@@ -4,6 +4,75 @@
  * rules can refine the existing canonical controls without changing behavior.
  */
 
+/* Loaded after contextual-shell.css: replace its former outer gutter and fixed
+   page height. Settings supplies its own rail/content padding and one scroll. */
+body.settings-anchored-mode #view-settings .cc-page {
+    padding-inline: 0;
+    height: auto;
+    min-height: 100%;
+}
+
+/* Settings uses its integrated rail through tablet widths. Keep all responsive
+   changes here so the later phone shell remains the authority for clearance. */
+@media (min-width: 761px) and (max-width: 1100px) {
+    #view-settings .cc-page { grid-template-columns: 220px minmax(0, 1fr); }
+    #view-settings .cc-main,
+    #view-settings .cc-main.is-searching { padding-inline: 24px; }
+    #view-settings .cc-page .cc-action-bar { padding-inline: 24px; }
+    #view-settings .cc-page-header-meta { top: 14px; right: 24px; }
+    #view-settings .cc-page [data-settings-section="appearance"] .cc-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    #view-settings .cc-row-control { justify-content: flex-start; }
+    #view-settings .cc-appearance-foundation .cc-row:first-child .cc-row-control { justify-content: start; grid-template-columns: auto auto; }
+    #view-settings .cc-row-control > .cc-segmented { max-width: 440px; }
+    #view-settings .cc-preview-layout { grid-template-columns: 120px minmax(0, 1fr); gap: 12px; }
+    #view-settings .cc-preview-mini-content { padding-right: 12px; }
+    #view-settings .cc-preview-focus.cc-preview-mini-card { display: none; }
+}
+
+@media (max-width: 760px) {
+    body.settings-anchored-mode #view-settings.view-settings,
+    #view-settings.view-settings { height: auto; min-height: 0; overflow: visible; }
+    body.settings-anchored-mode #view-settings .cc-page,
+    #view-settings .cc-page { display: block; height: auto; min-height: 0; padding: 0; background: var(--cc-workspace-bg); }
+    #view-settings .cc-page-header { padding: 20px 16px 12px; }
+    #view-settings .cc-title { font-size: 1.6rem; }
+    #view-settings .cc-discovery { padding: 0 16px 14px; }
+    #view-settings .cc-search { min-height: 44px; padding-left: 36px; padding-right: 44px; }
+    #view-settings .cc-search-input { min-height: 44px; height: 44px; font-size: 16px; }
+    #view-settings .cc-search-clear { top: 0; right: 0; }
+    #view-settings .cc-page[data-settings-mobile-view="categories"] .cc-sidebar { display: block; padding: 0 16px 16px; }
+    #view-settings .cc-page .cc-sidebar-nav { gap: 12px; }
+    #view-settings .cc-page .cc-sidebar-item { min-height: 44px; }
+    #view-settings .cc-page .cc-sidebar-item-name { font-size: 0.9rem; }
+    #view-settings .cc-page .cc-sidebar-foot { padding-top: 12px; }
+    #view-settings .cc-page[data-settings-mobile-view="detail"] .cc-main,
+    #view-settings .cc-page[data-settings-mobile-view="detail"] .cc-main.is-searching { display: block; padding: 0 16px 20px; border: 0; overflow: visible; }
+    #view-settings .cc-page[data-settings-mobile-view="categories"] .cc-main { display: none; }
+    #view-settings .cc-page[data-settings-mobile-view="detail"] .cc-sidebar,
+    #view-settings .cc-page[data-settings-mobile-view] .cc-preview-rail { display: none; }
+    #view-settings .cc-page-header-meta { position: static; justify-content: flex-start; text-align: left; padding-bottom: 10px; }
+    #view-settings #settingsBackToCategories { margin-bottom: 12px; }
+    #view-settings .cc-section-head { flex-direction: row; align-items: flex-start; min-height: 0; gap: 10px; padding-bottom: 18px; }
+    #view-settings .cc-section-head > .cc-btn { min-width: 64px; margin: 0; padding-inline: 12px; }
+    #view-settings .cc-section-title { font-size: 1.6rem; }
+    #view-settings .cc-page .cc-section-copy { font-size: 0.85rem; }
+    #view-settings .cc-page [data-settings-section="appearance"] .cc-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 0; }
+    #view-settings .cc-row-control { justify-content: flex-start; min-width: 0; }
+    #view-settings .cc-appearance-foundation .cc-row:first-child .cc-row-control { grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; width: 100%; }
+    #view-settings .cc-theme-palette { gap: 8px; }
+    #view-settings .cc-theme-swatch { width: 19px; height: 19px; }
+    #view-settings #settingsChooseThemeBtn { padding-inline: 12px; }
+    #view-settings .cc-segmented { max-width: 100%; }
+    #view-settings .cc-page .cc-segment { min-height: 44px; padding-inline: 2px; font-size: 0.7rem; }
+    #view-settings .cc-appearance-details > summary { flex-wrap: wrap; gap: 5px 12px; min-height: 62px; font-size: 0.9rem; }
+    #view-settings .cc-details-copy { order: 2; flex-basis: 100%; font-size: 0.72rem; }
+    #view-settings .cc-page .cc-action-bar { position: sticky; flex-direction: column; align-items: stretch; min-height: 0; gap: 8px; padding: 10px 16px; border-left: 0; }
+    #view-settings .cc-page .cc-action-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+    #view-settings .cc-page .cc-action-buttons .cc-btn,
+    #view-settings .cc-page .cc-action-buttons .cc-btn:last-child { grid-column: auto; min-width: 0; width: 100%; }
+    #view-settings .cc-action-status { font-size: 0.73rem; }
+}
+
 #testingHubReviewMount {
     --bg-2: var(--bg-elevated, var(--bg-secondary, #fff));
     --review-surface: var(--bg-elevated, var(--bg-secondary, #fff));
@@ -353,11 +422,19 @@
     /* Match the Settings layer's specificity so its phone footer cannot
        replace the clearance reserved for the fixed navigation/player. */
     #view-settings .cc-page .cc-action-bar {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        width: auto;
         bottom: calc(
             var(--sutra-mobile-nav-height, 4.75rem) +
             var(--sutra-focus-player-height, 0px) +
             env(safe-area-inset-bottom, 0px) + 8px
         );
+    }
+    body.settings-anchored-mode #view-settings .cc-page {
+        min-height: 0;
+        padding-bottom: calc(140px + var(--sutra-mobile-nav-height, 4.75rem) + var(--sutra-focus-player-height, 0px) + env(safe-area-inset-bottom, 0px));
     }
 
     /* Quick Capture: the card is the one scroll surface, including its footer. */
