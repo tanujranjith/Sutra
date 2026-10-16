@@ -1249,16 +1249,16 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
 /* Grounded note evidence shared by the docked and full Assistant shells. */
 .assistant-sources {
   margin-top: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--border-color, #64748b) 32%, transparent);
+  border: 1px solid var(--surface-border, var(--border, #64748b));
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--card-bg, #111827) 88%, transparent);
+  background: var(--bg-elevated, var(--bg-secondary, #f8fafc));
   overflow: hidden;
 }
 
 .assistant-sources-summary {
   cursor: pointer;
   padding: 0.62rem 0.72rem;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-primary, #1f2937);
   font-size: 0.78rem;
   font-weight: 650;
   list-style-position: inside;
@@ -1272,9 +1272,9 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
 
 .assistant-source-card {
   padding: 0.62rem;
-  border: 1px solid color-mix(in srgb, var(--border-color, #64748b) 26%, transparent);
+  border: 1px solid var(--surface-border, var(--border, #64748b));
   border-radius: 0.62rem;
-  background: color-mix(in srgb, var(--background-primary, #0f172a) 78%, transparent);
+  background: var(--bg-secondary, #f8fafc);
 }
 
 .assistant-source-card.is-stale {
@@ -1286,7 +1286,7 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
   border: 0;
   padding: 0;
   background: none;
-  color: var(--accent-color, #60a5fa);
+  color: var(--text-primary, #1f2937);
   font: inherit;
   font-weight: 700;
   text-align: left;
@@ -1301,7 +1301,7 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
 .assistant-source-heading,
 .assistant-source-meta {
   margin-top: 0.25rem;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-primary, #1f2937);
   font-size: 0.7rem;
 }
 
@@ -1309,7 +1309,7 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
   align-self: flex-start;
   border: 0;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-primary, #1f2937);
   cursor: pointer;
   font: inherit;
   font-size: 0.75rem;
@@ -1327,8 +1327,8 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
 .assistant-source-quote {
   margin: 0.45rem 0 0;
   padding-left: 0.55rem;
-  border-left: 2px solid color-mix(in srgb, var(--accent-color, #60a5fa) 55%, transparent);
-  color: var(--text-primary, #e5e7eb);
+  border-left: 2px solid color-mix(in srgb, var(--accent-strong, var(--accent, #60a5fa)) 55%, transparent);
+  color: var(--text-primary, #1f2937);
   font-size: 0.78rem;
   line-height: 1.45;
 }

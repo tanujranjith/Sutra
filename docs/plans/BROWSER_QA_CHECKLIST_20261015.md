@@ -44,30 +44,94 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 23. ~~HTML-page PIN unlock and source preservation.~~
 24. ~~US Letter default and A4 selection.~~
 25. ~~Imported task Notes/Reference URL editing, reopen/reload, and unknown fields.~~
-26. Stateful follow-up: correct task/URL and matching citations. Open: no provider key in this separate QA origin.
+26. ~~Stateful follow-up: Gemini read staged task notes/Reference URL, resolved the follow-up correctly, cited the right task, and retained working citations and fields after reload.~~
 27. Successful one-time PIN read: accurate source disclosure and editor stays locked. Open: needs user-entered QA PIN plus a provider.
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
-29. True browser zoom at 67%/150% across Home/Create/Assistant/Settings, plus narrow screens. Open: viewport resizing is not browser zoom; the available controls did not establish true zoom coverage.
+29. True browser zoom at 67%/150% across Home/Create/Assistant/Settings. Open: Chrome shortcut attempts did not change the observed document width, so actual zoom coverage remains unverified. Narrow-screen checks passed separately.
 30. ~~Bundled Sutra icons in light/dark themes, phone navigation, and cached loading with the local server stopped.~~
 31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
-32. Grammar/spelling/rephrase: cheap generation, editable review, Apply, Cancel, and Undo. Partial: empty grammar review and Cancel were checked; live generation/Apply/Undo remain open.
-33. Writing guards: empty input makes no request and stale original text cannot be overwritten. Partial: empty passage disabled Generate; stale-text behavior needs a provider or CI fixture.
+32. ~~Grammar/spelling/rephrase: live short drafts, editable review, insertion and selected-text replacement, Cancel, and editor Undo passed in Chrome.~~
+33. ~~Writing guards: empty /grammar disables Generate; changing the note during generation closes the stale review and preserves the newer text.~~
 34. Strengthened page PIN: wrong/right PIN, change/remove, legacy upgrade, and reload. Open: new credential entry must be performed privately by the user.
 35. Workspace lock: refresh/inactivity and retry delay. Open: user-entered QA credential required.
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
 38. ~~Weekly planning: seven-day coverage, future starts, after-hours rollover, expired-preview rejection, single-tab schedule persistence, and already-scheduled work deduplication.~~
-39. Wellness retirement: navigation/widgets/commands/Help and legacy data preservation; normal goals/habits/notes/Focus remain usable. Partial: Life dashboard omitted retired tools, and an ordinary goal saved/reloaded. Legacy portability and all discovery surfaces remain open.
+39. Wellness retirement: retired controls are absent; goals, note editing, and Focus start/pause/resume/reset work. Stale Life tutorial copy and a retired-data recovery gap were fixed. Full legacy-record backup/restore/Sync portability and comprehensive discovery checks remain pending CI.
 40. ~~Spreadsheet importer: native Sheets formulas/reload/cached use, plus general XLSX-to-note import displaying the previously blank formula result and retaining it after reload.~~
 41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Partial: malformed JSON and corrupt .sutra rejection preserved the existing task; missing required attachment bytes produced a persistent incomplete-restore warning. Simulated workspace/attachment write failures remain for controlled CI fixtures.
 42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Open: controlled CI/service fixtures required; remote data/configuration not changed.
-43. Help/tutorial: current instructions, rendering, and navigation. Partial: refreshed Settings and explicit writing-command instructions render; the known double-escaped customization heading now displays a normal ampersand. Comprehensive tutorial/link and table-of-contents navigation review remains open.
+43. Help/tutorial: current instructions render and the six-screen quick tour navigates through Finish. Needs fix: Help's generated table-of-contents and Back to top buttons become plain text in the V2 editor. Full-tour/link review remains open.
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
 46. ~~Save-conflict fix: startup recovery/repair now coordinates conditional writes, journals replaced roots, and identifies accepted writes. Timeline create/edit/reload and genuine two-tab stale-write protection passed manually.~~
 47. ~~Settings option 3 redesign: independently reviewed, compared with the selected mockup, and checked in Chrome on desktop, tablet, and 390px/320px phones; staged preview, Revert, Save/reload, searchable disclosures, and Dark theme verified.~~
-48. Theme creation in Assistant: CTA/prefill, empty-command guard, staged inline palette review, explicit Preview/Revert/Apply, reload, and /theme off passed manually. Live selected-provider generation/refinement remains pending; mocked full-chat CI coverage is prepared.
+48. ~~Theme creation in Assistant: live Gemini 3.8 Flash + Low generation/refinement, inline palette review, explicit Preview/Revert/Apply, saved palette/reply reload, and local /theme off passed.~~
 49. ~~Settings and workspace search upgrade: everyday phrases/typos, relevant field-level results, exact-control focus, shared workspace Settings results, keyboard navigation, draft/disclosure preservation, and phone containment passed manual Chrome QA. Luna diffs and privacy boundaries independently reviewed; automated regressions remain under item 45.~~
+50. ~~Assistant response details, receipt labels, and source panels adapt to theme colors; light/dark/custom-light stats contrast checked and faint-label/dark-fallback defects fixed.~~
+51. ~~Completed theme replies release the Stop-generating state; connected-provider composer hints refresh correctly after reload.~~
+
+## Live Gemini follow-up and contrast fixes
+
+All generation requests used the user's selected `gemini-3.8-flash` with Low
+thinking. No OpenAI requests. Nine short generation requests were submitted:
+five chat calls, three completed writing calls, and one writing call cancelled
+when the source note changed. The five chat calls reported:
+
+| Check | Input tokens | Output tokens | Total |
+|---|---:|---:|---:|
+| Theme generation | 312 | 90 | 402 |
+| Theme refinement | 408 | 87 | 495 |
+| Minimal-context negative read | 824 | 35 | 859 |
+| Selective task read | 859 | 54 | 913 |
+| Stateful task follow-up | 935 | 44 | 979 |
+| Total reported chat usage | 3338 | 310 | 3648 |
+
+The writing-review UI does not report token totals, and provider billing was not
+inspected. The initial 2.5 Flash-Lite send was blocked at disclosure before a
+generation response; the user then personally approved the narrowed first-send
+disclosure for 3.8 Flash. Google lists 3.8 Flash's current paid standard rates as
+$0.75/$3.75 per million input/output tokens; 2.5 Flash-Lite lists $0.10/$0.40.
+Low thinking reduces token use, not the published token rate.
+Source: https://ai.google.dev/gemini-api/docs/pricing (checked October 15, 2026).
+
+Only the harmless QA Planning task was allowed for retrieval; other areas were
+blocked. Minimal context withheld task data as expected. Workspace-aware read
+used one task source; the follow-up cited the same task and reported Planning
+plus recent conversation, with no saved memory. The task's notes, URL, answer,
+and citation navigation survived reload. Workspace access was restored to Off,
+area defaults to Use access mode, chat memory to Stateless, and context depth
+to Current view. Gemini 3.8 Flash + Low remains selected for the user.
+
+Live theme generation/refinement produced QA Blue and QA Blue Darker Accent.
+The second changed the accent from #2563eb to #1d4ed8 while retaining the other
+five colors. Preview/Revert/Apply, reload, stored palettes, and /theme off passed.
+A live defect left structured replies stuck on Stop generating; the parent
+fixed the missing render-completion callback and verified the next live send
+returned to Send message. The stale No AI connected hint was also corrected.
+
+Writing QA used a disposable QA Writing Checks note. Grammar draft insertion
+and edited review worked; Undo restored the original. Spelling replacement
+changed `I recieved the seperate calender.` to `I received the separate calendar.`;
+Undo restored it. A changed note closed an in-flight review and retained
+`QA NEWER TEXT MUST REMAIN.`. A later rephrase returned `I will join the meeting
+at nine.`; cancelling left the original sentence untouched. Empty /grammar
+disabled Generate without a remote request.
+
+The parent reviewed Luna's scoped stats CSS/test diff, then strengthened faint
+labels and applied the same fix to Sources. Real rendered stats label/value
+contrast measured 15.03:1 in Default, 12.94:1 in Dark, and 12.96:1 in QA Blue.
+Required core runtime integrity checks and staged hooks passed. Automated
+unit/E2E suites remain unrun locally and pending GitHub CI. Commits remain local;
+no pushes, merges, or deployments. Token/usage snapshots are ephemeral by design.
+
+Remaining findings: real browser zoom could not be established; Help TOC buttons
+are lost during V2 rendering. A separate reviewed recovery fix preserves retired
+sleep/breathing and unknown Life fields without treating generated defaults as
+user data; its controlled recovery cases await CI. Focus start/pause/resume/reset
+passed and the QA timer was returned to Ready. The six-screen essentials tour
+finished normally. Private PIN, service Sync, encrypted backup, OS notification,
+and controlled storage/security-failure checks remain open as listed above.
 
 ## Search follow-up
 
