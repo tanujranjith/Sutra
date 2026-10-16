@@ -112,6 +112,8 @@ test('everything fixture covers every portable top-level and named nested contra
     .canvas.objects.find(object => object.type === 'content-timeline').contentTimeline;
   const slideTimeline = fixture.pages.find(page => page.id === 'page-parent')
     .slides.slides[0].elements.find(element => element.type === 'content-timeline').contentTimeline;
+  const assistantSource = fixture.assistantChatHistory.conversations[0].messages
+    .find(row => Array.isArray(row.sources) && row.sources.length).sources[0];
   const samples = {
     'pages[]': Object.assign({}, ...fixture.pages),
     'pages[].comments[]': fixture.pages[0].comments[0],
@@ -126,6 +128,7 @@ test('everything fixture covers every portable top-level and named nested contra
     'assistantChatHistory.conversations[]': fixture.assistantChatHistory.conversations[0],
     'assistantChatHistory.conversations[].messages[]':
       Object.assign({}, ...fixture.assistantChatHistory.conversations[0].messages.map(row => row)),
+    'assistantChatHistory.conversations[].messages[].sources[]': assistantSource,
     'courseWorkspace.files[]': fixture.courseWorkspace.files[0],
     'attachmentLinks[]': fixture.attachmentLinks[0],
     'pdfDocuments[]': fixture.pdfDocuments[0],

@@ -8,12 +8,13 @@ const syncCrypto = require('../../src/sync/sync-crypto.js');
 const protocol = require('../../src/sync/sync-protocol.js');
 
 async function makeEnvelope(key, opId, lamport, deviceId = 'dev-a', body = 'content') {
+  const payload = { id: opId.replace(':', '-'), body };
   const op = {
     opId, deviceId, lamport,
     recordKey: `c/pages/${opId.replace(':', '-')}`,
     kind: 'upsert', baseHash: null,
-    hash: await protocol.hashValue({ body }),
-    payload: { id: opId, body },
+    hash: await protocol.hashValue(payload),
+    payload,
     schemaVersion: 5, protocolVersion: 1, clientTime: '2026-07-15T00:00:00.000Z'
   };
   return syncCrypto.encryptOpEnvelope(key, op);

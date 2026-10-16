@@ -68,7 +68,7 @@ test('XLSX formula cells include typed cached results and preserve formulas', as
   const worksheet = await zip.file('xl/worksheets/sheet1.xml').async('text');
 
   assert.match(worksheet, /<c r="A3" t="n"><f>SUM\(A1:A2\)<\/f><v>5<\/v><\/c>/);
-  assert.match(worksheet, /<c r="B1" t="str"><f>"Ready &amp; set"<\/f><v>Ready &amp; set<\/v><\/c>/);
+  assert.match(worksheet, /<c r="B1" t="str"><f>&quot;Ready &amp; set&quot;<\/f><v>Ready &amp; set<\/v><\/c>/);
   assert.match(worksheet, /<c r="C1" t="b"><f>A1&gt;0<\/f><v>1<\/v><\/c>/);
   assert.match(worksheet, /<c r="D1" t="e"><f>1\/0<\/f><v>#DIV\/0!<\/v><\/c>/);
   assert.equal(Sheets.cellAt(sheet, 2, 0).formula, '=SUM(A1:A2)');
@@ -92,7 +92,7 @@ test('XLSX formula caches use the Sheets engine for cross-sheet and named-range 
 
   assert.match(worksheet, /<f>Inputs!A1\*2<\/f><v>12<\/v>/);
   assert.match(worksheet, /<f>BaseValue\*3<\/f><v>18<\/v>/);
-  assert.match(workbookXml, /<definedName name="BaseValue">'Inputs'!A1<\/definedName>/);
+  assert.match(workbookXml, /<definedName name="BaseValue">&apos;Inputs&apos;!A1<\/definedName>/);
 });
 
 test('SheetJS formula-cache repair fills missing sums and cross-sheet names without replacing supplied caches', () => {

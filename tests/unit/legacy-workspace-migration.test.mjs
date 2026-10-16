@@ -271,7 +271,7 @@ test('accepted recovery journals the displaced root, preserves unknown fields, a
   assert.equal(notifications[0].hash, coordinatorApi.hashRecord(recovered));
   assert.equal(runtime.lockCalls.length, 1);
   assert.equal(runtime.lockCalls[0].name, 'sutra-workspace-write-v1');
-  assert.equal(runtime.createOptions[1].backupKey, 'workspace-empty-before-recovery');
+  assert.equal(runtime.createOptions.filter(options => options.backupKey === 'workspace-empty-before-recovery').length, 1);
   existingTab.close();
 });
 

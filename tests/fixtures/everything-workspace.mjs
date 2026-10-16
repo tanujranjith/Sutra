@@ -45,12 +45,12 @@ export const EVERYTHING_ASSISTANT_HISTORY = {
       partial: false,
       restoredFromBackup: false,
       sources: [{
-        id: 'source-parity-1', kind: 'note', noteId: 'page-child',
+        id: 'source-parity-1', key: 'note:page-child', kind: 'note', noteId: 'page-child',
         blockId: 'block-rich', title: 'Parity Parent::Parity Child',
         headingPath: ['Evidence'], quote: 'Unique parity evidence.',
         href: 'sutra://page/page-child', updatedAt: EVERYTHING_STAMP,
         version: 'version-parity', sourceOffsets: null, score: 0, confidence: 'high',
-        reasonCodes: ['exact-match'], safetyFlags: [], stale: false
+        reasonCodes: ['exact-match'], safetyFlags: [], stale: false, readOnce: false
       }],
       grounding: {
         evidenceStatus: 'supported', query: 'synthetic parity query',

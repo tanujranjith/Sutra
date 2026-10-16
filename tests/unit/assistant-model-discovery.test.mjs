@@ -5,7 +5,9 @@ import { extractFunction } from '../helpers/extract-function.mjs';
 
 const source = readFileSync(new URL('../../src/core/app.js', import.meta.url), 'utf8');
 const discoverySource = extractFunction(source, 'normalizeModelIdFromGeminiName').body
-  + '\n' + extractFunction(source, 'fetchProviderModels').body;
+  // extractFunction returns from `function`; restore the async keyword present
+  // on this source declaration before compiling the fixture.
+  + '\nasync ' + extractFunction(source, 'fetchProviderModels').body;
 function discover(config, fetch, preferences = () => ({})) {
   return new Function('CHAT_PROVIDER_CONFIG', 'fetch', 'getWorkspacePreference', 'window', discoverySource + ';return fetchProviderModels;')(
     config, fetch, preferences, { location: { origin: 'https://sutra.test' } });

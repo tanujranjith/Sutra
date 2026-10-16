@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { extractBalancedBlock, extractFunction } from '../helpers/extract-function.mjs';
 
 const appSource = readFileSync(new URL('../../src/core/app.js', import.meta.url), 'utf8');
+const calculatorSource = readFileSync(new URL('../../src/features/workspace/custom-tabs.js', import.meta.url), 'utf8');
 
 function functionBody(source, name) {
   const declaration = extractFunction(source, name);
@@ -241,7 +242,11 @@ function makeLifeCalculator() {
         return null;
       }
     },
-    window: {}
+    window: {
+      SutraCustomTabs: {
+        evaluateExpression: new Function(`${functionBody(calculatorSource, 'evalExpression')}; return evalExpression;`)()
+      }
+    }
   });
   const start = appSource.indexOf("            let calcExpr = '';");
   const end = appSource.indexOf('            const lifeCalcButtons =', start);
