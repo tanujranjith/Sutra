@@ -282,10 +282,47 @@ async function seedWorkspace(page, marker) {
 }
 
 async function fillCloudPassword(page, pass = PASS, confirm = true) {
-  await expect(page.locator('#sutraCloudSyncPasswordModal')).toHaveClass(/active/, { timeout: 20_000 });
-  await page.fill('#sutraCloudSyncPassphraseInput', pass);
-  if (confirm) await page.fill('#sutraCloudSyncPassphraseConfirmInput', pass);
-  await page.locator('#sutraCloudSyncPasswordSubmitBtn').click();
+  await test.step(`${confirm ? 'Create' : 'Restore'} cloud password (length ${pass.length})`, async () => {
+    const modal = page.locator('#sutraCloudSyncPasswordModal');
+    const passInput = page.locator('#sutraCloudSyncPassphraseInput');
+    const confirmField = page.locator('#sutraCloudSyncConfirmField');
+    const confirmInput = page.locator('#sutraCloudSyncPassphraseConfirmInput');
+    const submit = page.locator('#sutraCloudSyncPasswordSubmitBtn');
+
+    await expect(modal).toHaveClass(/active/, { timeout: 20_000 });
+    if (!confirm) await expect(confirmField).toBeHidden();
+    await passInput.fill(pass);
+    if (confirm) await confirmInput.fill(pass);
+
+    // Compare in-page so a failed assertion reports only a boolean, never the
+    // password value itself.
+    const passValueMatches = await passInput.evaluate((input, expected) => input.value === expected, pass);
+    expect(passValueMatches, 'cloud password field retains the requested value').toBe(true);
+
+    try {
+      await expect(submit).toBeEnabled();
+    } catch (cause) {
+      const safeState = await page.evaluate(() => {
+        const modalEl = document.getElementById('sutraCloudSyncPasswordModal');
+        const passEl = document.getElementById('sutraCloudSyncPassphraseInput');
+        const confirmEl = document.getElementById('sutraCloudSyncPassphraseConfirmInput');
+        const confirmFieldEl = document.getElementById('sutraCloudSyncConfirmField');
+        return {
+          title: document.getElementById('sutraCloudSyncPasswordTitle')?.textContent || '',
+          passLength: passEl?.value.length || 0,
+          confirmLength: confirmEl?.value.length || 0,
+          confirmVisible: !!confirmFieldEl && !confirmFieldEl.hidden && confirmFieldEl.getClientRects().length > 0,
+          errorText: document.getElementById('sutraCloudSyncPasswordError')?.textContent || '',
+          modalActive: !!modalEl?.classList.contains('active')
+        };
+      });
+      const diagnostic = new Error(`Cloud password submit stayed disabled; safe dialog state: ${JSON.stringify(safeState)}`);
+      diagnostic.cause = cause;
+      throw diagnostic;
+    }
+
+    await submit.click();
+  });
 }
 
 function parseEnvelopeHeader(buffer) {
