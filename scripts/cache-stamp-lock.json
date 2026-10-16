@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-help-navigation11",
-    "hash": "0899f15d1b9dab73"
+    "stamp": "20261016-help-navigation13",
+    "hash": "47ecae6dcfb41310"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

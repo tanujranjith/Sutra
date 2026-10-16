@@ -61,7 +61,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 40. ~~Spreadsheet importer: native Sheets formulas/reload/cached use, plus general XLSX-to-note import displaying the previously blank formula result and retaining it after reload.~~
 41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Partial: malformed JSON and corrupt .sutra rejection preserved the existing task; missing required attachment bytes produced a persistent incomplete-restore warning. Simulated workspace/attachment write failures remain for controlled CI fixtures.
 42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Open: controlled CI/service fixtures required; remote data/configuration not changed.
-43. Help/tutorial: current instructions render and the six-screen quick tour navigates through Finish. Needs fix: Help's generated table-of-contents and Back to top buttons become plain text in the V2 editor. Full-tour/link review remains open.
+43. ~~Help/tutorial: generated Help retains all 34 table-of-contents targets and native Back to top buttons; mouse/keyboard jumps, heading focus, reload, read-only Help, ordinary same-title note editability, and 390px controls passed. Full 67-screen tour Next/Back/Finish and the six-screen quick tour passed; reopening instructions match current Settings.~~
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
 46. ~~Save-conflict fix: startup recovery/repair now coordinates conditional writes, journals replaced roots, and identifies accepted writes. Timeline create/edit/reload and genuine two-tab stale-write protection passed manually.~~
@@ -324,6 +324,24 @@ No secrets, provider calls, remote actions, or schema changes. Two extra harmles
 QA tasks and their disposable planning activity were used only in origin 5195.
 
 ## Evidence from the initial pass (before the follow-up fixes)
+
+Help follow-up (local origin 5196): the Modern Editor now renders generated,
+sanitized Help through its existing preserved-block path and strips the
+temporary wrapper when serializing. No durable fields were added. All 34
+contents targets exist and were activated; two rapid semantic clicks needed
+a fresh activation after browser auto-scroll, and then focused the correct
+heading. Distant sections settled at y140 below the desktop toolbar (bottom
+y126); the phone Notes section settled at y74 below its toolbar (bottom y60).
+Phone controls measured at least 44px high with no document overflow.
+Reload retained 68 native navigation buttons. Switching to a regular note,
+including temporarily giving it the title Help & Docs, retained editability
+and no Help wrapper. The original QA note title was restored.
+
+The full tutorial was walked through all 67 screens with Next, Back, and
+Finish. Individual action buttons were not all invoked; their feature-specific
+checks remain in the corresponding entries. Luna's CI regression was reviewed
+and corrected before acceptance, but was not run locally. Required runtime
+integrity and the staged core hook passed; automated suites remain under 45.
 
 - 28: staged major QA Engineering. Real changed keystrokes set lower-row values
   7 and 8; Tab/Shift+Tab moved to adjacent score fields. Both values survived

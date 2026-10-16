@@ -32819,7 +32819,7 @@ function buildOnboardingPlanPreview() {
             const allSteps = [
                 /* ---------- 1-2 Welcome ---------- */
                 { title: 'Welcome to your guided tour',
-                  body: 'This is a 66-step walkthrough of Sutra — a local-first workspace for notes, tasks, calendar, homework, exams, college, life, and projects. Use Next / Back to step through, Skip to leave. You can rerun this tour any time from Settings → Data & backups → Start guided tour. Your data stays on your device throughout.' },
+                  body: 'This guided walkthrough covers Sutra — a local-first workspace for notes, tasks, calendar, homework, exams, college, life, and projects. Use Next / Back to step through, Skip to leave. Reopen it from Settings → Advanced & packs → Advanced → Tutorial & onboarding. Choose Start guided tour or Redo Tutorial. Your data stays on your device throughout.' },
 
                 { selector: '.view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('today')),
@@ -33222,17 +33222,17 @@ function buildOnboardingPlanPreview() {
                   body: 'Export tasks and time blocks as .ics for Google / Apple / Outlook, or import an .ics file into the Timeline.' },
 
                 { selector: '#startTutorialBtn',
-                  before: () => gotoTutorialSettingsSection('data'),
+                  before: () => gotoTutorialSettingsSection('advanced'),
                   title: 'Restart this tour anytime',
-                  body: 'Run this guided tour again from Settings → Data & backups → Start guided tour. The status text remembers whether you finished, skipped, or never started.' },
+                  body: 'Open Settings → Advanced & packs → Advanced → Tutorial & onboarding. Choose Start guided tour or Redo Tutorial. The status text remembers whether you finished, skipped, or never started.' },
 
                 { selector: '#rerunOnboardingBtn',
-                  before: () => gotoTutorialSettingsSection('data'),
+                  before: () => gotoTutorialSettingsSection('advanced'),
                   title: 'Rerun full onboarding',
                   body: 'Re-open the unified onboarding (Welcome, Focus, Setup, AI & Backups, Tour) whenever your use case changes. Your notes, tasks, homework, and other data are preserved — only setup preferences are revisited.' },
 
                 { selector: '#resetOnboardingBtn',
-                  before: () => gotoTutorialSettingsSection('data'),
+                  before: () => gotoTutorialSettingsSection('advanced'),
                   title: 'Reset onboarding (testing)',
                   body: 'Clears onboarding flags so the first-run experience opens again on next load. Strictly for development / demos — it does not delete any notes, tasks, homework, AP data, college data, themes, or settings.' },
 
@@ -33248,7 +33248,7 @@ function buildOnboardingPlanPreview() {
 
                 /* ---------- 66 Closing ---------- */
                 { title: 'You\'re ready to fly',
-                  body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Create has templates and split-screen, Tasks + Homework feed Home, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. This tour lives in Settings → Data & backups if you want to revisit it.' }
+                  body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Create has templates and split-screen, Tasks + Homework feed Home, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. Reopen this tour from Settings → Advanced & packs → Advanced → Tutorial & onboarding.' }
             ];
 
             // Essentials path: a ~5-step "just the things that matter" tour for the
@@ -33284,7 +33284,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#view-settings, .view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('settings')),
                   title: '5 · Yours, and portable',
-                  body: 'Everything stays on your device. From Settings → Data & backups you can export an encrypted .sutra file, rerun this tour, or take the full walkthrough. That\'s the essentials — you\'re ready.' }
+                  body: 'Everything stays on your device. Export an encrypted .sutra file from Settings → Data & Backup. Reopen this quick tour from the Command Palette, or find the full walkthrough in Settings → Advanced & packs → Advanced → Tutorial & onboarding. That\'s the essentials — you\'re ready.' }
             ];
 
             // Filter out steps whose targets don't currently exist (e.g. tabs
@@ -44265,8 +44265,9 @@ function buildOnboardingPlanPreview() {
                     title: 'Tutorial And Help',
                     body: `
 <ul>
-  <li>The interactive tutorial can be started, resumed, skipped, or redone from Settings.</li>
+  <li>Open <strong>Settings &rsaquo; Advanced &amp; packs &rsaquo; Advanced &rsaquo; Tutorial &amp; onboarding</strong> and choose <strong>Start guided tour</strong> or <strong>Redo Tutorial</strong>. Use Next / Back, Skip to leave, and Finish to close. The Command Palette also offers <strong>Quick start tour (5 essentials)</strong>.</li>
   <li>This Help &amp; Docs page is the fast written reference for starting, planning, studying, searching, backing up, and restoring.</li>
+  <li>Use its <strong>Table of Contents</strong> to jump to a section, and <strong>Back to top</strong> to return. Both controls support the keyboard; Help stays read-only while ordinary notes remain editable.</li>
 </ul>
                     `
                 }
