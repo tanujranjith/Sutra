@@ -36,6 +36,24 @@ function copy(value) {
   return value === null || value === undefined ? null : JSON.parse(JSON.stringify(value));
 }
 
+function defaultLifeWorkspace() {
+  return {
+    onboardingSeeded: false,
+    goals: [], habits: [], habitCompletions: {}, habitExcused: {}, skills: [],
+    fitness: [], calories: [], books: [], spending: [], spendingBudgets: {},
+    recurringExpenses: [], journals: [],
+    sleepTracker: { targetSleepMinutes: 480, entries: [] },
+    wellness: {
+      checkIns: [], journalEntries: [],
+      breathing: {
+        preferredPattern: 'calm-focus', preferredDuration: 120, reducedMotion: false,
+        soundEnabled: false, ambientSound: 'off', breathingCuesEnabled: false,
+        volume: 0.35, muted: false, sessionsCompleted: 0, lastCompletedAt: null
+      }
+    }
+  };
+}
+
 function deferred() {
   let resolve;
   const promise = new Promise(done => { resolve = done; });
@@ -306,6 +324,62 @@ test('a confirmed empty workspace is not replaced by an older recovery journal',
   assert.equal(runtime.writeIfCalls.length, 0);
   assert.equal(notifications.length, 0);
   existingTab.close();
+});
+
+test('retired Life records, preferences, history, and unknown fields prevent stale or unmarked recovery', async () => {
+  const breathingDefaults = defaultLifeWorkspace().wellness.breathing;
+  const legacyValues = [
+    ['sleep entries', { sleepTracker: { targetSleepMinutes: 480, entries: [{ date: '2025-04-02', totalSleepMinutes: 360 }] } }],
+    ['custom sleep target', { sleepTracker: { targetSleepMinutes: 420, entries: [] } }],
+    ['custom breathing preference', { wellness: { checkIns: [], journalEntries: [], breathing: { ...breathingDefaults, preferredPattern: 'box' } } }],
+    ['breathing session history', { wellness: { checkIns: [], journalEntries: [], breathing: { ...breathingDefaults, sessionsCompleted: 2, lastCompletedAt: '2025-04-02T09:00:00.000Z' } } }],
+    ['unknown Life zero', { futureLifeValue: 0 }],
+    ['unknown Life false', { futureLifeValue: false }],
+    ['unknown wellness zero', { wellness: { ...defaultLifeWorkspace().wellness, futureWellnessValue: 0 } }],
+    ['unknown wellness false', { wellness: { ...defaultLifeWorkspace().wellness, futureWellnessValue: false } }],
+    ['unknown breathing false', { wellness: { checkIns: [], journalEntries: [], breathing: { ...breathingDefaults, futureBreathingValue: false } } }],
+    ['unknown sleep zero', { sleepTracker: { targetSleepMinutes: 480, entries: [], futureSleepValue: 0 } }]
+  ];
+  const markerCases = [
+    ['absent marker', undefined],
+    ['stale marker', { version: 1, meaningful: true, confirmedAt: '2026-10-14T12:00:00.000Z' }]
+  ];
+
+  for (const [valueName, lifePatch] of legacyValues) {
+    for (const [markerName, marker] of markerCases) {
+      const root = {
+        pages: [],
+        lifeWorkspace: { ...defaultLifeWorkspace(), ...lifePatch },
+        settings: { onboarding: { completed: true } }
+      };
+      const records = {
+        root,
+        'workspace-last-meaningful': { pages: [{ id: 'older-page', title: 'Older recovery candidate' }] }
+      };
+      if (marker) records['workspace-confirmed-root'] = marker;
+      const runtime = makeRuntime({ records });
+      runtime.run();
+
+      const loaded = await runtime.waitForMigration();
+      assert.deepEqual(loaded, root, `${valueName} must survive with an ${markerName}`);
+      assert.equal(runtime.writeIfCalls.length, 0, `${valueName} must not trigger recovery with an ${markerName}`);
+    }
+  }
+});
+
+test('default sleep and breathing state remains empty for recovery selection', async () => {
+  const emptyRoot = { pages: [], lifeWorkspace: defaultLifeWorkspace() };
+  const runtime = makeRuntime({ records: {
+    root: emptyRoot,
+    'workspace-last-meaningful': { pages: [{ id: 'older-page', title: 'Older recovery candidate' }] }
+  } });
+  runtime.run();
+
+  const loaded = await runtime.waitForMigration();
+  assert.equal(loaded.pages[0].id, 'older-page');
+  assert.deepEqual(runtime.rows.get('workspace-empty-before-recovery'), emptyRoot);
+  assert.equal(runtime.rows.get('workspace-confirmed-root').meaningful, true);
+  assert.equal(runtime.writeIfCalls.length, 1);
 });
 
 test('canonical root read failures reject the migration gate instead of permitting startup to assume recovery succeeded', async () => {

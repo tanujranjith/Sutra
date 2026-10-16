@@ -85,6 +85,29 @@
         'operatingManual.preferredStudyTimes', 'pinnedPages.life', 'pinnedPages.collegeapp',
         'pinnedPages.notesBySpace'
     ];
+    const LIFE_WORKSPACE_FIELDS = new Set([
+        'onboardingSeeded', 'goals', 'habits', 'habitCompletions', 'habitExcused', 'skills',
+        'fitness', 'calories', 'books', 'spending', 'spendingBudgets', 'recurringExpenses',
+        'journals', 'sleepTracker', 'wellness'
+    ]);
+    // Mirror getDefaultLifeSleepTracker() and getDefaultWellnessBreathingPrefs()
+    // in app.js; these generated defaults must not count as saved user data.
+    const LIFE_SLEEP_TRACKER_DEFAULTS = Object.freeze({ targetSleepMinutes: 8 * 60, entries: [] });
+    const LIFE_SLEEP_TRACKER_FIELDS = new Set(Object.keys(LIFE_SLEEP_TRACKER_DEFAULTS));
+    const LIFE_WELLNESS_FIELDS = new Set(['checkIns', 'journalEntries', 'breathing']);
+    const LIFE_WELLNESS_BREATHING_DEFAULTS = Object.freeze({
+        preferredPattern: 'calm-focus',
+        preferredDuration: 120,
+        reducedMotion: false,
+        soundEnabled: false,
+        ambientSound: 'off',
+        breathingCuesEnabled: false,
+        volume: 0.35,
+        muted: false,
+        sessionsCompleted: 0,
+        lastCompletedAt: null
+    });
+    const LIFE_WELLNESS_BREATHING_FIELDS = new Set(Object.keys(LIFE_WELLNESS_BREATHING_DEFAULTS));
     const TESTING_PROFILE_KEYS = ['ap', 'sat', 'act', 'mcat', 'gre', 'lsat', 'gmat', 'psat', 'toefl', 'ielts', 'clep', 'ib', 'state'];
     const TESTING_PROFILE_DATA_KEYS = ['resourceLinks', 'weakAreas', 'practiceTests', 'mistakes', 'tasks'];
     const BUILT_IN_FOCUS_TEMPLATE_IDS = new Set([
@@ -143,6 +166,40 @@
         return true;
     }
 
+    function hasUnknownFieldsWithStoredValues(value, knownFields) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        return Object.keys(value).some(key => !knownFields.has(key) && hasUnknownStoredValue(value[key]));
+    }
+
+    function hasNonDefaultFields(value, defaults) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return hasStoredValue(value);
+        return Object.keys(defaults).some(key => {
+            if (!Object.prototype.hasOwnProperty.call(value, key)) return false;
+            const baseline = defaults[key];
+            return Array.isArray(baseline)
+                ? hasStoredValue(value[key])
+                : !Object.is(value[key], baseline);
+        });
+    }
+
+    function hasMeaningfulLifeCompatibilityData(workspace) {
+        const life = valueAtPath(workspace, 'lifeWorkspace');
+        if (!life || typeof life !== 'object' || Array.isArray(life)) return hasStoredValue(life);
+        if (hasUnknownFieldsWithStoredValues(life, LIFE_WORKSPACE_FIELDS)) return true;
+
+        const sleepTracker = life.sleepTracker;
+        if (hasNonDefaultFields(sleepTracker, LIFE_SLEEP_TRACKER_DEFAULTS)
+            || hasUnknownFieldsWithStoredValues(sleepTracker, LIFE_SLEEP_TRACKER_FIELDS)) return true;
+
+        const wellness = life.wellness;
+        if (!wellness || typeof wellness !== 'object' || Array.isArray(wellness)) return hasStoredValue(wellness);
+        if (hasUnknownFieldsWithStoredValues(wellness, LIFE_WELLNESS_FIELDS)) return true;
+
+        const breathing = wellness.breathing;
+        return hasNonDefaultFields(breathing, LIFE_WELLNESS_BREATHING_DEFAULTS)
+            || hasUnknownFieldsWithStoredValues(breathing, LIFE_WELLNESS_BREATHING_FIELDS);
+    }
+
     function isGeneratedHelpPage(page) {
         if (!page || typeof page !== 'object') return false;
         if (page.isSystemPage === true || page.builtInId === 'help-docs' || page.systemRole === 'help-docs') return true;
@@ -161,6 +218,7 @@
         if (Array.isArray(workspace.pages) && workspace.pages.some(page => page && !isGeneratedHelpPage(page))) return true;
         if (hasUserSpaces(workspace.spaces)) return true;
         if (USER_DATA_PATHS.some(path => hasStoredValue(valueAtPath(workspace, path)))) return true;
+        if (hasMeaningfulLifeCompatibilityData(workspace)) return true;
         if (typeof valueAtPath(workspace, 'businessWorkspace.quickCapture') === 'string'
             && valueAtPath(workspace, 'businessWorkspace.quickCapture').trim()) return true;
         if (TESTING_PROFILE_KEYS.some(profileKey => {

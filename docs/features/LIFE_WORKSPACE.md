@@ -16,6 +16,11 @@ saves, workspace exports and backups, restores, and encrypted Sync keep those
 records. Retired widgets show a neutral notice with no active
 controls. The legacy wellness-trends API reports unavailable without analyzing
 the records. Old Assistant wellness permission flags cannot re-enable retrieval.
+Startup recovery treats saved sleep entries, custom sleep targets, changed
+breathing preferences or session history, and unknown nested Life/wellness fields
+as workspace data, including unknown `0` and `false` values. The built-in
+8-hour sleep target, empty entry lists, and default breathing preferences remain
+semantically empty so they do not block recovery of an otherwise empty workspace.
 
 Ordinary scheduling preferences and workload planning are unaffected. In
 particular, quiet hours, breaks in a focus session, and availability windows do
