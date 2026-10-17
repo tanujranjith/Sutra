@@ -6,9 +6,20 @@ Full text coverage and parent diff review completed. This manifest records full 
 
 Inventory: tracked Markdown, MDX, reStructuredText, and text files from `git ls-files`. Legal and vendor documents are classified separately and preserved. Runtime Help source and additional non-Markdown contracts/notices are listed separately. Primary `AGENTS.md` was read as current policy; candidate `AGENTS.md` remains unchanged.
 
-## Findings awaiting owner review
+## Findings at audit completion
 
 - Candidate Homework source (`src/domain/homework-store.js`, `src/compat/legacy-homework.js`) and `docs/runtime-architecture.md` define canonical workspace storage and read-only legacy keys; primary AGENTS says Homework retains localStorage and mirroring. This contract conflict requires owner reconciliation; no policy or runtime change is made here.
+
+Follow-up resolution (October 17): the user delegated the storage choice, and
+the parent retained existing canonical persistence for current Homework UI
+writes. Candidate policy and feature guides now link the
+[migration/recovery record](../architecture/HOMEWORK_STORAGE_MIGRATION.md).
+The parent checked and documented retained v1 connected-view mutation paths,
+which are separate from the read-only migration adapter; an unqualified claim
+that all old keys are read-only would be inaccurate. No runtime, stored task,
+or primary checkout was changed. The findings below remain the audit's dated
+record; the authority conflict is resolved by this subsequent documented
+decision. Trademark policy remains an owner decision.
 
 ## Per-file coverage
 

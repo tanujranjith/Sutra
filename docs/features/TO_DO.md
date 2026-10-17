@@ -48,7 +48,7 @@ Searching or applying a task filter shows every matching assignment directly in 
 
 ## Persistence and connected views
 
-Both categories use `SutraHomeworkStore` and `appData.homeworkWorkspace.tasks`. There is no new task database or migration of legacy planner tasks. Course links, IDs, completion timestamps, unknown row fields, JSON compatibility schema, full-workspace exports, encrypted backups, and Sync collection projection remain in place. Preserve legacy storage identifiers and compatibility; [Data and Backups](../privacy-security/DATA_AND_BACKUPS.md#homework--established-store-and-legacy-compatibility) records the unresolved authority/mirroring discrepancy. The recognized `kind` value is inventoried in the existing row. Unknown kinds are preserved and displayed as homework.
+Both categories use `SutraHomeworkStore` and `appData.homeworkWorkspace.tasks`. There is no new task database or migration of legacy planner tasks. Course links, IDs, completion timestamps, unknown row fields, JSON compatibility schema, full-workspace exports, encrypted backups, and Sync collection projection remain in place. Preserve legacy storage identifiers, the read-only migration adapter, and retained v1 connected-view compatibility; [Data and Backups](../privacy-security/DATA_AND_BACKUPS.md#homework--established-store-and-legacy-compatibility) describes these boundaries. The recognized `kind` value is inventoried in the existing row. Unknown kinds are preserved and displayed as homework.
 
 An explicit Boolean `done` is authoritative for completion. Legacy `completed`
 and `status: "done"` values supply the initial completion state only when no

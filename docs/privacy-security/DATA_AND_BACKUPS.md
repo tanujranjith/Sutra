@@ -93,12 +93,14 @@ carry its `homeworkWorkspace` records. Legacy `hwCourses:v2`, `hwTasks:v2`, and
 older input formats remain compatibility identifiers. Do not write another task
 store or rename these keys.
 
-There is an unresolved contract discrepancy: this candidate's domain store uses
-canonical workspace persistence and its legacy adapter describes old keys as
-migration inputs, while the current agent policy requires existing localStorage
-and mirroring behavior to be preserved. The [documentation audit](../plans/DOCUMENTATION_AUDIT_20261017.md)
-records the evidence. This documentation change authorizes no storage migration
-or removal of compatibility. Save failures must remain visible; an in-memory
+The [Homework migration and recovery contract](../architecture/HOMEWORK_STORAGE_MIGRATION.md)
+documents the existing July migration and the October decision to retain canonical
+workspace persistence for the current Homework UI. Raw v2 keys are preserved as
+recovery input and are not maintained as live mirrors. The migration adapter also
+reads v1 keys, but separate legacy connected-view paths still read and mutate v1
+arrays; these are not mirrors of canonical edits. Once legacy import is complete,
+replaying stale arrays can resurrect deleted work. No tasks are rewritten by this
+documentation reconciliation. Save failures must remain visible; an in-memory
 task is not proof of a confirmed durable write.
 
 ### Other local data
@@ -626,7 +628,7 @@ round-trip in a browser.
 | `noteflow_atelier_db` (store `workspace`, key `root`) | IndexedDB | The whole `appData` workspace | Legacy-named compatibility identifier |
 | `noteflow_atelier_db` recovery keys | IndexedDB | Last meaningful root, displaced empty candidate, and confirmed-root marker | Device-local recovery journal and commit marker; not exported separately |
 | `noteflow_attachments_db` (store `blobs`) | IndexedDB | Course-file binaries | Legacy-named compatibility identifier |
-| `hwCourses:v2`, `hwTasks:v2` | localStorage legacy identifiers | Homework compatibility | See the unresolved authority/mirroring discrepancy above; workspace exports carry `homeworkWorkspace` |
+| `hwCourses:v2`, `hwTasks:v2` | localStorage legacy inputs | One-time migration and recovery compatibility | Canonical `homeworkWorkspace` is exported; raw legacy keys are not live mirrors |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
 | API keys | sessionStorage (default), encrypted `sutra_credentials_db` when remembered | Provider credentials | Never exported |

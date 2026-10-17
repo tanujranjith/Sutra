@@ -125,7 +125,8 @@ Self-contained feature areas live in domain subdirectories under
   [`SUTRA_ASSISTANT.md` §15](../features/SUTRA_ASSISTANT.md).
 - `homework.js` — the Homework UI, using the established `SutraHomeworkStore`.
   See [Homework storage and compatibility](../privacy-security/DATA_AND_BACKUPS.md#homework--established-store-and-legacy-compatibility)
-  for the unresolved policy/implementation discrepancy.
+  and the [migration record](HOMEWORK_STORAGE_MIGRATION.md) for current canonical
+  persistence, the read-only migration adapter, and retained v1 mutation paths.
 - `ap-study.js` — AP Study.
 - `review.js` — Review / flashcards (spaced repetition).
 - `business-workspace.js` — Projects & Work.

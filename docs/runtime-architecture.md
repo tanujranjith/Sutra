@@ -6,10 +6,10 @@ Sutra remains a static, file-compatible application. No bundler is required: `Su
 
 - `src/persistence/workspace-db.js` owns the IndexedDB connection and record adapter.
 - `src/core/migrations.js` owns sequential persisted-schema transformations. Runtime defaulting remains separate in the application normalizers.
-- `src/domain/homework-store.js` is the only writable homework authority. It commits whole workspace snapshots with revision and mutation metadata.
+- `src/domain/homework-store.js` owns current Homework UI writes. It commits whole workspace snapshots with revision and mutation metadata. The historical localStorage import, retained v1 mutation paths, and recovery contract are recorded in [Homework storage migration](architecture/HOMEWORK_STORAGE_MIGRATION.md).
 - `src/features/assistant/action-system.js` owns assistant action schemas, permissions, confirmation policy, transactional execution, rollback, persistence, undo receipts, and audit metadata.
 - `src/features/feature-registry.js` owns lazy initialization and teardown state for optional packs; `src/config/feature-manifest.js` is the declarative source of pack assets and integrations.
-- `src/compat/legacy-homework.js` is a read-only adapter for historical homework keys. Modern code must not write those keys.
+- `src/compat/legacy-homework.js` is a read-only adapter for historical Homework keys; it imports them into the canonical workspace and does not maintain localStorage mirrors. Legacy v1 call paths elsewhere in `app.js` have their own compatibility constraints; see [Homework storage migration](architecture/HOMEWORK_STORAGE_MIGRATION.md).
 - `src/core/dom-safety.js` is the trust boundary for untrusted HTML, URL, CSS, and iframe content.
 
 `src/core/app.js` is still the composition root and contains substantial view and domain code. New persistence, homework, migration, optional-feature, security, and assistant-action behavior should be added through the modules above rather than reintroduced as globals. Further extractions should be small and covered by unit tests before callers are moved.
