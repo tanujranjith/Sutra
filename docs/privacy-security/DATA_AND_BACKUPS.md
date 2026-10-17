@@ -1,4 +1,4 @@
-﻿# Data and Backups
+# Data and Backups
 
 Automatic backup failures retry with increasing session-local delays (one minute
 through thirty minutes), without marking the due daily slot as complete. A
@@ -86,22 +86,20 @@ fixtures by `npm run check:migrations`.
   verification as other canonical attachments. A backup is not reported as
   complete when a required source is missing.
 
-### Homework — localStorage mirror
+### Homework — established store and legacy compatibility
 
-- Homework is the homework module's own source of truth in **localStorage**:
-  `hwCourses:v2` and `hwTasks:v2` (with legacy `:v1` keys read for migration).
-- It is **mirrored** into `appData.homeworkWorkspace` at save time and **restored
-  to localStorage** on import, so it travels in backups while remaining the live
-  source of truth at runtime.
-- **Failure handling (storage hardening).** Homework writes go through the shared
-  `SutraSafeStorage` wrapper. If a write fails (quota exhausted, private-mode
-  security error, etc.), Homework **does not crash and does not lose your change
-  in memory**: the new/edited item stays on screen and a **clear, durable warning
-  banner** appears (`#sutraStorageWarningBanner`) offering an emergency backup.
-  This is **separate** from the catastrophic core IndexedDB save-failure banner
-  (`#sutraSaveFailureBanner`), which is reserved for the canonical workspace
-  pipeline — a Homework/localStorage hiccup never falsely claims total workspace
-  data loss. The warning clears automatically once a write succeeds again.
+Homework UI reads and writes through `SutraHomeworkStore`; workspace backups
+carry its `homeworkWorkspace` records. Legacy `hwCourses:v2`, `hwTasks:v2`, and
+older input formats remain compatibility identifiers. Do not write another task
+store or rename these keys.
+
+There is an unresolved contract discrepancy: this candidate's domain store uses
+canonical workspace persistence and its legacy adapter describes old keys as
+migration inputs, while the current agent policy requires existing localStorage
+and mirroring behavior to be preserved. The [documentation audit](../plans/DOCUMENTATION_AUDIT_20261017.md)
+records the evidence. This documentation change authorizes no storage migration
+or removal of compatibility. Save failures must remain visible; an in-memory
+task is not proof of a confirmed durable write.
 
 ### Other local data
 
@@ -434,7 +432,8 @@ makes **zero** Sutra Cloud requests.
 system from every backup layer above, with its own spec
 ([`docs/architecture/SYNC_PROTOCOL.md`](../architecture/SYNC_PROTOCOL.md)) and
 user guide ([`docs/features/CLOUD_SYNC.md`](../features/CLOUD_SYNC.md)). It is
-**off by default**, lives behind the save bar's **Sync** button, and never
+**off by default**, opens in **Sutra Cloud → Sync** (legacy Sync actions route
+to the same hub), and never
 replaces backups: sync replicates *changes*, backups preserve *moments*.
 
 The three guarantees are distinct and the Sync panel reports each one:
@@ -486,7 +485,8 @@ required fresh sign-in/device registration. This browser-origin cleanup cannot
 erase downloaded backups, external files, service-worker application caches, or
 an offline browser before it reconnects.
 
-The synchronized portable workspace is the schema-v7 `mode: "sync"` payload,
+The synchronized portable workspace uses the `mode: "sync"` contract introduced
+in schema v7 (the current migration registry supports v8),
 not the plaintext JSON-recovery payload. It includes all classified durable user
 content: notes and version history, tasks/planning/Homework, academic/study/
 college/life/work data, custom tabs, trash, private documents, supported
@@ -575,7 +575,7 @@ Two deliberate details:
 - **Assistant chat history from a backup** when its encrypted/plaintext backup
   setting is off. This backup preference does not suppress encrypted Sutra Sync:
   when durable chat history is enabled, visible conversations synchronize.
-  - **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
+- **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
   in-session unlocked-page set) — not exported; locked pages correctly require
   the PIN again after a reload.
 
@@ -626,12 +626,12 @@ round-trip in a browser.
 | `noteflow_atelier_db` (store `workspace`, key `root`) | IndexedDB | The whole `appData` workspace | Legacy-named compatibility identifier |
 | `noteflow_atelier_db` recovery keys | IndexedDB | Last meaningful root, displaced empty candidate, and confirmed-root marker | Device-local recovery journal and commit marker; not exported separately |
 | `noteflow_attachments_db` (store `blobs`) | IndexedDB | Course-file binaries | Legacy-named compatibility identifier |
-| `hwCourses:v2`, `hwTasks:v2` | localStorage | Homework (source of truth) | Mirrored into `appData.homeworkWorkspace` |
+| `hwCourses:v2`, `hwTasks:v2` | localStorage legacy identifiers | Homework compatibility | See the unresolved authority/mirroring discrepancy above; workspace exports carry `homeworkWorkspace` |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
 | API keys | sessionStorage (default), encrypted `sutra_credentials_db` when remembered | Provider credentials | Never exported |
 | `appData.assistantChatHistory` | canonical IndexedDB workspace | Optional visible conversations, ids/order/citations/receipts | Encrypted sync and encrypted backup by default; plaintext recovery opt-in |
 | Managed Assistant chat localStorage keys | localStorage compatibility mirror | One-time legacy import, then canonical-to-mirror only | Never authoritative after migration; stale/empty values cannot erase canonical history |
 
-For the authoritative, line-referenced behavior and the verification scripts,
+For dated implementation evidence and the verification scripts at that audit,
 read [`sutra-save-systems-audit.md`](../architecture/sutra-save-systems-audit.md).

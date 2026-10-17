@@ -109,7 +109,8 @@ and closure-bound runtime bridges retain their existing ownership.
 
 ## 3. Feature modules
 
-Self-contained feature areas live in **`src/features/*.js`**:
+Self-contained feature areas live in domain subdirectories under
+**`src/features/`** (see [`src/features/README.md`](../../src/features/README.md)):
 
 - `flow-assistant.js` — **Sutra Assistant**, the contextual chat panel and its
   Suggested Actions / Apply-Decline change cards / Assistant Activity.
@@ -122,8 +123,9 @@ Self-contained feature areas live in **`src/features/*.js`**:
   parsing, reasoning-aware timeout scaling, and per-response/aggregate
   diagnostics. No DOM, no network. See
   [`SUTRA_ASSISTANT.md` §15](../features/SUTRA_ASSISTANT.md).
-- `homework.js` — the Homework module (its own localStorage source of truth,
-  mirrored into `appData`).
+- `homework.js` — the Homework UI, using the established `SutraHomeworkStore`.
+  See [Homework storage and compatibility](../privacy-security/DATA_AND_BACKUPS.md#homework--established-store-and-legacy-compatibility)
+  for the unresolved policy/implementation discrepancy.
 - `ap-study.js` — AP Study.
 - `review.js` — Review / flashcards (spaced repetition).
 - `business-workspace.js` — Projects & Work.
@@ -220,7 +222,8 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
 
 - **One workspace object** (`appData`) is the in-memory truth; it persists to
   **IndexedDB** (`noteflow_atelier_db`). Course-file binaries persist separately
-  to `noteflow_attachments_db`; homework mirrors to localStorage.
+  to `noteflow_attachments_db`; Homework retains its established store and legacy
+  compatibility boundaries described above.
 - **One hydrate path** merges stored data over defaults and normalizes it on
   load; **one debounced save path** (with a lifecycle flush) writes it back.
 - `src/persistence/workspace-db.js` deliberately reuses one IndexedDB connection,
@@ -277,7 +280,8 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
   circuit breaker pauses sync without blocking local saves. This is sync-time
   block merging, not a CRDT/OT collaborative editor. The normative contract is
   [`SYNC_PROTOCOL.md`](./SYNC_PROTOCOL.md).
-- **Workspace schema v7 makes sync portability and Assistant ownership explicit.** The classification
+- **Schema v7 introduced sync portability and Assistant ownership; the current
+  migration registry supports v8.** The classification
   in `persistence-inventory.json` covers all top-level fields, named nested
   durable contracts, localStorage mirrors, browser stores, assets, secrets, and
   deliberate exclusions. `appData.assistantChatHistory` owns durable
@@ -341,13 +345,14 @@ Run with Node from the project root:
   the HTML entry points (`document.getElementById` returns only the first match,
   so a dup id silently mis-wires).
 - `npm run verify` - the strongest practical local pass: `check:all` +
-  `build:deploy` + `check:deploy` + a deterministic serial Chromium e2e smoke
-  (`test:e2e:smoke`). The full browser matrix stays on `npm run test:e2e`.
+  `test:unit` + `build:deploy` + `check:deploy` + deterministic serial Chromium
+  smoke and Sync suites (`test:e2e:smoke`, `test:e2e:sync`). The full browser
+  matrix stays on `npm run test:e2e`.
 - `npm run check:guardrails` - architecture guardrails: fails CI when a change
   adds a new raw `innerHTML =` / `insertAdjacentHTML` / `document.write`, a new
   direct `localStorage.setItem` / `sessionStorage.setItem`, an unregistered
   `window.*` global, or a top-level workspace field missing from
-  `docs/persistence-inventory.json`. Baseline lives in
+  `docs/architecture/persistence-inventory.json`. Baseline lives in
   `scripts/guardrail-baseline.json`; reviewed exceptions use an inline
   `// sutra-allow-html:` / `// sutra-allow-storage:` marker, or
   `npm run check:guardrails:update` to deliberately re-baseline.
@@ -493,7 +498,7 @@ reads must not open the Sync database or request provider data. The existing
 `SutraSync` and `SutraCloudSync` APIs retain their operational semantics;
 their open actions select the corresponding section in the shared modal.
 Sync scheduling stays inside its engine/bridge. Snapshot scheduling uses a
-separate Web Lock and successful-upload receipt in version-2 device-local
+separate Web Lock and successful-upload receipt in version-3 device-local
 Cloud metadata. The encryption helpers and provider registry stay in place.
 
 The restructure deliberately **stopped at green checkpoints**. Remaining work,

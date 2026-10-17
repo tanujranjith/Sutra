@@ -19,8 +19,10 @@ Plain-English fixes for common Sutra Cloud issues. See also
   folder, or a self-hosted token-exchange proxy.
 
 ### "Blocked by browser security policy" / custom provider won't load
-- The hosted build's CSP only allows known origins and **forbids wildcards**.
-  Your custom WebDAV/S3/Custom-HTTP/other-Supabase origin isn't allowed.
+- The hosted build permits reviewed origins and bounded host families, including
+  hosted `*.supabase.co` projects. Arbitrary WebDAV/Custom HTTP origins and
+  self-hosted Supabase endpoints require a CSP change. See
+  [the canonical destination matrix](SUTRA_CLOUD_SETUP.md#hosted-vs-self-hosted).
 - **Fix:** run a **self-hosted Sutra build** and add your origin to the
   `connect-src` in `scripts/lib/csp-policy.mjs`, run `npm run csp:generate`,
   then rebuild or redeploy. Recommended providers work in the hosted build.
@@ -52,8 +54,10 @@ Plain-English fixes for common Sutra Cloud issues. See also
   credentials have write access. Re-run **Test connection**.
 
 ### Restore failed
-- Usually a wrong passphrase or a partial download. Your workspace isn't changed.
-  Retry; if it persists, try another backup or a local `.sutra` import.
+- Wrong-passphrase and pre-apply validation failures leave the workspace unchanged.
+  A failure after restore starts may leave recovered content that is not yet
+  confirmed saved. Read the error, keep the original backup and safety copy,
+  and resolve storage errors before retrying.
 
 ### I switched providers and my old backups disappeared
 - They didn't — switching just shows the **new** provider's list. Your old
@@ -87,7 +91,8 @@ Plain-English fixes for common Sutra Cloud issues. See also
 
 ## FAQ
 
-**Can Sutra read my backup?** No. It's encrypted on your device; Sutra has no key.
+**Can Sutra read my backup?** The local app decrypts it when you supply the
+passphrase. No central Sutra service receives the passphrase.
 
 **Can my provider read my workspace?** No. The provider stores ciphertext only.
 
@@ -114,8 +119,9 @@ are device-local and never travel in a backup.
 **Can I use iCloud Drive?** Yes — via **Manual** backup: save the encrypted
 `.sutra` into your iCloud Drive folder.
 
-**Can I self-host storage?** Yes — WebDAV, S3-compatible, or a Custom HTTP
-endpoint (self-hosted build needed for custom origins due to CSP).
+**Can I self-host storage?** Yes — WebDAV or a Custom HTTP endpoint, with your
+origin added to a self-hosted build's CSP. S3-compatible transport is preview;
+its configuration UI does not yet provide working uploads.
 
 **What is WebDAV?** A standard file-access protocol supported by Nextcloud,
 ownCloud, and many NAS devices — Sutra uploads encrypted files over it.

@@ -497,8 +497,9 @@ sync's own status UI — **never** through the local persistence-failure banner.
 Sync reuses the existing Sutra Cloud email-OTP sign-in. Deliberate deviation
 from the backup convention: sync persists the Supabase **refresh token** in
 `sutra_sync_db.meta` (IndexedDB, this-device-only, never in workspace data or
-exports) so sync survives browser restarts; backups keep their
-sessionStorage-only sessions. Every sync RPC binds the authenticated Supabase
+exports) so sync survives browser restarts. Backup-only sign-in is session-only
+by default; an explicit Remember me choice stores its refresh token encrypted
+in the separate device-local credential vault. Every sync RPC binds the authenticated Supabase
 `session_id` claim to one registered device row. Revoking that row blocks RPC
 and `sync-assets` Storage access on the next request; direct table grants are
 revoked so a device cannot bypass the check with PostgREST.

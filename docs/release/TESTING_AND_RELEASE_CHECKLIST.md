@@ -1,23 +1,20 @@
-﻿# Testing & Release Checklist
+# Testing & Release Checklist
 
 This is the pre-release checklist for **Sutra**. It combines the automated guards
 (Node scripts that run without a DOM) with a manual QA matrix, legacy-compatibility
 checks, the document-background round-trip, accessibility checks, and a final
 sign-off.
 
-The latest audit-remediation evidence is recorded in
+Historical August audit-remediation evidence is recorded in
 [Audit Remediation Release Certification — 2026-08-30](./AUDIT_REMEDIATION_CERTIFICATION_2026-08-30.md).
 
-Sutra is **local-first** - a static web app with no backend. The automated checks
-therefore verify the **shipped source** (export/import wiring, persistence parity,
-feature hooks) rather than spinning up a server.
+Sutra is a static, local-first app with no required backend; optional services have separate contracts. Release verification includes source-policy checks, executable unit tests, packaged-artifact checks, and browser tests. See the [current CI record](../plans/CI_READINESS_20261016.md) for observed results; this checklist is not a certification.
 
 ---
 
 ## 1. Automated test commands
 
-Run all of these from the repository root with Node. They are fast and require no
-browser.
+The table below lists selected Node checks, which require no browser. It is not the complete release gate. `npm run verify` runs check:all, unit tests, deploy build/check, Chromium smoke, and Sync suites; the full compatibility matrix additionally covers the configured browser/device projects.
 
 | Command | What it guards |
 | --- | --- |
@@ -113,7 +110,7 @@ Sutra never breaks old data. Verify each:
       loading). Confirm custom CSS and plugins are skipped and **nothing is deleted**.
 - [ ] **Secrets excluded.** Export a workspace that has an API key configured and
       confirm **no API keys / provider credentials / tokens** appear anywhere in the
-      exported file (provider API keys are session-only). The activity-log key
+      exported file (session-only and explicitly remembered device-local credentials must both be excluded). The activity-log key
       (`sutra:activityLog:v1`, migrated from `flow:activityLog:v1`) is **not** a
       secret and may appear.
 
@@ -138,7 +135,7 @@ locking:
 8. **Export** the workspace (`.sutra`), then **wipe** local data, **import** the
    backup, and **reload**. The background, blur, and dim come back intact (packaged as
    an `assets/` file with a checksum).
-9. Repeat step 8 with a legacy **`.atelier`** export to confirm cross-format parity.
+9. Import a known-good legacy **`.atelier`** fixture to confirm compatibility; current exports use `.sutra`.
 10. Check **note export** behavior: HTML includes the background where feasible; PDF
     preserves it where browser printing allows; **Markdown and plain text omit it
     cleanly**; treat DOCX/RTF as a known limitation if not reliably supported.
@@ -281,8 +278,7 @@ human authentication.
 
 For the current manual Account A/B certification sequence, use
 [`SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md`](./SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md)
-after applying the ordered chain through
-`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`. The
+after applying the current [ordered schema/migration instructions](../../supabase/README.md#2-apply-the-schema). The
 repository has static policy/RPC/transport checks, but only the operator can
 record real authenticated REST, RPC, Storage, and ciphertext-metadata denial
 evidence. Do not copy a browser token, passphrase, key, or payload body into
@@ -305,8 +301,7 @@ Google Drive OAuth/sync, Sutra Assistant provider calls, configurable
 localhost/127.0.0.1 local endpoints, approved feedback-form embeds, approved
 media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube
 thumbnails), AP Classroom resource links, AI-console help links,
-ChatGPT/Spotify launch shortcuts, and optional secondary document import/export
-libraries with graceful offline errors.
+ChatGPT/Spotify launch shortcuts, and explicit optional local helpers. Document import/export runtime libraries are vendored and load from the same origin. Enabled automatic Sync/backup cycles do not require a new click.
 
 Physical-device QA is not automated and must not be fabricated. Before public beta,
 record actual results for:
@@ -320,13 +315,15 @@ record actual results for:
 
 ## 8. Production response-header verification
 
-The current production host is GitHub Pages. It is intentionally retained as a
-static host, so the repository documents and accepts its inability to emit
+GitHub Pages is a static hosting target. Its header limitations apply to that
+host; the repository documents its inability to emit
 custom response headers. Before a release, perform the read-only HTTPS `HEAD`
 check documented in [`security-headers.md`](../security-headers.md) against the
-production `Sutra.html` URL and record any host-policy change. The current
-baseline is `200` with HSTS only; response-header CSP, MIME-sniffing,
+target deployment URL and record any host-policy change. The recorded Pages
+baseline was `200` with HSTS only; response-header CSP, MIME-sniffing,
 referrer, and framing protections are unavailable there. The meta CSP remains
 required in every HTML entry point. A header-capable host or reverse proxy is a
 separate deployment decision and must not be introduced implicitly by this
 checklist.
+
+The separately inspected Vercel app deployments have revision-specific header evidence in the [CI readiness record](../plans/CI_READINESS_20261016.md). Verify the exact target; do not generalize one host's headers to another.

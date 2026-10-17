@@ -1,5 +1,7 @@
 # NoteFlow Atelier — Save Systems Audit (Local Persistence + `.atelier` Export/Import)
 
+> Historical audit: the findings and line references below describe the May 2026 review and its recorded follow-ups. They are not a current storage contract or fresh test result. Use [Data and Backups](../privacy-security/DATA_AND_BACKUPS.md) and [the persistence inventory](persistence-inventory.json) for current contracts.
+
 _Last updated: 2026-05-29. Audit performed by reading the live implementation in
 `src/core/app.js` (~48k lines), `src/features/*.js`, and the verification scripts,
 then exercising the running app in a browser (Stage 1 + Stage 2 round-trips)._

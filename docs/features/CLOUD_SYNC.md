@@ -180,18 +180,7 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
 V1 syncs through the same Supabase project that powers Sutra Cloud backups
 (official or bring-your-own). Setup for the project owner:
 
-1. New project: run [`supabase/schema.sql`](../../supabase/schema.sql) (backups), then
-   [`supabase/sync-schema.sql`](../../supabase/sync-schema.sql) (sync tables,
-   RLS, RPCs). Both idempotent. Existing sync project: run only
-   [`supabase/migrations/20260716_device_revoke_wipe.sql`](../../supabase/migrations/20260716_device_revoke_wipe.sql)
-   to add revoke-and-wipe state/RPCs, then
-   [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql)
-   to tighten `sync-assets` Storage paths, then
-   [`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`](../../supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql)
-   to reproduce the final production policy syntax and remove browser execution
-   of `rls_auto_enable()`. All migrations preserve encrypted vault data and are
-   safe to rerun. The final policy permits only the exact authenticated
-   `<user-id>/<64-character-lowercase-hex-content-hash>` asset path.
+1. Follow the canonical [schema and ordered migration instructions](../../supabase/README.md#2-apply-the-schema) for a fresh or existing project. That maintained list includes later pruning and asset/reference repairs; do not rely on an older July-only chain.
 2. Configure `supabaseUrl` + `supabaseAnonKey` in
    `src/config/sutra-runtime-config.js` (already done if Sutra Cloud works).
 3. Users sign in with the existing email-OTP flow, then enable sync with a
@@ -294,13 +283,17 @@ states the required direct REST, RPC, Storage, payload-boundary, anonymous, and
 same-profile-account-switch checks without exposing browser credentials to the
 test runner.
 
-The latest repository-wide reconciliation, current parity matrix, unattended
-evidence, release blocker, migration order, and 30-step operator checklist are
-recorded in the [2026-07-22 cloud sync audit](../release/CLOUD_SYNC_AUDIT_2026-07-22.md).
+The July repository-wide reconciliation, parity matrix, unattended evidence,
+release blocker, migration order, and 30-step operator checklist are preserved
+in the historical [2026-07-22 cloud sync audit](../release/CLOUD_SYNC_AUDIT_2026-07-22.md).
 
 ### Verification boundary (2026-07-18)
 
-- The current local validation run completed the named migration, round-trip
+> The results below are dated July evidence. They do not certify the current
+> branch, browser matrix, or production backend. Current release readiness must
+> be established separately.
+
+- The local validation run recorded on 2026-07-18 completed the named migration, round-trip
   (53-field matrix), persistence, network, CSP, guardrail, and link checks;
   `npm run test:unit` passed 312 tests; and `npm run test:e2e:sync` passed
   14 serialized Chromium scenarios. The focused sync suite now drives the real

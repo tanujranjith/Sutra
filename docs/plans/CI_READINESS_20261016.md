@@ -6,6 +6,20 @@ this branch for GitHub CI after preflight review. No merge, production promotion
 or remote configuration change is authorized. Prepared coverage is not a claim
 that pending automated tests have passed.
 
+## Current recorded status — October 17
+
+Run [38997646618](https://github.com/tanujranjith/Sutra/actions/runs/38997646618)
+at `d95489e` completed with **16 successful jobs and one failed job**. Static,
+unit, build, artifact, Chromium, Chrome, Firefox, responsive, and the other WebKit
+lanes passed. WebKit shard 5 failed the closing-connection autosave case in
+`persistence-and-folder.spec.mjs` with `WorkspaceConflictError`; its job recorded
+113 passes and 12 existing engine skips. This is not an all-green matrix.
+
+Later local PIN fixes and documentation changes have not been uploaded or tested
+by CI. The user's current instruction is **no push or merge**. The dated progress
+and prepared-check tables below are historical checkpoints, not pending-run or
+current-release certification.
+
 ## Initial CI execution
 
 - The branch was pushed at `b28b216`; GitHub confirmed `main` remained at
@@ -264,10 +278,11 @@ No protection or remote hosting setting changed. The CLI's redundant `.gitignore
 addition was removed; existing ignore rules already cover its local metadata.
 This supersedes the earlier live-header limitation for these two app deployments.
 
-Full run `38997646618` at `d95489e` is in progress. Its build/static/unit/artifact
+Full run `38997646618` at `d95489e` completed as summarized above. Its build/static/unit/artifact
 job passed, and the parent read successful WebKit early checks for the header
 (26.0 s), full Assistant writing review (23.6 s), and repaired math fixture
-(10.3 s). The full 17-job result is still pending. No main merge occurred.
+(10.3 s). The WebKit fifth-shard persistence failure prevents a full compatibility
+pass. No main merge occurred.
 
 Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:
 

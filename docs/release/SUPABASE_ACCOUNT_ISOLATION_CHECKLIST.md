@@ -1,17 +1,6 @@
 # Sutra Sync — manual Account A/B isolation checklist
 
-For a fresh empty project, apply in order:
-
-1. [`supabase/schema.sql`](../../supabase/schema.sql);
-2. [`supabase/sync-schema.sql`](../../supabase/sync-schema.sql);
-
-The current `sync-schema.sql` already contains revoke/wipe and exact asset-path
-definitions. For an existing project created from an older sync schema, apply
-(or safely re-run) these additive migrations in order:
-
-3. [`supabase/migrations/20260716_device_revoke_wipe.sql`](../../supabase/migrations/20260716_device_revoke_wipe.sql);
-4. [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql);
-5. [`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`](../../supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql).
+Before testing, follow the canonical [schema and ordered migration instructions](../../supabase/README.md#2-apply-the-schema) for the project state. Use the complete maintained chain, including the later pruning and asset/reference repairs, rather than a duplicated July-only setup list.
 
 The July 30 migration reproduces the policy/ACL state applied manually to the
 production project: four anchored exact-path policies plus no browser-role
