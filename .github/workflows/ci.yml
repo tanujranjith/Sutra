@@ -194,6 +194,10 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
           SUTRA_SERVE_ROOT: .deploy
         run: |
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "2" ]; then
+            # Report Drive prompt/lock regressions before the longer WebKit shard.
+            npx playwright test tests/e2e/google-drive-sync.spec.mjs --grep 'locking Drive sync|Drive restore rejects wrong password' --workers=1 --project=webkit
+          fi
           if [ "${{ matrix.id }}" = "responsive" ]; then
             npx playwright test --workers=1 ${{ matrix.project_args }}
           else
