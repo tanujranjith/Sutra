@@ -147,6 +147,23 @@ session; no matching artifact was found in Downloads, and that route was stopped
 Remaining transient page/setup or visibility failures that passed retry are
 tracked separately from repeated application/fixture failures.
 
+Full run `38988735851` at `5d59d76` passed static/unit/build/artifact gates.
+Both early WebKit Drive regressions passed: locking retained the pending local
+edit without reopening a password prompt, and restore rejected a wrong password
+before restoring with the correct one. These observed passes validate the hidden
+field and lock-timer repairs without establishing every earlier failure's cause.
+
+The same run reproduced Settings notice overlap after the layout-settling wait.
+At 320 by 568, the actual main-content scroller stopped at its maximum of 543px;
+the first appearance disclosure remained at y=308–370 behind the visible update
+notice at y=308–412. The requested scroll was larger than the available range.
+This establishes missing bottom scroll clearance, rather than smooth scrolling,
+as the reproduced defect. The reviewed mobile CSS repair reserves the notice's
+existing responsive height cap as additional bottom scroll space only while the
+notice is visible, preserving navigation padding and safe-area clearance.
+The notice checks are included in all four responsive projects. Both changes
+await CI validation; no local browser suite was run.
+
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
 live application headers remain unverified. The installed CLI can inspect the

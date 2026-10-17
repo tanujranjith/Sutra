@@ -2276,8 +2276,19 @@ body:has(#view-settings.active) .sutra-update-banner {
     overflow-y: auto;
 }
 @media (max-width: 640px) {
+    body:has(#view-settings.active) {
+        --settings-mobile-update-banner-max-height: calc(100dvh - 240px);
+    }
     body:has(#view-settings.active) .sutra-update-banner {
         bottom: calc(156px + env(safe-area-inset-bottom, 0px));
-        max-height: calc(100dvh - 240px);
+        max-height: var(--settings-mobile-update-banner-max-height);
+    }
+    /* Reserve the banner's height cap so the last controls can scroll above it.
+       Match contracts.css's overlay suppression; hidden notices need no reserve. */
+    body:has(#view-settings.active):has(#sutraUpdateBanner:not([hidden])):not(:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .sidebar-open, .notif-panel-open)) #mainContent {
+        padding-bottom: calc(
+            132px + var(--safe-bottom, 0px) +
+            max(0px, var(--settings-mobile-update-banner-max-height))
+        );
     }
 }

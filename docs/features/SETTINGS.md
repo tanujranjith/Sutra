@@ -39,6 +39,9 @@ least 44 pixels.
 The pending-changes bar stays above the phone navigation, safe-area inset, and
 any active Focus player, so Save Changes and Revert remain reachable.
 The optional app-update notice sits above this action bar on desktop and phones.
+While it is visible on phones, extra bottom scroll space lets the final controls
+move above the notice without dismissing it. The reserve follows the notice's
+responsive height limit and disappears when the notice is hidden.
 
 Workspace search uses the same field-level Settings index and intent ranking.
 Category names are indexed separately from their navigation descriptions, so
