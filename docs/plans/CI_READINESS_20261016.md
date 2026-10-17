@@ -115,6 +115,12 @@ checks visible-banner disclosure reachability through the actual phone scroller.
 The parent corrected an initial bottom-navigation/header assumption before
 accepting that regression. Focused Settings and paste checks also precede their
 long compatibility shards. These changes still await GitHub execution.
+The completed Firefox second shard additionally exposed the same synthetic-paste
+issue in pagination and a first-selection timeout in the writing-review fixture.
+The pagination transfer is now explicit. Writing review checks visible and
+serialized text before focused keyboard selection, retaining the full-selection
+requirement and reporting its actual value. Both checks precede Firefox's long
+second shard on the next run.
 
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so

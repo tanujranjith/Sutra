@@ -18,7 +18,7 @@ async function selectEditorTextAndWait(page, editor, text) {
   await editor.click();
   await editor.press('Home');
   await editor.press('Shift+End');
-  await page.waitForFunction(expected => window.getSelection()?.toString() === expected, text);
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(text);
 }
 
 test('passage writing command reviews, cancels, applies edited text, and supports Undo', async ({ page }) => {
@@ -30,9 +30,9 @@ test('passage writing command reviews, cancels, applies edited text, and support
   const editor = page.locator('#editorV2Host .ProseMirror');
   const original = 'This are a sentence.';
   await editor.fill(original);
-  await editor.press('Home');
-  await editor.press('Shift+End');
-  await page.waitForFunction(text => window.getSelection().toString() === text, original);
+  await expect(editor).toHaveText(original);
+  await expect.poll(() => page.evaluate(() => window.SutraNotesEditorV2.getStorageHtml())).toContain(original);
+  await selectEditorTextAndWait(page, editor, original);
   await editor.press('/');
   await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
   const review = page.locator('.sutra-inline-ai-workbench');
@@ -41,9 +41,7 @@ test('passage writing command reviews, cancels, applies edited text, and support
   await review.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(editor).toHaveText(original);
 
-  await editor.press('Home');
-  await editor.press('Shift+End');
-  await page.waitForFunction(text => window.getSelection().toString() === text, original);
+  await selectEditorTextAndWait(page, editor, original);
   await editor.press('/');
   await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
   await review.getByRole('button', { name: 'Generate draft', exact: true }).click();

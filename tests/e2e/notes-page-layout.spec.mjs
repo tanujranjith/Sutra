@@ -182,11 +182,12 @@ test('Pages mode paginates long paragraphs and keeps auto gaps out of stored con
     pm.commands.setTextSelection(pm.state.doc.content.size - 1);
     const transfer = new DataTransfer();
     transfer.setData('text/plain', text);
-    pm.view.dom.dispatchEvent(new ClipboardEvent('paste', {
-      bubbles: true,
-      cancelable: true,
-      clipboardData: transfer
-    }));
+    const pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+    // Firefox drops ClipboardEventInit.clipboardData for synthetic paste events.
+    // https://bugzilla.mozilla.org/show_bug.cgi?id=2027025
+    // Keep the test's prepared transfer available through the event property.
+    Object.defineProperty(pasteEvent, 'clipboardData', { value: transfer });
+    pm.view.dom.dispatchEvent(pasteEvent);
   }, pastedText);
   await expect.poll(() => page.evaluate(() => window.SutraNotesEditorV2.getStorageHtml()))
     .toContain('Pasted words trigger the same layout refresh.');
