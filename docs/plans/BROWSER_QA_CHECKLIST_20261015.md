@@ -45,7 +45,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 24. ~~US Letter default and A4 selection.~~
 25. ~~Imported task Notes/Reference URL editing, reopen/reload, and unknown fields.~~
 26. ~~Stateful follow-up: Gemini read staged task notes/Reference URL, resolved the follow-up correctly, cited the right task, and retained working citations and fields after reload.~~
-27. Successful one-time PIN read: accurate source disclosure and editor stays locked. Open: needs user-entered QA PIN plus a provider.
+27. Successful one-time PIN read: consent/PIN prompts and editor isolation passed October 17, but the live answer remains unverified. Findings: local Help routing intercepted the note question; Workspace-aware and Current view pre-send receipts listed an unrelated QA note; Minimal listed no source after consent. All provider submissions were cancelled before sending. Fix/verify routing and exact-source disclosure, then repeat the live answer.
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
 29. ~~True Chrome zoom at 67%/150% across Home, Create editing, Assistant composer, and Settings search/save. User set real browser zoom; manual QA confirmed layout containment and note persistence on October 17.~~
 30. ~~Bundled Sutra icons in light/dark themes, phone navigation, and cached loading with the local server stopped.~~
@@ -73,7 +73,55 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 52. ~~Repository documentation audit, applicable consolidation, and obsolete-guide removal; parent reviewed the changes.~~
 53. ~~Workspace PIN setup and timeout forms hide irrelevant credential fields; local manual verification passed.~~
 54. ~~Homework storage policy reconciled with the existing current-UI IndexedDB store; migration/recovery record explicitly preserves and documents separate legacy v1 mutation paths. No runtime or task data changed.~~
-55. Trademark policy: owner decision remains open.
+55. Trademark policy: recommendation prepared October 17: keep Apache 2.0, update TRADEMARK.md to Sutra with its former name, permit accurate attribution/references, and distinguish unofficial forks from the official project. Owner decision remains open; no legal files changed.
+
+## Locked-source QA and trademark recommendation — October 17, 2026
+
+Manual Chrome checks used only the disposable `http://localhost:5287`
+workspace. The user saved a Gemini key and created the PIN for the harmless
+`QA Locked Consent` note. The fixture contains only a short practice-meeting
+reminder. Gemini's live model catalog loaded 46 entries; the selected model
+was `gemini-3.8-flash`, with Low thinking and Stateless history.
+
+The exact test question was:
+
+> Read only the locked note "QA Locked Consent" with one-time permission.
+> In one short sentence, when is the practice meeting and what should I bring?
+
+- The consent dialog named the correct page and required its existing PIN.
+  Repeated attempts asked for fresh consent and PIN verification.
+- With local answers enabled, the completed reply was generic locked-note Help,
+  labeled Computed locally / no API key used, rather than the requested answer.
+- With that local shortcut temporarily disabled, Workspace-aware and Current
+  view pre-send receipts each named both the consented locked note and the
+  unrelated `QA Zoom 29 — disposable` note. The locked source was correctly
+  labeled as read once with PIN for this request. Those submissions were
+  cancelled; this establishes a disclosure/source-selection finding, not proof
+  that unrelated content reached a provider.
+- Minimal context still requested consent/PIN, but its pre-send receipt listed
+  neither sources nor workspace areas. That submission was also cancelled.
+  No successful remote answer or post-response disclosure was verified.
+- Returning to Create showed the protected page's PIN screen. Its reminder
+  text was absent from both the classic editor and Modern Editor DOM.
+- Workspace access was restored to No workspace access, Notes to Use access
+  mode, context depth to Current view, local answers to On, and Assistant
+  master/Pack to Off. Settings and the locked page state survived reload.
+  The harmless locked note and QA chats remain locally.
+
+Gemini generation requests submitted: zero; the local reply and cancelled
+pre-send receipts are the observed evidence. Provider billing was not inspected.
+Model-list lookup is not a generation. No API key value was read, exported,
+or recorded. No automated
+suites, installs, deployments, pushes, or merges were performed.
+
+For item 55, `TRADEMARK.md` still names NoteFlow Atelier while `NOTICE` and
+README already identify Sutra and explain the former name. The recommendation
+is to align that brand policy with the current product, retain Apache 2.0 code
+licensing, permit truthful references and attribution, and ask distributed
+forks to use distinct branding without implying endorsement. This is a proposed
+project policy, not a claim of trademark registration or name clearance.
+The owner has not yet adopted it, and LICENSE/NOTICE/TRADEMARK.md are unchanged.
+Reference: [Apache 2.0, sections 4 and 6](https://www.apache.org/licenses/LICENSE-2.0).
 
 ## Real Chrome zoom and storage follow-up — October 17, 2026
 
@@ -89,7 +137,8 @@ toolbar exposed its existing scroll controls. The harmless `QA Zoom 29 — dispo
 note, including text added at 150%, survived reload. Assistant drafts were cleared
 without sending; no keys or provider calls were used. Assistant master and Pack
 were temporarily enabled for composer QA, then both restored to Off and confirmed
-after reload. Real zoom remains at the user's 150% setting pending their reset.
+after reload. The user subsequently restored 100%; the later item 27 pass
+confirmed pixel ratio 1 and no document overflow at a 1755px CSS viewport.
 Screenshots were inspected in memory, avoiding additional large disk artifacts.
 
 For item 54, the user delegated the storage-contract choice. History and current
