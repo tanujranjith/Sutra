@@ -359,7 +359,7 @@
     "./styles/legacy/ui-refresh.css?v=20260616-cssextract1",
     "./styles/legacy/workspace-overrides.css?v=20260703-voice1",
     "./styles/responsive/mobile.css?v=20261001-mobile-data-actions1",
-    "./styles/responsive/student-workspaces-polish.css?v=20261015-settings-option3-qa4",
+    "./styles/responsive/student-workspaces-polish.css?v=20261016-settings-notice-flow3",
     "./styles/themes/dune.css?v=20260807-dune3",
     "./styles/themes/glass.css?v=20260917-glass-cohesion1",
     "./styles/themes/macos26-redesign.css?v=20260913-glass-surfaces1",
@@ -370,7 +370,7 @@
     "./styles/views/contextual-shell.css?v=20261011-header-flow4",
     "./styles/views/custom-tabs.css?v=20260913-custom-html-widget1",
     "./styles/views/focus-session.css?v=20260807-atmospheres1",
-    "./styles/views/settings-redesign.css?v=20261016-settings-notice-clearance3",
+    "./styles/views/settings-redesign.css?v=20261016-settings-notice-clearance4",
     "./styles/views/timeline-calendar.css?v=20261001-mobile-agenda1",
     "./styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1",
     "./styles/views/today-redesign.css?v=20260816-home-quick-task1"

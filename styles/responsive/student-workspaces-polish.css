@@ -376,13 +376,16 @@ body.settings-anchored-mode #view-settings .cc-page {
         overflow-wrap: anywhere;
     }
 
-    /* Settings: use the existing category picker and page-level scroll. */
+    /* Settings: keep fixed controls clear in the flowing page. Update notices
+       supply a conditional reserve; scroll-container padding alone does not
+       extend overflowing descendants in WebKit. */
     #view-settings .cc-page {
         padding-bottom: calc(
             var(--sutra-mobile-nav-height, 4.75rem) +
             var(--sutra-focus-player-height, 0px) +
             env(safe-area-inset-bottom, 0px) +
-            var(--sutra-space-6, 24px)
+            var(--sutra-space-6, 24px) +
+            var(--settings-mobile-update-clearance, 0px)
         ) !important;
     }
 

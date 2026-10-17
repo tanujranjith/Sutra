@@ -153,6 +153,7 @@ test('update advice does not prevent scrolling to Settings appearance disclosure
         bodyClasses: document.body.className,
         scrollPaddingBottom: liveOwnerStyle?.paddingBottom || 'unknown',
         bannerHeightCap: getComputedStyle(document.body).getPropertyValue('--settings-mobile-update-banner-max-height').trim(),
+        settingsPagePaddingBottom: getComputedStyle(document.querySelector('#view-settings .cc-page')).paddingBottom,
         scrollAttempt,
         liveScrollOwner: {
           name: liveOwnerName,

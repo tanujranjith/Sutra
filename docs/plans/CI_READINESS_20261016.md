@@ -172,6 +172,14 @@ overriding the reserve. The scoped Settings reserve now explicitly overrides
 that rule, and failure diagnostics also report computed padding, body classes,
 and the responsive height cap. The reachability assertions remain unchanged.
 
+Run `38990835735` at `5c0c63d` passed the non-browser gates, but WebKit's notice
+reachability check still failed with computed main-content padding near 460px
+and unchanged scroll range. The reserve is now applied to the flowing Settings
+page's existing mobile footer-padding contract, rather than its overflow owner.
+It still derives from the notice height cap and only exists while the notice is
+shown. Diagnostics include the Settings page's computed padding. This revision
+awaits CI; no reachability assertion or visible-notice requirement was removed.
+
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
 live application headers remain unverified. The installed CLI can inspect the
