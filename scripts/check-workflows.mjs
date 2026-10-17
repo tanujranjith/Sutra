@@ -77,21 +77,35 @@ if (!ci.includes('browser_install:') || !ci.includes('npx playwright install --w
 }
 const ciCompatibilityJob = ci.split(/^  browser-compatibility-matrix:/m)[1] || '';
 const ciCompatibilityRows = readIncludedMatrixRows(ciCompatibilityJob);
-if (ciCompatibilityRows.length !== 10) failures.push('ci.yml: compatibility matrix must contain nine desktop shards and one responsive lane');
-const desktopProjects = { chrome: 'chrome', firefox: 'firefox', webkit: 'webkit' };
-for (const [engine, project] of Object.entries(desktopProjects)) {
+if (ciCompatibilityRows.length !== 13) failures.push('ci.yml: compatibility matrix must contain twelve desktop shards and one responsive lane');
+const desktopProjects = {
+  chrome: { project: 'chrome', label: 'Desktop Chrome', total: '3', shards: ['1', '2', '3'] },
+  firefox: { project: 'firefox', label: 'Desktop Firefox', total: '3', shards: ['1', '2', '3'] },
+  webkit: { project: 'webkit', label: 'Desktop WebKit', total: '6', shards: ['1', '2', '3', '4', '5', '6'] }
+};
+for (const [engine, expected] of Object.entries(desktopProjects)) {
   const engineRows = ciCompatibilityRows.filter((row) => matrixValue(row, 'id') === engine);
   const shards = engineRows.map((row) => matrixValue(row, 'shard')).sort();
-  if (engineRows.length !== 3 || shards.join(',') !== '1,2,3') {
-    failures.push(`ci.yml: ${engine} compatibility coverage must contain each of shards 1, 2, and 3 exactly once`);
+  if (engineRows.length !== expected.shards.length || shards.join(',') !== expected.shards.join(',')) {
+    failures.push(`ci.yml: ${engine} compatibility coverage must contain each expected shard exactly once`);
   }
-  if (engineRows.some((row) => matrixValue(row, 'project_args') !== `--project=${project}` || matrixValue(row, 'browser_install') !== project)) {
-    failures.push(`ci.yml: ${engine} shards must all test and install the ${project} browser project`);
+  if (engineRows.some((row) => matrixValue(row, 'shard_total') !== expected.total)) {
+    failures.push(`ci.yml: ${engine} compatibility shards must declare total ${expected.total}`);
+  }
+  if (engineRows.some((row) => matrixValue(row, 'label') !== `${expected.label} shard ${matrixValue(row, 'shard')}`)) {
+    failures.push(`ci.yml: ${engine} compatibility shard labels must match their shard numbers`);
+  }
+  if (engineRows.some((row) => matrixValue(row, 'project_args') !== `--project=${expected.project}` || matrixValue(row, 'browser_install') !== expected.project)) {
+    failures.push(`ci.yml: ${engine} shards must all test and install the ${expected.project} browser project`);
   }
 }
 checkResponsiveProjects('ci.yml', ciCompatibilityRows);
-if (!ciCompatibilityJob.includes('--shard=${{ matrix.shard }}/3') || !ciCompatibilityJob.includes('--workers=1')) {
-  failures.push('ci.yml: desktop compatibility shards must run serially across three complete shards');
+const ciResponsiveRow = ciCompatibilityRows.find((row) => matrixValue(row, 'id') === 'responsive');
+if (ciResponsiveRow && (matrixValue(ciResponsiveRow, 'shard') !== 'full' || matrixValue(ciResponsiveRow, 'shard_total') !== 'full')) {
+  failures.push('ci.yml: responsive compatibility coverage must remain an unsharded full lane');
+}
+if (!ciCompatibilityJob.includes('--shard=${{ matrix.shard }}/${{ matrix.shard_total }}') || !ciCompatibilityJob.includes('--workers=1')) {
+  failures.push('ci.yml: desktop compatibility shards must use their declared totals and run serially');
 }
 if (!ciCompatibilityJob.includes("key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ matrix.id }}")) {
   failures.push('ci.yml: compatibility browser cache must be shared by engine across its shards');

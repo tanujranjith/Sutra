@@ -126,51 +126,79 @@ jobs:
             project_args: --project=chrome
             browser_install: chrome
             shard: 1
+            shard_total: 3
           - label: Desktop Chrome shard 2
             id: chrome
             project_args: --project=chrome
             browser_install: chrome
             shard: 2
+            shard_total: 3
           - label: Desktop Chrome shard 3
             id: chrome
             project_args: --project=chrome
             browser_install: chrome
             shard: 3
+            shard_total: 3
           - label: Desktop Firefox shard 1
             id: firefox
             project_args: --project=firefox
             browser_install: firefox
             shard: 1
+            shard_total: 3
           - label: Desktop Firefox shard 2
             id: firefox
             project_args: --project=firefox
             browser_install: firefox
             shard: 2
+            shard_total: 3
           - label: Desktop Firefox shard 3
             id: firefox
             project_args: --project=firefox
             browser_install: firefox
             shard: 3
+            shard_total: 3
           - label: Desktop WebKit shard 1
             id: webkit
             project_args: --project=webkit
             browser_install: webkit
             shard: 1
+            shard_total: 6
           - label: Desktop WebKit shard 2
             id: webkit
             project_args: --project=webkit
             browser_install: webkit
             shard: 2
+            shard_total: 6
           - label: Desktop WebKit shard 3
             id: webkit
             project_args: --project=webkit
             browser_install: webkit
             shard: 3
+            shard_total: 6
+          - label: Desktop WebKit shard 4
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 4
+            shard_total: 6
+          - label: Desktop WebKit shard 5
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 5
+            shard_total: 6
+          - label: Desktop WebKit shard 6
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 6
+            shard_total: 6
           - label: Responsive devices
             id: responsive
             project_args: --project=mobile-chromium --project=mobile-webkit --project=tablet --project=narrow-desktop
             browser_install: chromium firefox webkit
             shard: full
+            shard_total: full
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -202,6 +230,12 @@ jobs:
             npx playwright test tests/e2e/settings-global-search.spec.mjs --grep '320px' --workers=1 --project=webkit
             npx playwright test tests/e2e/update-banner-layering.spec.mjs --workers=1 --project=webkit
           fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "5" ]; then
+            npx playwright test tests/e2e/notes-editor-v2.spec.mjs --grep 'passage writing command reviews' --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "6" ]; then
+            npx playwright test tests/e2e/navigation-clarity.spec.mjs --grep 'header utilities stay clear' --workers=1 --project=webkit
+          fi
           if [ "${{ matrix.id }}" = "firefox" ] && [ "${{ matrix.shard }}" = "3" ]; then
             npx playwright test tests/e2e/student-editing-controls.spec.mjs --grep 'plain-text paste strips' --workers=1 --project=firefox
           fi
@@ -212,7 +246,7 @@ jobs:
           if [ "${{ matrix.id }}" = "responsive" ]; then
             npx playwright test --workers=1 ${{ matrix.project_args }}
           else
-            npx playwright test --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/3
+            npx playwright test --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
           fi
       - name: Upload failure diagnostics
         if: ${{ failure() && !cancelled() }}
