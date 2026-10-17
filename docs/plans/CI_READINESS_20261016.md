@@ -164,6 +164,14 @@ notice is visible, preserving navigation padding and safe-area clearance.
 The notice checks are included in all four responsive projects. Both changes
 await CI validation; no local browser suite was run.
 
+Run `38990115649` at `474b6cc` passed static/unit/build/artifact gates and both
+early WebKit Drive checks, but the visible-notice reachability test still failed
+with unchanged scroll geometry. Source review found the older
+`styles/legacy/ui-refresh.css` important zero main-content bottom-padding rule
+overriding the reserve. The scoped Settings reserve now explicitly overrides
+that rule, and failure diagnostics also report computed padding, body classes,
+and the responsive height cap. The reachability assertions remain unchanged.
+
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
 live application headers remain unverified. The installed CLI can inspect the

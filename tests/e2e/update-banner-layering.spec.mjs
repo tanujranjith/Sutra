@@ -150,6 +150,9 @@ test('update advice does not prevent scrolling to Settings appearance disclosure
         hitSummary: hit === element || element.contains(hit),
         selector: scrollAttempt.selector,
         viewport: { width: window.innerWidth, height: window.innerHeight, scrollY: Math.round(window.scrollY * 10) / 10 },
+        bodyClasses: document.body.className,
+        scrollPaddingBottom: liveOwnerStyle?.paddingBottom || 'unknown',
+        bannerHeightCap: getComputedStyle(document.body).getPropertyValue('--settings-mobile-update-banner-max-height').trim(),
         scrollAttempt,
         liveScrollOwner: {
           name: liveOwnerName,

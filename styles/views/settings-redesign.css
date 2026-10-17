@@ -2284,11 +2284,12 @@ body:has(#view-settings.active) .sutra-update-banner {
         max-height: var(--settings-mobile-update-banner-max-height);
     }
     /* Reserve the banner's height cap so the last controls can scroll above it.
-       Match contracts.css's overlay suppression; hidden notices need no reserve. */
+       Match contracts.css's overlay suppression; hidden notices need no reserve.
+       Override base/legacy important zero main-content padding resets. */
     body:has(#view-settings.active):has(#sutraUpdateBanner:not([hidden])):not(:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .sidebar-open, .notif-panel-open)) #mainContent {
         padding-bottom: calc(
             132px + var(--safe-bottom, 0px) +
             max(0px, var(--settings-mobile-update-banner-max-height))
-        );
+        ) !important;
     }
 }
