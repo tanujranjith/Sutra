@@ -94,6 +94,34 @@ verified the source commit after the subagent verified landing-page availability
 No hosting setting or protection was changed. The precise normal public URL is
 still being clarified; a working preview is not proof of production promotion.
 
+Full run `38982196006` at `f68673a` passed static/unit/build/artifact gates and
+all three normal Chromium shards. The expanded matrix exposed a WebKit Drive
+restore prompt that remains disabled, a narrow WebKit Settings control obscured
+by floating UI, and two Firefox synthetic clipboard-event failures. Investigation
+and repair validation remain in progress; this run is not a full compatibility
+pass. A separate Firefox browser-page setup timeout passed its retry and is
+recorded as infrastructure flakiness rather than a failed application assertion.
+
+The Drive investigation also found that locking left a previously scheduled save
+timer active. Commit `35e92de` cancels that timer and its queued-upload flag while
+preserving dirty local changes. Its required local runtime integrity gate and
+staged hook passed; browser regression execution remains on GitHub. Password
+prompt diagnostics report only field lengths and dialog state, never passphrases.
+WebKit Drive checks now run before the long shard for earlier failure evidence.
+The Firefox fixture now attaches its prepared DataTransfer to the synthetic
+event explicitly; formatting and reload checks remain unchanged. Settings layout
+tests isolate live service-worker state, and a separate mocked-update regression
+checks visible-banner disclosure reachability through the actual phone scroller.
+The parent corrected an initial bottom-navigation/header assumption before
+accepting that regression. Focused Settings and paste checks also precede their
+long compatibility shards. These changes still await GitHub execution.
+
+The immutable branch app finished loading to Today with onboarding and no console
+errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
+live application headers remain unverified. The installed CLI can inspect the
+project with the bundled Node runtime's Windows CA trust; no certificate check
+was disabled. No hosting restoration or production promotion was performed.
+
 ## Vercel inspection
 
 Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:

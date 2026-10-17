@@ -198,6 +198,13 @@ jobs:
             # Report Drive prompt/lock regressions before the longer WebKit shard.
             npx playwright test tests/e2e/google-drive-sync.spec.mjs --grep 'locking Drive sync|Drive restore rejects wrong password' --workers=1 --project=webkit
           fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "3" ]; then
+            npx playwright test tests/e2e/settings-global-search.spec.mjs --grep '320px' --workers=1 --project=webkit
+            npx playwright test tests/e2e/update-banner-layering.spec.mjs --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "firefox" ] && [ "${{ matrix.shard }}" = "3" ]; then
+            npx playwright test tests/e2e/student-editing-controls.spec.mjs --grep 'plain-text paste strips' --workers=1 --project=firefox
+          fi
           if [ "${{ matrix.id }}" = "responsive" ]; then
             npx playwright test --workers=1 ${{ matrix.project_args }}
           else
