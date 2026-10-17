@@ -18,6 +18,11 @@ reconciles those two records before save. The records use the existing page
 schema, history, backup, and Sync paths. Do not store editor-only UI state in
 the page. A locked page must not mount a live node until it is unlocked.
 
+Relocking saves pending authorized edits before removing session access, then
+clears the classic mirror and Modern Editor document. This resets editor undo
+history as well as rendered content; clearing the locked surface must never
+overwrite the canonical note with an empty body.
+
 ## Split View
 
 Split View presents two equal note panes in one workspace. Each header identifies

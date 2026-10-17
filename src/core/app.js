@@ -49109,8 +49109,7 @@ function getActiveEditor() {
                 renderSplitNoteSelect();
                 closeCompactSidebarDrawer();
 
-                // Always load content into the editor so saves work normally.
-                // The lock overlay is purely visual — show it on top if needed.
+                // Hydrate only authorized content; locked pages use an empty editor.
                 const primaryEditor = getPrimaryEditor();
                 const isCanvasPage = normalizePageType(page.type) === PAGE_TYPES.CANVAS;
                 const isFolder = isFolderPage(page);
@@ -50415,6 +50414,9 @@ function getActiveEditor() {
 
         function renderLockedPageScreen(page) {
             window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(page && page.id || '') } }));
+            // Relocking does not navigate through loadPage(). Clear both editor
+            // surfaces here too, after callers save and revoke authorization.
+            loadPageContentIntoEditor(getPrimaryEditor(), page);
             renderComments();
             const primaryPane = document.getElementById('notesPrimaryPane');
             if (window.SutraFolderWorkspace) window.SutraFolderWorkspace.close();
@@ -67412,7 +67414,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     : editor.id === 'editorSecondary' && notesSecondaryEditorV2?.isMounted() ? notesSecondaryEditorV2 : null;
                 if (modern) {
                     try {
-                        modern.setContent('');
+                        // A lock is a document boundary: discard the old undo
+                        // history as well as its rendered and mirrored plaintext.
+                        modern.loadDocument('');
                     } catch (err) { /* privacy surface is already cleared */ }
                 }
                 return;

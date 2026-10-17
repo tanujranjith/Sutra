@@ -3,6 +3,40 @@ import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
 const PIN = '2468';
 
+test('manual relock clears both editors without losing pending note edits', async ({ page }) => {
+  await openApp(page);
+  const id = 'manual-relock-plaintext-qa';
+  const secret = 'Private edit immediately before manual relock';
+  await page.evaluate(async ({ id, pin }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    payload.pages.push({ id, title: 'Manual relock QA', content: '<p>Original body</p>', blocks: [] });
+    await window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(id, pin);
+    window.loadPage(id);
+  }, { id, pin: PIN });
+  await page.locator('#lockScreenPinInput').fill(PIN);
+  await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
+  await expect(page.locator('#lockedPageScreen')).toBeHidden();
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill(secret);
+  await page.evaluate(id => window.__sutraPublicBetaTestHooks.lockPageNow(id), id);
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await expect(page.locator('#editor')).not.toContainText(secret);
+  await expect(page.locator('#editorV2Host')).not.toContainText(secret);
+  await expect.poll(() => page.evaluate(async id => {
+    const workspace = await window.loadWorkspaceLocally();
+    return workspace?.pages?.find(note => note.id === id)?.content || '';
+  }, id)).toContain(secret);
+  await page.reload();
+  await waitForAppHydrated(page);
+  await page.locator('.top-nav .view-tabs > [data-view="notes"]').click();
+  await page.locator(`.page-item[data-page-id="${id}"] .page-title-text`).click();
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await page.locator('#lockScreenPinInput').fill(PIN);
+  await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
+  await expect(editor).toContainText(secret);
+});
+
 for (const leaveImmediately of [false, true]) {
   test(`locked note user edits survive automatic saving and reload (immediate navigation: ${leaveImmediately})`, async ({ page }) => {
     await openApp(page);

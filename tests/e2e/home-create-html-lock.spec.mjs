@@ -421,6 +421,14 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   const options = await page.locator('#sutraWorkspaceLockTimeout option').allTextContents();
   expect(options).toEqual(expect.arrayContaining(['1 minute', '10 minutes', '45 minutes', '2 hours', '12 hours', 'Custom…']));
 
+  await page.evaluate(() => window.setActiveView('settings'));
+  await page.locator('[data-settings-nav="data"]').click();
+  await page.locator('#sutraWorkspaceLockEnableBtn').click();
+  await expect(page.locator('[data-lock-current]')).toBeHidden();
+  await expect(page.locator('[data-lock-new]')).toBeVisible();
+  await expect(page.locator('[data-lock-confirm]')).toBeVisible();
+  await page.locator('[data-lock-cancel]').click();
+
   await page.evaluate(() => window.SutraWorkspaceLock.enable('2468', 5));
   await page.locator('#sutraWorkspaceUnlockPin').fill('2468');
   await page.locator('#sutraWorkspaceUnlockForm button').click();
@@ -429,6 +437,7 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   await page.evaluate(() => window.setActiveView('settings'));
   await expect(page.locator('#view-settings')).toBeVisible();
   await page.locator('[data-settings-nav="data"]').click();
+  await expect(page.locator('#sutraWorkspaceLockEnableBtn')).toBeHidden();
   await page.locator('#sutraWorkspaceLockTimeout').evaluate((select) => {
     select.value = 'custom';
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -436,6 +445,9 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   await expect(page.locator('#sutraWorkspaceLockCustomWrap')).toBeVisible();
   await page.locator('#sutraWorkspaceLockCustomMinutes').fill('137');
   await page.locator('#sutraWorkspaceLockCustomApply').click();
+  await expect(page.locator('[data-lock-current]')).toBeVisible();
+  await expect(page.locator('[data-lock-new]')).toBeHidden();
+  await expect(page.locator('[data-lock-confirm]')).toBeHidden();
   await page.locator('[data-lock-current]').fill('2468');
   await page.locator('[data-lock-submit]').click();
   await expect(page.locator('#sutraWorkspaceLockScreen')).toBeVisible();

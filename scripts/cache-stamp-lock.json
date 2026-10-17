@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261016-drive-lock-timer1",
-    "hash": "180b117724f92f1d"
+    "stamp": "20261017-pin-cleanup1",
+    "hash": "9e5cbbd34c82b2ef"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -676,8 +676,8 @@
     "hash": "797fa2b7dc9bdc73"
   },
   "styles/features/workspace-lock.css": {
-    "stamp": "20260816-lock2",
-    "hash": "980ff43561f79838"
+    "stamp": "20261017-pin-fields2",
+    "hash": "912507bd93601b09"
   },
   "styles/features/workspace-startup.css": {
     "stamp": "20260925-hydration1",

@@ -52,7 +52,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
 32. ~~Grammar/spelling/rephrase: live short drafts, editable review, insertion and selected-text replacement, Cancel, and editor Undo passed in Chrome.~~
 33. ~~Writing guards: empty /grammar disables Generate; changing the note during generation closes the stale review and preserves the newer text.~~
-34. Strengthened page PIN: partial manual Chrome pass on October 17 for wrong/right PIN, manual relock and reload. Open: locking hides the note but retains its text in hidden classic and Modern Editor DOM until reload; PIN change/removal and legacy upgrade were not manually tested.
+34. Strengthened page PIN: wrong/right PIN, immediate editor cleanup on manual relock, intact content after unlock/reload passed manual Chrome QA on October 17. Open: PIN change/removal and legacy upgrade were not manually tested.
 35. ~~Workspace lock: user-created local test credential; wrong/right PIN, retry delay, refresh locking, real inactivity locking, background isolation and separate page-lock preservation passed manual Chrome QA on October 17.~~
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
@@ -104,6 +104,24 @@ The QA workspace was left locked, with its one-minute test timeout enabled and
 the local server running. Page PIN change/removal and legacy upgrade remain
 unverified manually. No application code, provider requests, automated suites,
 remote hosting changes, pushes or merges were performed in this pass.
+
+## PIN fixes verified — October 17, 2026
+
+The follow-up fix clears both the classic mirror and Modern Editor document when
+the lock screen opens, resetting Modern Editor undo history. In the isolated
+local QA origin, **Lock again** left no canary text in either editor. A wrong PIN
+remained blocked; correct unlock restored the intact note, including after
+reload. No canonical note fields or PIN verifier formats changed.
+
+Workspace timeout authorization now displays only Current PIN. Setup on a
+separate empty `http://localhost:5287` origin displays only New PIN and Confirm;
+no new credential was entered or submitted. Both dialogs were cancelled, and the
+existing QA workspace retained its one-minute timeout after reload. Hidden setup
+and custom-duration controls also stay hidden in their inapplicable states.
+
+The required runtime integrity checks passed. Regression cases were added for
+CI but were not executed locally; no push or merge was made. The earlier finding
+above remains a dated record of the behavior before this fix.
 
 ## Live Gemini follow-up and contrast fixes
 

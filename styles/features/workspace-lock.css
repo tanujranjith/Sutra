@@ -34,6 +34,8 @@ html[data-sutra-workspace-locked="true"] #sutraWorkspaceLockScreen { visibility:
 .sutra-workspace-lock-dialog h2 { margin: 0; }
 .sutra-workspace-lock-dialog p { margin: 0; color: var(--text-secondary, #687079); line-height: 1.45; }
 .sutra-workspace-lock-dialog label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.sutra-workspace-lock-dialog label[hidden],
+[id^="sutraWorkspaceLock"][hidden] { display: none !important; }
 .sutra-workspace-lock-dialog input { min-height: 44px; padding: 8px 11px; color: inherit; background: var(--bg-secondary, #fbfaf5); border: 1px solid var(--border-color, #d7d3c7); border-radius: 8px; font: 700 18px ui-monospace, monospace; letter-spacing: .18em; }
 .sutra-workspace-lock-dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 0 0; padding: 0; }
 .sutra-workspace-lock-dialog button { min-height: 40px; padding: 7px 13px; color: inherit; background: transparent; border: 1px solid var(--border-color, #d7d3c7); border-radius: 8px; cursor: pointer; }
