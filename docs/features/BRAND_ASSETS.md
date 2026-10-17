@@ -249,7 +249,9 @@ The button uses a `28%` border-radius to echo the icon's own corner geometry wit
 | Assistant launcher | `sutra-assistant-icon-44.png` at 48 px CSS | 48 × 48 px CSS |
 | Assistant panel header | `sutra-assistant-icon-64.png` at 30 px CSS (mobile) | 30 × 30 px CSS |
 
-Never scale below the source resolution. The 44 px assistant icon is the minimum touch-target size.
+Prefer a source image at least as large as its displayed pixel dimensions.
+The launcher button, independently of its image size, must retain a minimum
+44-pixel touch target.
 
 ---
 
@@ -278,7 +280,7 @@ The startup loader CSS (`styles/features/startup-intro.css`) must include:
 }
 ```
 
-The scroll-linked landing page animations (problem-section, reveal-section, guided tour) also respect `prefers-reduced-motion` — see `docs/SCROLLYTELLING_AND_LANDING_PAGE.md`.
+The scroll-linked landing page animations (problem-section, reveal-section, guided tour) also respect `prefers-reduced-motion` — see [Landing page](SCROLLYTELLING_AND_LANDING_PAGE.md).
 
 ---
 
@@ -351,7 +353,7 @@ If the master PNGs are ever updated with approved replacements:
 3. Run: `node scripts/sutra-brand-assets-check.mjs`
 4. Run: `node scripts/smoke-check.mjs`
 5. Run: `node scripts/sutra-rebrand-check.mjs`
-6. Verify visually at the breakpoints documented in `docs/MOBILE_AND_RESPONSIVE_BEHAVIOR.md`.
+6. Verify visually at the breakpoints documented in [Mobile and responsive behavior](MOBILE_AND_RESPONSIVE_BEHAVIOR.md).
 7. Commit the new masters and all regenerated derivatives together.
 
 ---
@@ -390,4 +392,4 @@ The following identifiers are **intentionally retained** for backwards compatibi
 | `.atelier` import | File extension | All old backups must still import |
 | `NoteFlow Classic` | Product name | Separate legacy app — not affected by rebrand |
 
-These are described in full in `docs/REBRAND_AND_COMPATIBILITY.md`.
+These are described in full in [Rebrand and Compatibility](REBRAND_AND_COMPATIBILITY.md).

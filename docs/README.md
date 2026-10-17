@@ -21,7 +21,8 @@ Start here, then follow the topic folders. The canonical map of the whole app is
 
 ## Conventions
 - Cross-doc links are relative (e.g. `../release/CHANGELOG.md`); the
-  `npm run check:links` audit validates every local link.
+  `npm run check:links` audit validates local file targets. It strips URL
+  fragments and does not validate heading anchors or external websites.
 - Files referenced programmatically by checks (`persistence-inventory.json`,
   `TESTING_AND_RELEASE_CHECKLIST.md`, `PRIVACY_AND_LOCAL_FIRST.md`,
   `MODS_AND_CUSTOMIZATION.md`, `PLUGIN_SDK.md`, `HANDWRITING_AND_DRAWING.md`)

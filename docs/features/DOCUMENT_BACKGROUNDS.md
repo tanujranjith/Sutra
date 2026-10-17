@@ -154,7 +154,9 @@ When you export an individual **note document** (as opposed to a workspace
 backup), background handling depends on the target format:
 
 - **HTML** - the background is included where feasible.
-- **PDF** - the background is preserved where the browser's printing allows.
+- **PDF** - direct local PDF export includes the image, cover fit, and dim
+  overlay; CSS blur is reported as unsupported. The browser print fallback
+  preserves backgrounds where printing allows. See [Document Export](DOCUMENT_EXPORT.md).
 - **Markdown** and **plain text** - the background is **omitted cleanly** (these
   are text-only formats).
 - **DOCX / RTF** - background support is **a known limitation**; do not rely on
@@ -166,9 +168,10 @@ backup), background handling depends on the target format:
 
 A Document Background is **image data stored locally on your device**, inline on
 the page, with everything else in your workspace. It only leaves this browser if
-**you** export a backup or note document that includes it, or if you explicitly
-enable encrypted Google Drive sync. In Drive sync, the complete workspace
-snapshot is encrypted in the browser before upload. And, as in section 5, a **locked
+**you** export a backup or note document that includes it, or explicitly enable
+an encrypted backup destination or Sutra Sync. Backup providers receive encrypted
+snapshots; [Sutra Sync](CLOUD_SYNC.md) separately carries encrypted workspace
+changes. As in section 5, a **locked
 page's background is never revealed behind the PIN screen**. See
 [`PRIVACY_AND_LOCAL_FIRST.md`](../privacy-security/PRIVACY_AND_LOCAL_FIRST.md) for the full
 local-first model.

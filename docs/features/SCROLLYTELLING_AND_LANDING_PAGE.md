@@ -122,4 +122,4 @@ No blank scroll space, no fragments stranded offscreen, no hidden thread.
 
 - Restyle fragments via `.frag` / `[data-sutra-thread-node]`.
 - Tune the thread with `.sutra-thread-path` (`stroke-width`, the `drop-shadow` glow, or the `#sutraThreadGradient` stops).
-- See `docs/CSS_MODS_GUIDE.md` for safe copy-paste examples (e.g., reducing the thread glow).
+- See [CSS Mods Guide](CSS_MODS_GUIDE.md) for safe copy-paste examples (e.g., reducing the thread glow).

@@ -100,12 +100,10 @@ certified-action references are locked by the Intelligence Harness
 
 ## 4. Workspace Access (context depth)
 
-Workspace Access controls how much of your workspace the assistant can read when
-you send an AI request:
-
-- **Minimal** — almost nothing beyond your message.
-- **Current view** — only the active screen / current area.
-- **Full workspace** — broad context across your workspace.
+Workspace access grants read/write permission; Context depth independently
+narrows retrieval to Minimal, Current view, or Workspace-aware. Area denials
+remain authoritative at every depth. The canonical controls and permission
+semantics are documented in [Sutra Assistant §3](features/SUTRA_ASSISTANT.md#3-workspace-access-and-context-depth).
 
 Locked-note contents are excluded by default, regardless of Workspace Access.
 When you explicitly ask about an identified locked page, Assistant must first
@@ -232,19 +230,22 @@ access/refresh tokens, client secrets, passwords, `.sutra` passphrases, derived
 encryption keys, Google Drive device-local sync metadata, in-flight/streaming
 chat buffers, abort/request state, typing indicators, token/latency diagnostics,
 in-session unlocked-page state, and regenerable caches. API keys are session-only
-and never appear in `.sutra`, JSON, Sutra Sync, Activity logs, Memory,
+by default (or explicitly remembered in the encrypted device-local vault) and
+never appear in `.sutra`, JSON, Sutra Sync, Activity logs, Memory,
 diagnostics, prompts, or cloud snapshots.
 
 **Import** restores into the correct authoritative store, migrates older exports,
-tolerates missing or newer sections, validates before writing, avoids partial
-overwrites on failure, and avoids duplicating mirrored data (e.g. planner-task ↔
-Homework mirrors). Old workspaces with no memory store import cleanly.
+tolerates missing or newer sections, validates before writing, and reports
+incomplete writes rather than claiming a successful restore. Legacy compatibility
+does not introduce a second task store. Old workspaces with no memory store
+import cleanly.
 
 **Encrypted backups:** an encrypted `.sutra` is AES-256-GCM with a PBKDF2-derived
 key from your passphrase. Optional cloud backup (Google Drive / OneDrive /
 Dropbox / Supabase) is consent-first and encrypts on-device before upload.
 
-Where: **Settings ▸ Backups & Export** → Export (optionally encrypted) / Import.
+Where: **Settings ▸ Data & Backup** → encrypted workspace backup or Import
+Workspace / Docs. Plaintext recovery exports remain explicit alternatives.
 
 ---
 
@@ -313,7 +314,8 @@ action/storage/Undo failures, and partial batches.
 - Sutra Intelligence is local-first and makes no server calls itself.
 - Product Knowledge, Local Help, Memory, and deterministic intelligence work
   fully offline.
-- API keys are session-only. Credentials never enter Memory,
+- API keys are session-only by default; explicit remembering is device-local.
+  Credentials never enter Memory,
   exports, Activity logs, prompts, diagnostics, or UI text.
 - Locked-note contents are excluded from ordinary Assistant context. An
   explicitly requested page can be read only after one-time Assistant consent

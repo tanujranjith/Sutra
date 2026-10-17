@@ -432,9 +432,9 @@ You bring your own AI provider. Sutra supports:
   yourself on your own machine or network.
 
 For each provider you choose, you specify the exact **Model ID** to use (the
-provider's own model identifier). Your provider, model choices, and the custom
-endpoint configuration are **preferences** — they are saved with your workspace
-and travel in backups, so a restored workspace keeps its setup.
+provider's own model identifier). Provider and model choices are portable
+preferences. Custom/local endpoint configuration is device-local and excluded
+from exports and Sync; restore preserves the receiving device's endpoint.
 
 The setup wizard can test the connection, discover available models, show
 detected input capabilities, and explain the provider's cost/privacy boundary
@@ -533,7 +533,8 @@ balance.
    choose your provider, and enter the exact **Model ID**.
 3. Enter the **API key** in **Settings ▸ Assistant ▸ Your API Keys** (one field
    per provider). Session-only storage is the default; the optional encrypted
-   vault requires your local secret after restart. Keys and vault envelopes are
+   vault restores remembered credentials on this device without a separate
+   passphrase gate. Keys and vault envelopes are
    never exported.
 
 ---
@@ -574,7 +575,8 @@ field in **Settings ▸ Assistant ▸ API keys**, select the provider, then use
   `provider/model-name`.
 
 Availability and pricing belong to each provider. Sutra does not silently route
-between them, and all three keys remain session-only and export-excluded.
+between them. Keys are session-only by default; explicitly remembered keys use
+the encrypted device-local vault and remain export-excluded.
 
 ### DeepSeek, xAI (Grok), and Perplexity (Sonar)
 
@@ -636,8 +638,9 @@ dropped, and the attachment chip explains the safest supported next step.
 > to check.
 
 > **Keep your keys private.** Treat an API key like a password — anyone with it
-> can spend on your account. Don't paste keys into shared documents. Because
-> Sutra stores keys only in the browser session, closing the tab clears them.
+> can spend on your account. Don't paste keys into shared documents.
+> Session-only keys clear when their browser session ends. Explicitly remembered
+> keys remain encrypted on that device; never include them in shared content.
 
 ---
 
@@ -717,8 +720,9 @@ to keep even the AI side on your own machine or network.
   vision-capable model from your provider.
 - **The Assistant proposes, you apply.** It will not change your workspace
   without your Apply/confirm action — by design.
-- **Context is bounded by Workspace Access.** At **Current Screen Only**, the
-  Assistant genuinely cannot reason about data on other screens.
+- **Context is bounded by permission and scope.** Workspace access and per-area
+  denials control reads; Context depth narrows retrieval independently. See
+  [Workspace access and context depth](#3-workspace-access-and-context-depth).
 
 ---
 
@@ -729,18 +733,19 @@ Confirm you have selected a provider and entered its API key for this session. C
 or that your Local / Custom endpoint is running and reachable.
 
 **My API key disappeared.**
-Expected. Re-enter it for the current browser session. Provider/model choices
-remain remembered; credentials are never persisted or exported.
+Session-only keys clear when their session ends. Re-enter it, or explicitly
+enable encrypted device-local remembering. Provider/model choices remain
+portable; credentials are never exported.
 
 **The Assistant doesn't seem to know about my other notes/tasks.**
-Check **Workspace Access**. **Current Screen Only** and **Current Area**
-intentionally limit what it can see. Raise it to **Full Workspace Context** if
-you want cross-workspace awareness.
+Check **Workspace access**, **Access by area**, and **Context depth** separately.
+Use a reading mode that permits the requested area, then choose the search
+scope you want. Workspace-aware never overrides an access denial.
 
 **I attached an image and it was ignored.**
-Your selected model is likely text-only. Switch to a vision-capable model
-(for example, a current GPT-4-class, Claude 3+, or Gemini 1.5+ model) on a
-provider that supports image input.
+Read the attachment chip's compatibility explanation and choose a model whose
+current Sutra capability entry supports image input. Unsupported files are
+blocked with a reason; they should not be silently omitted.
 
 **It applied a change I didn't want.**
 Open **Assistant Activity** and **undo** the action. To prevent this in future,

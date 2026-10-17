@@ -1,7 +1,11 @@
 # Sutra Daily Lock-in Quotes — Source Audit
 
-This document records the source audit for every quote shipped in
-`src/data/daily-lock-in-quotes.js`. Final count: **153 verified quotes**.
+This is the historical 2026-06-05 attribution ledger for the quote bank in
+`src/data/daily-lock-in-quotes.js` (recorded shipped count: **153 quotes**).
+It includes disputed or unconfirmed attributions and summarizes later entries
+as a group, so it does not establish an independently verified primary source
+for every quote. Verification notes below are the original audit's claims; they
+were not reverified against external sources during the documentation audit.
 
 All rendered text uses straight ASCII punctuation.
 Smart quotes, em dashes, en dashes, and Unicode ellipses are excluded.

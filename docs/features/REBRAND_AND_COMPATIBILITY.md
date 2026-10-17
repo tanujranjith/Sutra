@@ -1,4 +1,4 @@
-﻿# Rebrand & Compatibility
+# Rebrand & Compatibility
 
 **NoteFlow Atelier is now Sutra.** Same private, local-first student workspace - new name, refreshed surface. This document explains exactly what changed, what stayed the same, and how your existing data carries over.
 
@@ -80,9 +80,9 @@ Safe Mode loads Sutra with **no custom CSS and no plugins**, and **never deletes
 | Old path | New path |
 | --- | --- |
 | `NoteflowAtelier.html` | `Sutra.html` |
-| `styles/atelier-pro.css` | `styles/sutra-pro.css` |
+| `styles/atelier-pro.css` | `styles/themes/sutra-pro.css` |
 | `scripts/atelier-persistence-qa.js` | `scripts/sutra-persistence-qa.js` |
-| `docs/atelier-save-systems-audit.md` | `docs/sutra-save-systems-audit.md` |
+| `docs/atelier-save-systems-audit.md` | `docs/architecture/sutra-save-systems-audit.md` |
 
 The landing page (`HomePage.html`) and the `index.html` redirect keep their names. If you had a bookmark to `NoteflowAtelier.html`, update it to **`Sutra.html`**.
 
@@ -126,8 +126,8 @@ The upgrade is non-destructive and your data loads automatically - but a current
 If anything looks off after upgrading:
 
 - **The UI looks broken** - load **Safe Mode** (`?sutraSafeMode=1`, hold **Shift** at load, or the in-app Recovery button). This skips all custom CSS and plugins without deleting anything, so you can disable the offending snippet or plugin and reload normally.
-- **An import went wrong** - Sutra writes a **pre-import safety snapshot** before every workspace import. Restore it from `Settings -> Data -> Storage Health`.
+- **An import went wrong** - use the encrypted pre-import safety export if you accepted it, or the local recovery journal. Manual restore offers a safety export; it does not guarantee a downloaded file unless you choose it and the download completes. See [Data and Backups](../privacy-security/DATA_AND_BACKUPS.md#6-pre-import-safety-snapshot).
 - **Your data didn't appear** - confirm you opened Sutra in the **same browser and profile** where you used NoteFlow Atelier (browser storage is per-browser, per-profile, per-origin). If you switched browsers or machines, import your most recent `.sutra` or `.atelier` backup.
-- **The assistant lost its key** - that's expected. Re-enter it for this browser session; credentials are never persisted or exported.
+- **The assistant lost its key** - session-only keys clear when their session ends. Re-enter the key, or use the explicit device-local encrypted Remember API keys option. Credentials never enter workspace exports or Sync.
 
 For the full backup/format reference, see the [README](../../README.md) and [CHANGELOG](../release/CHANGELOG.md).

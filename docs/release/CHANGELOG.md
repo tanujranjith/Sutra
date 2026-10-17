@@ -1,11 +1,10 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
 ## Unreleased — local reliability and cleanup work
 
-These changes are on the local `codex/student-workflow-batch` branch. They have
-not been pushed, merged, or released. New automated regressions await CI.
+These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
 
 - Pause Sync on unauthenticated or inconsistent records while preserving local
   data, pending changes, and the existing vault key.

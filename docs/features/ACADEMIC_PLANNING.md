@@ -35,7 +35,7 @@ storage backend, no parallel data model.
 | School schedule | `appData.schoolSchedule` | full `.sutra` / JSON export, Drive sync |
 | Grade planner | `appData.gradePlanner` | full `.sutra` / JSON export, Drive sync |
 | Semester Setup drafts | `appData.semesterSetup` | full `.sutra` / JSON export, Drive sync |
-| Assignment Studio | `task.studio` on each homework task (`hwTasks:v2`) | homework localStorage mirror + `homeworkWorkspace` snapshot |
+| Assignment Studio | `task.studio` on each task in the established Homework store | `homeworkWorkspace` in full workspace exports; preserve legacy compatibility |
 | Reminder state | `sutraNotifications:v1` (localStorage) | `notificationsState` in the export payload |
 
 The three `appData.*` workspaces are registered in `src/core/app.js` exactly like
@@ -43,7 +43,7 @@ every other workspace: declared in `getDefaultAppData()`, merged in
 `mergeAppDataDefaults()`, hydrated in `hydrateStateFromAppData()`, written in
 `persistAppData()`, serialized in `serializeWorkspace()` (both the encrypted
 package and the JSON payload), read back in `deserializeWorkspace()`, and listed
-in `docs/persistence-inventory.json`. The round-trip guard
+in `docs/architecture/persistence-inventory.json`. The round-trip guard
 (`npm run check:roundtrip`) enforces save/export/import parity, so a missing wire
 fails CI.
 

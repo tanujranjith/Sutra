@@ -38,7 +38,9 @@ Sutra is a single static web app - no installer, no account, no build step.
   # then visit http://localhost:5173/Sutra.html
   ```
 
-On first launch, Sutra creates a welcome page and a built-in **Help & Docs** page in your sidebar. Everything you do from here lives on this device only.
+On first launch, Sutra provides a built-in **Help & Docs** page in the Create
+sidebar. Ordinary notes are created when you ask for them. Work stays local
+unless you explicitly export it or enable an optional connection.
 
 ---
 
@@ -201,7 +203,7 @@ The **Sutra Assistant** is the assistant icon button at the bottom-right. Its lo
 
 Right under the panel header you'll see the **Powered by Sutra Intelligence** badge - *"Local signals from your workspace."* That's the local layer reading your overdue work, workload, schedule conflicts, weak areas, review backlog, and next steps to ground the assistant. It does not call any server itself.
 
-You decide how much it sees with **Workspace Access**: *Current Screen Only*, *Current Area*, or *Full Workspace Context*. Choose **Single Request** or **Conversation Memory** for whether it remembers the thread.
+Workspace access, area permissions, context depth, and conversation memory are separate controls. Use the current [Assistant context and privacy contract](docs/features/SUTRA_ASSISTANT.md#3-workspace-access-and-context-depth) to choose what can be read and retained.
 
 When the assistant wants to *change* something - add a task, schedule a block, create a deck - it never does it silently. It renders **Apply / Decline** cards, and multi-action replies group into one **Proposed plan** card with per-step checkboxes, *Apply selected / Apply all*, a live "N of M applied" count, and a one-click **Undo all** that reverses the whole batch. **Confirm Before Applying Changes** keeps you in control. After a step applies you get a **receipt** - what changed, a link that jumps to the affected screen (*Open Homework*, *Open Timeline*, ...), and an inline **Undo**. Every applied action is also logged under **Assistant Activity** (single actions and whole batches can be undone from there too), and anything it creates is saved and backed up exactly like work you did by hand.
 
@@ -243,7 +245,9 @@ Open the **theme** panel from the top tab strip.
 Power users can go further under `Settings -> Customization`:
 
 - **CSS Overrides** - named CSS snippets with live preview, validation, reorder, and import/export. Custom CSS applies after themes and survives refresh.
-- **Plugins** - install local plugin bundles. They run **sandboxed**, install **disabled**, and are **reviewed before they run**.
+- **Plugins** — opt in separately under Settings → Advanced → Developer /
+  Experimental. Local bundles run **sandboxed**, install **disabled**, and
+  require review before they run.
 
 If a snippet or plugin ever misbehaves, load **Safe Mode** - add `?sutraSafeMode=1` to the URL, hold **Shift** while the app loads, or use the in-app Recovery button. Safe Mode skips all custom CSS and plugins and **never deletes anything**.
 
@@ -255,7 +259,10 @@ This is the single most important habit. Optional Google Drive sync can keep an 
 
 `Settings -> Data` -> **Encrypted Workspace Backup (.sutra)**. Sutra asks for a backup password, then downloads a file named like `sutra_workspace_2026-06-05_21-18-42.sutra` (your local date and time) containing your notes, tasks, timeline, settings, themes, homework, AP, college, life, and work data - including document backgrounds and inline images. You can also choose the explicit optional **unencrypted .sutra export** or plain **Workspace JSON** for raw interchange; both are readable formats, and Assistant chats stay out of the unencrypted .sutra path unless you opt in.
 
-To restore, import the file from the same screen. Sutra always writes a **pre-import safety snapshot** first, so if an import looks wrong you can roll back from `Settings -> Data -> Storage Health`.
+To restore, import the file from the same screen. Sutra offers an encrypted
+pre-import safety export; only accepting it creates a downloaded safety file.
+The local recovery journal also remains available. See
+[Data and Backups](docs/privacy-security/DATA_AND_BACKUPS.md#6-pre-import-safety-snapshot).
 
 A few things to know:
 

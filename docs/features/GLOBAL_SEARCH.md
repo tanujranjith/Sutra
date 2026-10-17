@@ -21,7 +21,7 @@ centered modal over the current screen.
 | **All** | Everything below, plus secondary surfaces: courses, AP Study subjects, College checklist, Review decks/cards, habits/goals/reading, Assistant activity history, and settings shortcuts. |
 | **Pages** | Create pages whose **title or location** matches. |
 | **Notes** | Create pages whose **note body** matches (the page is labeled *Note* with a content snippet). |
-| **Homework** | Homework tasks: title, notes, course name, due date (`hwTasks:v2`). |
+| **Homework** | Homework tasks: title, notes, course name, due date, read through the established Homework store. |
 | **Tasks** | Home/Today tasks: title, notes, category, due date. |
 | **Timeline** | Timeline blocks: name, notes, date/time. Opening one focuses that date. |
 | **Attachments** | Course files: filename, description, summary, tags, kind, size, course (`courseWorkspace.files` metadata). |
