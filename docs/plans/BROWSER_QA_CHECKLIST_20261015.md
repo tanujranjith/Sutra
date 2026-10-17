@@ -52,8 +52,8 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
 32. ~~Grammar/spelling/rephrase: live short drafts, editable review, insertion and selected-text replacement, Cancel, and editor Undo passed in Chrome.~~
 33. ~~Writing guards: empty /grammar disables Generate; changing the note during generation closes the stale review and preserves the newer text.~~
-34. Strengthened page PIN: wrong/right PIN, change/remove, legacy upgrade, and reload. Open: new credential entry must be performed privately by the user.
-35. Workspace lock: refresh/inactivity and retry delay. Open: user-entered QA credential required.
+34. Strengthened page PIN: partial manual Chrome pass on October 17 for wrong/right PIN, manual relock and reload. Open: locking hides the note but retains its text in hidden classic and Modern Editor DOM until reload; PIN change/removal and legacy upgrade were not manually tested.
+35. ~~Workspace lock: user-created local test credential; wrong/right PIN, retry delay, refresh locking, real inactivity locking, background isolation and separate page-lock preservation passed manual Chrome QA on October 17.~~
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
 38. ~~Weekly planning: seven-day coverage, future starts, after-hours rollover, expired-preview rejection, single-tab schedule persistence, and already-scheduled work deduplication.~~
@@ -70,6 +70,40 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 49. ~~Settings and workspace search upgrade: everyday phrases/typos, relevant field-level results, exact-control focus, shared workspace Settings results, keyboard navigation, draft/disclosure preservation, and phone containment passed manual Chrome QA. Luna diffs and privacy boundaries independently reviewed; automated regressions remain under item 45.~~
 50. ~~Assistant response details, receipt labels, and source panels adapt to theme colors; light/dark/custom-light stats contrast checked and faint-label/dark-fallback defects fixed.~~
 51. ~~Completed theme replies release the Stop-generating state; connected-provider composer hints refresh correctly after reload.~~
+
+## Local PIN follow-up — October 17, 2026
+
+Manual Chrome QA used only `http://127.0.0.1:5287/Sutra.html`, a fresh local
+origin serving the existing candidate. The official workspace and GitHub Pages
+app were not opened or modified for these checks. The user created both test
+PINs through the visible setup forms; their values are not recorded here.
+
+- Page: a wrong PIN showed the incorrect-PIN message and kept the note hidden.
+  The correct PIN revealed the original harmless canary. Refresh relocked it;
+  its body was absent from both editors until the next successful unlock.
+- Page finding: immediately after initial locking and after **Lock again**, the
+  canary remained in `#editor` and `#editorV2Host .ProseMirror`, behind
+  `display:none` ancestors with zero rendered rectangles. It was not visible in
+  the lock screen. Reload removed both retained copies. This contradicts the
+  documented page-owned plaintext cleanup contract; no broader bypass or data
+  exposure was demonstrated. Item 34 remains open.
+- Workspace: a wrong PIN was rejected; the fourth wrong attempt reported a
+  one-second retry wait. The correct PIN unlocked successfully afterward.
+  Locked background content had a hidden, inert, `aria-hidden` ancestor.
+- Changing the inactivity timeout required the existing PIN and relocked the
+  workspace. The one-minute selection survived refresh, which started locked.
+  After unlocking, 69 seconds of real inactivity produced the lock screen;
+  no clock injection or timer mock was used. Unlock succeeded afterward, and
+  opening the note still required its independent page PIN.
+- Setup UI observation: the workspace setup form displayed a Current PIN field
+  while the lock was Off; timeout authorization displayed unused new-PIN fields.
+  The actions completed with only their relevant fields filled. These incidental
+  presentation issues were not repaired in this verification pass.
+
+The QA workspace was left locked, with its one-minute test timeout enabled and
+the local server running. Page PIN change/removal and legacy upgrade remain
+unverified manually. No application code, provider requests, automated suites,
+remote hosting changes, pushes or merges were performed in this pass.
 
 ## Live Gemini follow-up and contrast fixes
 
