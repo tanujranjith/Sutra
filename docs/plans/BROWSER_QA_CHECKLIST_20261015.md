@@ -45,7 +45,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 24. ~~US Letter default and A4 selection.~~
 25. ~~Imported task Notes/Reference URL editing, reopen/reload, and unknown fields.~~
 26. ~~Stateful follow-up: Gemini read staged task notes/Reference URL, resolved the follow-up correctly, cited the right task, and retained working citations and fields after reload.~~
-27. Successful one-time PIN read: consent/PIN prompts and editor isolation passed October 17, but the live answer remains unverified. Findings: local Help routing intercepted the note question; Workspace-aware and Current view pre-send receipts listed an unrelated QA note; Minimal listed no source after consent. All provider submissions were cancelled before sending. Fix/verify routing and exact-source disclosure, then repeat the live answer.
+27. One-time PIN read fixes committed at `60c5ac0`: content requests bypass generic Help, ticketed evidence is restricted to the consented page, and Minimal can include that explicitly authorized source. Manual Chrome retest reached the provider disclosure with local routing On and exactly one correct locked/read-once source; no selection, memory, or history. Open: final live answer/post-response receipt and editor/reload checks after the user accepts Sutra's remote-AI acknowledgement; automated regressions await CI.
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
 29. ~~True Chrome zoom at 67%/150% across Home, Create editing, Assistant composer, and Settings search/save. User set real browser zoom; manual QA confirmed layout containment and note persistence on October 17.~~
 30. ~~Bundled Sutra icons in light/dark themes, phone navigation, and cached loading with the local server stopped.~~
@@ -75,7 +75,40 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 54. ~~Homework storage policy reconciled with the existing current-UI IndexedDB store; migration/recovery record explicitly preserves and documents separate legacy v1 mutation paths. No runtime or task data changed.~~
 55. Trademark policy: recommendation prepared October 17: keep Apache 2.0, update TRADEMARK.md to Sutra with its former name, permit accurate attribution/references, and distinguish unofficial forks from the official project. Owner decision remains open; no legal files changed.
 
-## Locked-source QA and trademark recommendation — October 17, 2026
+## Locked-source fix follow-up — October 17, 2026
+
+Local commit `60c5ac0` fixes the failures below without changing the core runtime,
+stored note/PIN formats, provider settings, or approval requirements. A valid
+one-request ticket suppresses the generic product-Help fallback, narrows the
+note index to the consented page, and builds minimal workspace context without
+another open editor, selection, automatic summaries, or memory. Source
+exclusions, explicit denials, ticket validation/consumption, and token budgets
+remain in force. Minimal still excludes automatic notes; an explicit verified
+page request is the exception. Generic read-this-note prompts can use bounded
+target excerpts when ordinary keyword search has no match.
+
+Luna xhigh traced and reviewed the relevant paths. The parent independently
+checked its findings and fixed the unrelated current-editor scope gap it found.
+The parent's code read rejected a subsequent false-positive report about
+missing local-search area approval: retrieval already derives that approval
+from a validated ticket. Unit and browser cases were prepared for CI, including
+an unrelated current note, generic queries, exclusions, Minimal, invalid tickets,
+ticket reuse, and editor isolation; they were not executed locally.
+
+Owning asset/cache-stamp generation and its required core-integrity assertion
+passed; `git diff --check` passed. No automated suites or dependency install.
+In the existing localhost Chrome workspace, the updated script URL was verified.
+With local routing On, Gemini 3.8 Flash + Low, Stateless history, and temporary
+Notes-only access, the original question passed consent/PIN and reached the
+pre-send disclosure. Its expanded receipt listed only `QA Locked Consent`,
+locked/read once with PIN for this request, with minimal workspace context,
+no selected text, no memory, no prior conversation, and Data transmitted: No.
+No generation request has been submitted for this retest yet. The user must
+accept the visible Send & don't ask again control, which also saves the app's
+remote-AI acknowledgement. Temporary Notes-only access remains enabled while
+that concrete request is pending and must be restored to Off after the retest.
+
+## Initial locked-source QA and trademark recommendation — October 17, 2026
 
 Manual Chrome checks used only the disposable `http://localhost:5287`
 workspace. The user saved a Gemini key and created the PIN for the harmless
