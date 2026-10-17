@@ -15,8 +15,16 @@ lanes passed. WebKit shard 5 failed the closing-connection autosave case in
 `persistence-and-folder.spec.mjs` with `WorkspaceConflictError`; its job recorded
 113 passes and 12 existing engine skips. This is not an all-green matrix.
 
-Later local PIN fixes and documentation changes have not been uploaded or tested
-by CI. The user's current instruction is **no push or merge**. The dated progress
+Local commit `66bd37f` repairs the closing-connection fixture: it awaits
+`waitForAppReady`, including canonical hydration and a confirmed save, before
+copying the root and installing the fake IndexedDB factory. Previously onboarding
+could queue a save against the fixture's stale copy and correctly trigger the
+production conflict guard. The parent reviewed the fixture, readiness helper,
+hydration/debounce behavior, and unchanged retry assertions. No production
+conflict protection was weakened, and no delay or skip was added.
+
+That fixture repair, later local PIN fixes, and documentation changes have not
+been uploaded or tested by CI. The user's current instruction is **no push or merge**. The dated progress
 and prepared-check tables below are historical checkpoints, not pending-run or
 current-release certification.
 

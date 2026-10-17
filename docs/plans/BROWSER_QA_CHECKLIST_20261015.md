@@ -37,7 +37,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 16. ~~Ordinary task notes/Reference URL persistence and cancelled-draft reset.~~
 17. ~~Blank essay word targets.~~
 18. ~~Homework titles/IDs render quotes and markup literally, including after reload.~~
-19. Diagnostic credential scrubbing with controlled synthetic secrets and exported diagnostics. Ready for CI: existing student-security-boundaries tests cover modern fake keys, nested/encoded aliases, and report/export sinks; independently reviewed. No real credentials inspected; execution remains pending.
+19. ~~Diagnostic credential scrubbing: controlled fake keys, nested/encoded aliases, and diagnostic/export sinks covered by the successful static/unit CI lane at `d95489e`; no real credentials inspected.~~
 20. ~~Grade Planner category/score preservation through Semester Setup and reload.~~
 21. ~~Assistant permission safeguards, consented locked-note read, and editor remaining locked.~~
 22. ~~Calculator negatives, parentheses, keyboard entry, errors, and recovery.~~
@@ -47,7 +47,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 26. ~~Stateful follow-up: Gemini read staged task notes/Reference URL, resolved the follow-up correctly, cited the right task, and retained working citations and fields after reload.~~
 27. Successful one-time PIN read: accurate source disclosure and editor stays locked. Open: needs user-entered QA PIN plus a provider.
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
-29. True browser zoom at 67%/150% across Home/Create/Assistant/Settings. Open: another Chrome shortcut attempt left the measured viewport at 1751px and pixel ratio 1. Available controls did not establish actual zoom. Narrow-screen checks passed separately.
+29. ~~True Chrome zoom at 67%/150% across Home, Create editing, Assistant composer, and Settings search/save. User set real browser zoom; manual QA confirmed layout containment and note persistence on October 17.~~
 30. ~~Bundled Sutra icons in light/dark themes, phone navigation, and cached loading with the local server stopped.~~
 31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
 32. ~~Grammar/spelling/rephrase: live short drafts, editable review, insertion and selected-text replacement, Cancel, and editor Undo passed in Chrome.~~
@@ -57,19 +57,53 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
 38. ~~Weekly planning: seven-day coverage, future starts, after-hours rollover, expired-preview rejection, single-tab schedule persistence, and already-scheduled work deduplication.~~
-39. Wellness retirement: live Life navigation, widget/template pickers, Settings/workspace search and command discovery passed additional retirement checks; ordinary goals, notes and Focus work. Ready for CI: enhanced encrypted-backup and full Sync fixtures cover retired sleep/wellness records and unknown nested 0/false values, with direct restore/transfer/reload assertions. Automated portability/exclusion checks remain pending.
+39. ~~Wellness retirement: discovery checks and the recorded successful CI coverage for exclusion, encrypted backup, and synthetic Sync preserve retired records and unknown nested fields. Ordinary goals, notes, and Focus remain available.~~
 40. ~~Spreadsheet importer: native Sheets formulas/reload/cached use, plus general XLSX-to-note import displaying the previously blank formula result and retaining it after reload.~~
-41. Incomplete restore: malformed/corrupt files preserve existing data and missing attachments show an incomplete-restore warning. Ready for CI: new restore-write-failure browser cases cover failed workspace/attachment writes, honest warnings, in-memory recovery and old-root preservation where applicable. Independently reviewed; not yet executed.
-42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Ready for CI: added durable-state preservation cases for auth rejection and corrupt ciphertext; existing crypto, conflict-store, storm and session-binding cases reviewed. Execution/service checks remain pending; remote data/configuration unchanged.
+41. ~~Incomplete restore: manual corrupt/missing-asset checks and successful CI fault-injection coverage verify honest warnings, in-memory recovery, and old-root preservation when workspace or attachment writes fail.~~
+42. ~~Synthetic Sync safety: recorded CI coverage verifies rejected/corrupt encrypted content and conflict failures preserve durable data. Live service and device validation remains under item 7.~~
 43. ~~Help/tutorial: generated Help retains all 34 table-of-contents targets and native Back to top buttons; mouse/keyboard jumps, heading focus, reload, read-only Help, ordinary same-title note editability, and 390px controls passed. Full 67-screen tour Next/Back/Finish and the six-screen quick tour passed; reopening instructions match current Settings.~~
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
-45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Vercel inspected: production tracks main; all other branches auto-build previews with Standard Authentication. Node 24.x confirmed. No settings changed and no push authorized; automated checks remain for GitHub CI.
+45. CI/hosting: latest recorded matrix at `d95489e` has 16 successful jobs and one WebKit closing-connection fixture failure. Local fix `66bd37f` now waits for canonical startup/save before installing its fake database; parent independently reviewed it. Open: CI rerun of that fix and subsequent local commits, requiring later push authorization. Hosting settings remain unchanged.
 46. ~~Save-conflict fix: startup recovery/repair now coordinates conditional writes, journals replaced roots, and identifies accepted writes. Timeline create/edit/reload and genuine two-tab stale-write protection passed manually.~~
 47. ~~Settings option 3 redesign: independently reviewed, compared with the selected mockup, and checked in Chrome on desktop, tablet, and 390px/320px phones; staged preview, Revert, Save/reload, searchable disclosures, and Dark theme verified.~~
 48. ~~Theme creation in Assistant: live Gemini 3.8 Flash + Low generation/refinement, inline palette review, explicit Preview/Revert/Apply, saved palette/reply reload, and local /theme off passed.~~
 49. ~~Settings and workspace search upgrade: everyday phrases/typos, relevant field-level results, exact-control focus, shared workspace Settings results, keyboard navigation, draft/disclosure preservation, and phone containment passed manual Chrome QA. Luna diffs and privacy boundaries independently reviewed; automated regressions remain under item 45.~~
 50. ~~Assistant response details, receipt labels, and source panels adapt to theme colors; light/dark/custom-light stats contrast checked and faint-label/dark-fallback defects fixed.~~
 51. ~~Completed theme replies release the Stop-generating state; connected-provider composer hints refresh correctly after reload.~~
+52. ~~Repository documentation audit, applicable consolidation, and obsolete-guide removal; parent reviewed the changes.~~
+53. ~~Workspace PIN setup and timeout forms hide irrelevant credential fields; local manual verification passed.~~
+54. ~~Homework storage policy reconciled with the existing current-UI IndexedDB store; migration/recovery record explicitly preserves and documents separate legacy v1 mutation paths. No runtime or task data changed.~~
+55. Trademark policy: owner decision remains open.
+
+## Real Chrome zoom and storage follow-up — October 17, 2026
+
+Only the disposable `http://localhost:5287/Sutra.html` origin was used.
+The user set Chrome to 67% and then 150%; read-only DOM measurements confirmed
+pixel ratios approximately 0.667 and 1.5, with CSS viewport widths 2632 and 1170.
+Visual viewport scale stayed 1, distinguishing browser zoom from pinch zoom.
+At both settings document scroll width equaled client width.
+
+Home navigation/layout, Create note typing and wrapping, the unsent Assistant
+composer draft, and Settings search/save were exercised. At 150% the formatting
+toolbar exposed its existing scroll controls. The harmless `QA Zoom 29 — disposable`
+note, including text added at 150%, survived reload. Assistant drafts were cleared
+without sending; no keys or provider calls were used. Assistant master and Pack
+were temporarily enabled for composer QA, then both restored to Off and confirmed
+after reload. Real zoom remains at the user's 150% setting pending their reset.
+Screenshots were inspected in memory, avoiding additional large disk artifacts.
+
+For item 54, the user delegated the storage-contract choice. History and current
+code support retaining the existing canonical store for current Homework UI
+writes instead of replaying potentially stale raw localStorage arrays. The
+parent corrected the subagent's overbroad single-authority wording and a relative
+documentation link after independently reading the v1 reader/mutation paths.
+The dedicated record distinguishes schema version 2 from the unnumbered
+legacy-import marker and records recovery/downgrade limitations. This resolves
+the policy/documentation conflict, not every possible legacy compatibility defect.
+No new migration was performed or certified.
+
+Item 45's fixture fix is local only. No automated suites, builds, installs,
+pushes, merges, or hosting changes were performed in this follow-up.
 
 ## Local PIN follow-up — October 17, 2026
 
