@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppReady } from './helpers/app-ready.mjs';
 
+// This spec covers Settings layout and search. The update notice is mocked in
+// its dedicated assertion below, so live service-worker state must not obscure
+// the Settings controls under test.
+test.use({ serviceWorkers: 'block' });
+
 async function openSettings(page) {
   await page.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   await page.goto('/Sutra.html');
