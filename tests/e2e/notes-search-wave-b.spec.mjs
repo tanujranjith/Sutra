@@ -84,16 +84,17 @@ test('shareable deck treats hostile prompts, answers, cloze text, and images as 
 
 test('math blocks render from their LaTeX source', async ({ page }) => {
   await openApp(page);
-  const rendered = await page.evaluate(async () => {
+  await page.evaluate(() => {
     const host = document.createElement('div');
+    host.id = 'notes-search-wave-b-math-host';
     host.innerHTML = '<span class="sutra-math-block" data-latex="x^2 + y^2">x^2 + y^2</span>';
     document.body.appendChild(host);
-    await window.__sutraPublicBetaTestHooks.renderMathBlocksIn(host);
-    // ensure() resolves before render; give the microtask a beat
-    await new Promise(r => setTimeout(r, 200));
-    return host.querySelector('.sutra-math-block').innerHTML.indexOf('katex') !== -1;
+    window.__sutraPublicBetaTestHooks.renderMathBlocksIn(host);
   });
-  expect(rendered).toBe(true);
+  const block = page.locator('#notes-search-wave-b-math-host .sutra-math-block');
+  await expect(block.locator('.katex')).toHaveCount(1);
+  await expect(block).toHaveAttribute('data-latex', 'x^2 + y^2');
+  await expect(block).toHaveAttribute('contenteditable', 'false');
 });
 
 test('the /math slash command and insert path ship in the bundle', async ({ request }) => {

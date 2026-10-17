@@ -232,6 +232,29 @@ was disabled. No hosting restoration or production promotion was performed.
 
 ## Vercel inspection
 
+### October 17 follow-up
+
+Full run `38994678784` at `94c8bc4` finished with 16 successful jobs and one
+failed WebKit fourth shard. The earlier header and full Assistant interaction
+failures passed both early checks and the full shard. The remaining repeated
+failure was `notes-search-wave-b.spec.mjs` math rendering: a one-shot check after
+200 ms observed no KaTeX markup. The helper returns void while scheduling lazy
+asset loading; awaiting it did not await rendering. The fixture now waits for
+actual KaTeX output and also verifies preserved LaTeX and non-editability. No
+production code changed. Its new CI validation is pending. Two other WebKit
+cases (comments containment and passage writing) passed on retry and remain
+reported as timing caveats.
+
+The user requested a hosting-restoration investigation. Read-only inspection
+confirmed the current branch preview is Ready at SHA `94c8bc4`, and the Git-main
+deployment exists at `80569e1`. The public `sutra-two.vercel.app` alias instead
+points at a separate manual production deployment whose root describes a Sutra
+product family (Windows browser, dynamic island, consulting and apparel).
+Its root returns 200 HTML; `/Sutra.html` returns 404 text/plain. This may be the
+other Sutra site the user asked to preserve. The exact normal app URL was
+requested before any alias change. No deployment, promotion, linking, protection
+or domain change was performed. Protected app headers remain unverified.
+
 Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:
 
 - Connected Git repository: `tanujranjith/Sutra`.
