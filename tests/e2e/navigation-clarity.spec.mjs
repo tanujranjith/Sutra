@@ -64,8 +64,47 @@ async function getHeaderGeometry(page) {
         && rect.top >= utilityRect.top - 1
         && rect.bottom <= utilityRect.bottom + 1;
     });
+    const visibleDestinationFitResults = Array.from(row.children).filter(visible).map((control) => {
+      const controlRect = control.getBoundingClientRect();
+      const label = document.createRange();
+      label.selectNodeContents(control);
+      const labelRect = label.getBoundingClientRect();
+      const fits = controlRect.left >= rowRect.left - 1 && controlRect.right <= rowRect.right + 1
+        && labelRect.left >= rowRect.left - 1 && labelRect.right <= rowRect.right + 1;
+      const round = (value) => Math.round(value * 100) / 100;
+      return {
+        id: control.id || null,
+        view: control.dataset.view || null,
+        label: (control.getAttribute('aria-label') || control.textContent || '').trim().replace(/\s+/g, ' '),
+        control: {
+          left: round(controlRect.left), right: round(controlRect.right), top: round(controlRect.top), bottom: round(controlRect.bottom),
+          width: round(controlRect.width), height: round(controlRect.height)
+        },
+        text: {
+          left: round(labelRect.left), right: round(labelRect.right), top: round(labelRect.top), bottom: round(labelRect.bottom),
+          width: round(labelRect.width), height: round(labelRect.height)
+        },
+        fits
+      };
+    });
+    const round = (value) => Math.round(value * 100) / 100;
+    const box = (rect) => ({
+      left: round(rect.left), right: round(rect.right), top: round(rect.top), bottom: round(rect.bottom),
+      width: round(rect.width), height: round(rect.height)
+    });
 
     return {
+      viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+      theme: {
+        key: document.body.getAttribute('data-theme-key'),
+        name: document.body.getAttribute('data-theme'),
+        colorScheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+        fontsStatus: document.fonts ? document.fonts.status : 'unsupported'
+      },
+      boxes: {
+        shell: box(shell.getBoundingClientRect()), row: box(rowRect), utility: box(utilityRect), brand: box(brandRect),
+        launcher: box(launcherRect)
+      },
       utilitySharesTabsShell: utility.parentElement === row.parentElement && row.parentElement === shell,
       rowLeft: rowRect.left,
       rowRight: rowRect.right,
@@ -76,21 +115,25 @@ async function getHeaderGeometry(page) {
       launcherRadius: parseFloat(getComputedStyle(launcher).borderTopLeftRadius) || 0,
       launcherOwnsHitTarget: !!launcherTarget && (launcherTarget === launcher || launcherTarget.closest('#commandPaletteLauncher') === launcher),
       utilityChildrenFit,
-      destinationOverflow: row.scrollWidth - row.clientWidth,
-      visibleDestinationLabelsFit: Array.from(row.children).filter(visible).every((control) => {
-        const rect = control.getBoundingClientRect();
-        const label = document.createRange();
-        label.selectNodeContents(control);
-        const labelRect = label.getBoundingClientRect();
-        return rect.left >= rowRect.left - 1 && rect.right <= rowRect.right + 1
-          && labelRect.left >= rowRect.left - 1 && labelRect.right <= rowRect.right + 1;
+      utilityChildFitResults: Array.from(utility.children).filter(visible).map((child) => {
+        const rect = child.getBoundingClientRect();
+        return {
+          id: child.id || null,
+          label: (child.getAttribute('aria-label') || child.textContent || '').trim().replace(/\s+/g, ' '),
+          left: round(rect.left), right: round(rect.right), top: round(rect.top), bottom: round(rect.bottom),
+          fits: rect.left >= utilityRect.left - 1 && rect.right <= utilityRect.right + 1
+            && rect.top >= utilityRect.top - 1 && rect.bottom <= utilityRect.bottom + 1
+        };
       }),
+      destinationOverflow: row.scrollWidth - row.clientWidth,
+      visibleDestinationLabelsFit: visibleDestinationFitResults.every((result) => result.fits),
+      visibleDestinationFitResults,
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
     };
   });
 }
 
-async function expectHeaderGeometry(page) {
+async function expectHeaderGeometry(page, stage = 'header layout') {
   await page.waitForFunction(() => {
     const row = document.querySelector('.view-tabs');
     const utility = document.querySelector('.nav-utility-group');
@@ -101,16 +144,17 @@ async function expectHeaderGeometry(page) {
   });
 
   const geometry = await getHeaderGeometry(page);
-  expect(geometry).not.toBeNull();
-  expect(geometry.utilitySharesTabsShell).toBe(true);
-  expect(geometry.rowRight).toBeLessThan(geometry.utilityLeft);
-  expect(geometry.brandRight).toBeLessThan(geometry.rowLeft);
-  expect(geometry.launcherWidth).toBeGreaterThanOrEqual(44);
-  expect(geometry.launcherHeight).toBeGreaterThanOrEqual(44);
-  expect(geometry.launcherRadius).toBeGreaterThan(0);
-  expect(geometry.launcherOwnsHitTarget).toBe(true);
-  expect(geometry.utilityChildrenFit).toBe(true);
-  expect(geometry.documentOverflow).toBeLessThanOrEqual(1);
+  const diagnostic = `${stage}: ${JSON.stringify(geometry)}`;
+  expect(geometry, `${stage}: header geometry was not available`).not.toBeNull();
+  expect(geometry.utilitySharesTabsShell, diagnostic).toBe(true);
+  expect(geometry.rowRight, diagnostic).toBeLessThan(geometry.utilityLeft);
+  expect(geometry.brandRight, diagnostic).toBeLessThan(geometry.rowLeft);
+  expect(geometry.launcherWidth, diagnostic).toBeGreaterThanOrEqual(44);
+  expect(geometry.launcherHeight, diagnostic).toBeGreaterThanOrEqual(44);
+  expect(geometry.launcherRadius, diagnostic).toBeGreaterThan(0);
+  expect(geometry.launcherOwnsHitTarget, diagnostic).toBe(true);
+  expect(geometry.utilityChildrenFit, diagnostic).toBe(true);
+  expect(geometry.documentOverflow, diagnostic).toBeLessThanOrEqual(1);
 }
 
 async function enableBuiltInQuickLaunchers(page) {
@@ -170,25 +214,25 @@ test('header utilities stay clear of centered navigation across desktop and tabl
   await openApp(page, 1644);
 
   // Check the actual startup layout before enabling any optional shortcut providers.
-  await expectHeaderGeometry(page);
+  await expectHeaderGeometry(page, 'startup at 1644px');
   const startupGeometry = await getHeaderGeometry(page);
-  expect(startupGeometry.destinationOverflow).toBeLessThanOrEqual(1);
-  expect(startupGeometry.visibleDestinationLabelsFit).toBe(true);
+  expect(startupGeometry.destinationOverflow, `startup at 1644px: ${JSON.stringify(startupGeometry)}`).toBeLessThanOrEqual(1);
+  expect(startupGeometry.visibleDestinationLabelsFit, `startup at 1644px: ${JSON.stringify(startupGeometry)}`).toBe(true);
 
   // Use the real Integrations preferences at a wide desktop size so the built-in
   // launchers are visible before the exact screenshot width is tested. The
   // canonical overflow manager may compact the dock at narrower widths.
   await page.setViewportSize({ width: 2000, height: 900 });
   await enableBuiltInQuickLaunchers(page);
-  await expectHeaderGeometry(page);
+  await expectHeaderGeometry(page, 'built-in launchers at 2000px');
   await page.setViewportSize({ width: 1644, height: 900 });
-  await expectHeaderGeometry(page);
+  await expectHeaderGeometry(page, 'built-in launchers at 1644px');
   await expect(page.locator('#quickAppLaunchers')).toBeVisible();
   await expect(page.locator('#quickAppLaunchers .quick-app-btn.spotify')).toBeVisible();
   await expect(page.locator('#quickAppLaunchers .quick-app-btn.chatgpt')).toBeVisible();
   const desktopGeometry = await getHeaderGeometry(page);
-  expect(desktopGeometry.destinationOverflow).toBeLessThanOrEqual(1);
-  expect(desktopGeometry.visibleDestinationLabelsFit).toBe(true);
+  expect(desktopGeometry.destinationOverflow, `built-in launchers at 1644px: ${JSON.stringify(desktopGeometry)}`).toBeLessThanOrEqual(1);
+  expect(desktopGeometry.visibleDestinationLabelsFit, `built-in launchers at 1644px: ${JSON.stringify(desktopGeometry)}`).toBe(true);
 
   const launcher = page.locator('#commandPaletteLauncher');
   await launcher.click();
@@ -202,7 +246,7 @@ test('header utilities stay clear of centered navigation across desktop and tabl
 
   for (const width of [1440, 1220, 981, 980, 700]) {
     await page.setViewportSize({ width, height: 900 });
-    await expectHeaderGeometry(page);
+    await expectHeaderGeometry(page, `responsive at ${width}px`);
   }
 });
 
