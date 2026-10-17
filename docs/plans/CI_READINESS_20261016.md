@@ -72,8 +72,9 @@ all static/unit/build/artifact gates and all three Chromium shards.
 CI annotations identified Node 20 action runtimes and an upcoming change to the
 `ubuntu-latest` image. Direct action pins were independently checked against
 official immutable manifests and updated to Node 24 versions; runners use
-`ubuntu-24.04`. Desktop Chrome, Firefox, and WebKit each retain full coverage in
-three separate one-worker shards. Responsive projects remain in one complete
+`ubuntu-24.04`. Desktop Chrome and Firefox retain three one-worker shards each;
+WebKit now has six one-worker shards for full coverage with shorter wall time.
+Responsive projects remain in one complete
 lane. Browser caches remain shared per engine, and failure artifact names now
 include the shard to avoid upload collisions. The workflow guard checks that
 desktop shards and responsive projects are neither lost nor duplicated.
@@ -121,6 +122,13 @@ The pagination transfer is now explicit. Writing review checks visible and
 serialized text before focused keyboard selection, retaining the full-selection
 requirement and reporting its actual value. Both checks precede Firefox's long
 second shard on the next run.
+WebKit also reproduced the writing-selection timeout and failed a header geometry
+predicate. Header assertions now preserve their thresholds while reporting exact
+viewport, control/text rectangles, font status, and original source stacks. Their
+production causes remain unproven. The reviewed repair batch supersedes the old
+run's remaining WebKit jobs with the complete six-shard matrix; completed results
+and observed failures from the old run remain recorded above. No compatibility
+failure has been hidden by a new skip or relaxed assertion.
 
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
