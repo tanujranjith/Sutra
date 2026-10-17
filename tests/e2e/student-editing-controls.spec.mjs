@@ -135,7 +135,12 @@ for (const modern of [true, false]) {
       const data = new DataTransfer();
       data.setData('text/html', '<p><strong>Plain paste control</strong></p>');
       data.setData('text/plain', 'Plain paste control');
-      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+      const pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      // Firefox currently drops ClipboardEventInit.clipboardData for synthetic paste events.
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=2027025
+      // Preserve the test's prepared DataTransfer explicitly on the event instance.
+      Object.defineProperty(pasteEvent, 'clipboardData', { value: data });
+      el.dispatchEvent(pasteEvent);
     });
     await expect(editor).toContainText('Plain paste control');
     const html = await editor.innerHTML();
