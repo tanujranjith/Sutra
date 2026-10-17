@@ -255,6 +255,20 @@ other Sutra site the user asked to preserve. The exact normal app URL was
 requested before any alias change. No deployment, promotion, linking, protection
 or domain change was performed. Protected app headers remain unverified.
 
+Subsequent parent verification linked only ignored local CLI project metadata to
+the already confirmed existing project, then used the installed CLI's authenticated
+`curl` path. Both the Git-main deployment and preview
+`sutra-k9yxw495p-tanuj-ranjith-s-projects.vercel.app` at `d95489e` returned HTTP 200
+with HTML, CSP, `nosniff`, `no-referrer`, Permissions Policy, COOP, CORP and HSTS.
+No protection or remote hosting setting changed. The CLI's redundant `.gitignore`
+addition was removed; existing ignore rules already cover its local metadata.
+This supersedes the earlier live-header limitation for these two app deployments.
+
+Full run `38997646618` at `d95489e` is in progress. Its build/static/unit/artifact
+job passed, and the parent read successful WebKit early checks for the header
+(26.0 s), full Assistant writing review (23.6 s), and repaired math fixture
+(10.3 s). The full 17-job result is still pending. No main merge occurred.
+
 Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:
 
 - Connected Git repository: `tanujranjith/Sutra`.
