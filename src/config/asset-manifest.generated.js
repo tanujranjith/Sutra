@@ -365,7 +365,7 @@
     "./styles/themes/glass.css?v=20260917-glass-cohesion1",
     "./styles/themes/macos26-redesign.css?v=20260913-glass-surfaces1",
     "./styles/themes/signature-presets.css?v=20260807-signaturethemes5",
-    "./styles/themes/sutra-pro.css?v=20261009-course-list1",
+    "./styles/themes/sutra-pro.css?v=20261016-password-hidden1",
     "./styles/themes/theme-cohesion.css?v=20261009-peach-preview1",
     "./styles/views/assistant-view.css?v=20261015-response-contrast3",
     "./styles/views/contextual-shell.css?v=20261011-header-flow4",

@@ -65,6 +65,8 @@ whether to make an encrypted safety export; only Yes opens its password screen.
   into an explicit conflict instead of being overwritten.
 - Locking Drive cancels pending save timers without discarding unsynced edits.
   A queued save does not reopen the password prompt after you lock the session.
+- Restoring uses one password field; the confirmation field is only shown when
+  creating a password. Theme layout rules must preserve hidden password fields.
 - The Sutra Cloud card points you there; deeper backup-list integration is a
   follow-up.
 
