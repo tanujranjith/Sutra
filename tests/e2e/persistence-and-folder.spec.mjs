@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Coverage for (a) the autosave readback false-positive fix and (b) the optional
 // user-selectable backup/export folder. Runs against the same static files that
@@ -94,6 +95,9 @@ test('ordinary autosave verifies and never shows the save-failure banner', async
 
 test('autosave reopens a connection that starts closing before its transaction', async ({ page }) => {
   await openApp(page);
+  // Onboarding can request a save before canonical hydration finishes. Wait for
+  // that save to become durable before copying the root and replacing IndexedDB.
+  await waitForAppReady(page);
   const result = await page.evaluate(async () => {
     // Preserve the canonical record while swapping the factory. The production
     // save path now rejects an empty/replaced database as a stale base instead
