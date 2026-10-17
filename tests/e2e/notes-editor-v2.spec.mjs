@@ -143,7 +143,10 @@ test('full Assistant writing review returns an editable draft to its composer an
     .messages.map(message => ({ role: message.role, content: message.content })));
 
   const passage = 'This are an explicit Assistant composer passage.';
+  await input.click();
   await input.fill('/grammar ' + passage);
+  await expect(input).toHaveValue('/grammar ' + passage);
+  await expect(page.locator('#asstSendBtn')).toBeEnabled();
   await page.locator('#asstSendBtn').click();
   const review = page.locator('.sutra-inline-ai-workbench');
   await expect(review.getByLabel('Passage to edit')).toHaveValue(passage);
@@ -241,9 +244,10 @@ async function openApp(page) {
     typeof window.setWorkspacePreference === 'function' &&
     typeof window.applyWorkspacePreferences === 'function');
   // The static shell and v2 module exist before the async canonical workspace
-  // hydrate completes. Wait through the public durability seam so tests never
+  // hydrate completes. Cross its readiness gate and durability seam so tests never
   // simulate typing into boot defaults that a real user cannot reach beneath
   // the startup overlay.
+  await waitForAppHydrated(page);
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
   await completeOnboarding(page);
 }
@@ -257,6 +261,7 @@ async function openAppForSplitLayout(page) {
     typeof window.flowAtelier.flushAppSaveNow === 'function' &&
     typeof window.setWorkspacePreference === 'function' &&
     typeof window.applyWorkspacePreferences === 'function');
+  await waitForAppHydrated(page);
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
   await completeOnboarding(page);
 }

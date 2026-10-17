@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openApp(page, width = 1440) {
   await page.setViewportSize({ width, height: 900 });
@@ -7,7 +8,7 @@ async function openApp(page, width = 1440) {
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await page.waitForFunction(() => !!window.flowAtelier
     && typeof window.flowAtelier.flushAppSaveNow === 'function');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('navigation-clarity-ready'));
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');
@@ -92,9 +93,20 @@ async function getHeaderGeometry(page) {
       left: round(rect.left), right: round(rect.right), top: round(rect.top), bottom: round(rect.bottom),
       width: round(rect.width), height: round(rect.height)
     });
+    const hitDetails = element => {
+      if (!element) return null;
+      const style = getComputedStyle(element);
+      return {
+        tag: element.tagName, id: element.id || null, classes: element.getAttribute('class') || '',
+        rect: box(element.getBoundingClientRect()), position: style.position, zIndex: style.zIndex,
+        pointerEvents: style.pointerEvents, visibility: style.visibility, opacity: style.opacity
+      };
+    };
 
     return {
       viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+      bodyClasses: document.body.className,
+      workspaceBoot: document.body.dataset.sutraWorkspaceBoot || null,
       theme: {
         key: document.body.getAttribute('data-theme-key'),
         name: document.body.getAttribute('data-theme'),
@@ -114,6 +126,10 @@ async function getHeaderGeometry(page) {
       launcherHeight: launcherRect.height,
       launcherRadius: parseFloat(getComputedStyle(launcher).borderTopLeftRadius) || 0,
       launcherOwnsHitTarget: !!launcherTarget && (launcherTarget === launcher || launcherTarget.closest('#commandPaletteLauncher') === launcher),
+      launcherStyle: hitDetails(launcher),
+      launcherHitTarget: hitDetails(launcherTarget),
+      launcherHitStack: document.elementsFromPoint(launcherRect.left + launcherRect.width / 2,
+        launcherRect.top + launcherRect.height / 2).slice(0, 8).map(hitDetails),
       utilityChildrenFit,
       utilityChildFitResults: Array.from(utility.children).filter(visible).map((child) => {
         const rect = child.getBoundingClientRect();
@@ -143,7 +159,15 @@ async function expectHeaderGeometry(page, stage = 'header layout') {
       && brand.getBoundingClientRect().right < row.getBoundingClientRect().left;
   });
 
-  const geometry = await getHeaderGeometry(page);
+  let geometry;
+  try {
+    await expect.poll(async () => {
+      geometry = await getHeaderGeometry(page);
+      return geometry?.launcherOwnsHitTarget;
+    }, { timeout: 10_000 }).toBe(true);
+  } catch (cause) {
+    throw new Error(`${stage}: ${JSON.stringify(geometry)}\n${cause.stack || cause}`, { cause });
+  }
   const diagnostic = `${stage}: ${JSON.stringify(geometry)}`;
   expect(geometry, `${stage}: header geometry was not available`).not.toBeNull();
   expect(geometry.utilitySharesTabsShell, diagnostic).toBe(true);

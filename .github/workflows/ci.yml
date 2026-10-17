@@ -230,6 +230,10 @@ jobs:
             npx playwright test tests/e2e/settings-global-search.spec.mjs --grep '320px' --workers=1 --project=webkit
             npx playwright test tests/e2e/update-banner-layering.spec.mjs --workers=1 --project=webkit
           fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "4" ]; then
+            npx playwright test tests/e2e/navigation-clarity.spec.mjs --grep 'header utilities stay clear' --workers=1 --project=webkit
+            npx playwright test tests/e2e/notes-editor-v2.spec.mjs --grep 'full Assistant writing review' --workers=1 --project=webkit
+          fi
           if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "5" ]; then
             npx playwright test tests/e2e/notes-editor-v2.spec.mjs --grep 'passage writing command reviews' --workers=1 --project=webkit
           fi

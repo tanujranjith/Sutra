@@ -180,6 +180,50 @@ It still derives from the notice height cap and only exists while the notice is
 shown. Diagnostics include the Settings page's computed padding. This revision
 awaits CI; no reachability assertion or visible-notice requirement was removed.
 
+Run `38991533617` at `cc62d20` passed static/unit/build/artifact gates. Its
+early WebKit checks passed for both Drive cases, Settings containment at 320px,
+and visible-update-notice reachability (6.6s). The parent independently checked
+the actual log and job API. Mobile Chromium also passed the notice reachability
+case. The full compatibility run is still in progress; seven jobs are confirmed
+green, including normal Chromium shards 1 and 3, Chrome shard 3, and WebKit
+shards 3, 5, and 6.
+
+WebKit shard 3's background Drive-pull test had one password-field equality
+failure that passed retry. Source review found no post-open value reset or
+re-entrant prompt in that path; its cause remains unproven. This is recorded as
+a transient, rather than an established application defect or a hidden failure.
+
+Vercel's commit status reports the `cc62d20` branch deployment completed
+successfully at deployment `2LFJbsY83niphT1JfsNuuByp5VG5`. A documented
+authenticated CLI HEAD request returned no usable whitelisted header output,
+despite exit zero. Live app security headers therefore remain unverified; no
+protection setting, credential, or production deployment was changed. No trace
+artifact was downloaded. The final broad-run result will be recorded separately.
+
+Later in the same run, all three standard Chromium shards, desktop Chrome shards
+1 and 3, Firefox shards 1 and 3, WebKit shards 1, 3, 5 and 6, and the responsive
+lane finished green. WebKit shard 4 reported two repeated failures: command
+launcher center-point ownership at startup width 1644 (other geometry fits), and
+the full Assistant writing-review test waiting on a disabled Send button.
+The parent independently read both assertion logs; no trace download was needed.
+
+The header and Notes fixtures now use the public UI-ready gate, and the header
+waits on its unchanged hit-target predicate with element-stack diagnostics.
+Writing review explicitly clicks and fills the composer, checks retained text,
+and checks Send availability before the existing real click. Flush already waits
+for data hydration; the stricter gate also confirms rendered UI and routing and
+removes startup inertness. These changes do not establish the failures' causes
+or weaken the original assertions. Both cases now precede the full WebKit fourth
+shard, and their repair validation remains pending. No production code changed
+in this fixture follow-up.
+
+Run `38991533617` completed with 16 successful jobs and one failed job (WebKit
+shard 4). All Chrome, Chromium, Firefox, responsive and other WebKit jobs passed.
+The failed job contained exactly the two repeated interaction failures above.
+WebKit shard 3 finished with 124 passed and one retry-passed Drive case; Firefox
+shard 2 also had a retry-passed browser-page setup timeout. The test-only repair
+revision will be validated in CI before claiming the full matrix is green.
+
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
 live application headers remain unverified. The installed CLI can inspect the
