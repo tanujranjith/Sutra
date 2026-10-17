@@ -63,6 +63,8 @@ whether to make an encrypted safety export; only Yes opens its password screen.
 - Snapshot pulls are conflict-safe: cycles are serialized, and a local save that
   lands while a remote snapshot is being downloaded/decrypted changes the pull
   into an explicit conflict instead of being overwritten.
+- Locking Drive cancels pending save timers without discarding unsynced edits.
+  A queued save does not reopen the password prompt after you lock the session.
 - The Sutra Cloud card points you there; deeper backup-list integration is a
   follow-up.
 

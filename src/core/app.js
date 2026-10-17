@@ -54485,6 +54485,11 @@ function getActiveEditor() {
         }
 
         function lockSutraDriveSync() {
+            // A previously scheduled local save must not reopen the unlock
+            // prompt after the user deliberately locks this session.
+            if (sutraDriveSyncRuntime.debounceTimer) clearTimeout(sutraDriveSyncRuntime.debounceTimer);
+            sutraDriveSyncRuntime.debounceTimer = null;
+            sutraDriveSyncRuntime.queuedUpload = false;
             sutraDriveSyncRuntime.derivedKey = null;
             clearSutraDrivePersistedKey();
             updateSutraDriveSyncUi();

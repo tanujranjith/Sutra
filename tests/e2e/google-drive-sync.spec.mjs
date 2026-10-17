@@ -371,6 +371,45 @@ test('first Drive connect uploads only encrypted appDataFolder bytes and stores 
   expect(await page.evaluate(() => window.__sutraRequestedScopes)).toEqual(['https://www.googleapis.com/auth/drive.appdata']);
 });
 
+test('locking Drive sync cancels a pending local-save debounce without prompting or uploading', async ({ page }) => {
+  const drive = await openApp(page);
+  await seedWorkspace(page, 'LOCK-DEBOUNCE-BASE');
+  const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));
+  await fillCloudPassword(page);
+  await connectPromise;
+  expect(drive.uploads).toHaveLength(1);
+
+  await page.clock.install({ time: new Date('2026-10-16T12:00:00Z') });
+  await seedWorkspace(page, 'LOCK-DEBOUNCE-LOCAL');
+  const dirtyStatus = await page.evaluate(() => window.SutraDriveSync.getStatus());
+  expect(dirtyStatus.state).toBe('ready-dirty');
+  expect(dirtyStatus.metadata.localDirty).toBe(true);
+
+  await page.evaluate(() => window.SutraDriveSync.lock());
+  await expect.poll(() => page.evaluate(() => window.SutraDriveSync.getStatus().state)).toBe('connected-locked');
+  // Observe across the known debounce deadline; the short real-time window
+  // lets a browser-issued request reach the mock without logging any secrets.
+  const unexpectedDriveList = page.waitForRequest(request => {
+    const url = new URL(request.url());
+    return request.method() === 'GET'
+      && url.origin === 'https://www.googleapis.com'
+      && url.pathname === '/drive/v3/files';
+  }).then(() => true, () => false);
+  await page.clock.runFor(20_500);
+  await page.clock.resume();
+  const backgroundSyncStarted = await Promise.race([
+    unexpectedDriveList,
+    page.waitForTimeout(2_000).then(() => false)
+  ]);
+  expect(backgroundSyncStarted, 'locking must cancel the scheduled Drive request').toBe(false);
+  await expect(page.locator('#sutraCloudSyncPasswordModal')).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => {
+    const status = window.SutraDriveSync.getStatus();
+    return { state: status.state, localDirty: status.metadata.localDirty };
+  })).toEqual({ state: 'connected-locked', localDirty: true });
+  expect(drive.uploads).toHaveLength(1);
+});
+
 test('Drive restore rejects wrong password without mutating, then restores with correct password', async ({ page }) => {
   test.setTimeout(120_000);
   await openApp(page);
