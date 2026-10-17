@@ -130,6 +130,23 @@ run's remaining WebKit jobs with the complete six-shard matrix; completed result
 and observed failures from the old run remain recorded above. No compatibility
 failure has been hidden by a new skip or relaxed assertion.
 
+Follow-up run `38986929179` at `7f314ec` passed static/unit/build/artifact gates.
+Its targeted Firefox paste (both editors), writing review, and pagination checks
+passed, as did WebKit writing review, header geometry, and the new Drive-lock
+regression. The Drive restore check exposed an author CSS grid rule overriding
+the confirmation label's `hidden` attribute in WebKit and Chromium. Commit
+`e4ac3d2` adds the owning password-field hidden backstop and updates generated
+cache references; no password or encryption validation was relaxed.
+
+The dedicated visible-update-banner Settings test still failed its reachability
+predicates. It now waits for ordinary layout to settle and reports actual scroll
+owners, limits, and rectangles on failure, preserving all three predicates.
+Settings source forces vertical scroll behavior to auto; smooth scrolling is not
+a proven cause. A browser artifact-download request stalled and reset its control
+session; no matching artifact was found in Downloads, and that route was stopped.
+Remaining transient page/setup or visibility failures that passed retry are
+tracked separately from repeated application/fixture failures.
+
 The immutable branch app finished loading to Today with onboarding and no console
 errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
 live application headers remain unverified. The installed CLI can inspect the

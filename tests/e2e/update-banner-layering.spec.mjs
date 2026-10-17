@@ -60,15 +60,15 @@ test('update advice does not prevent scrolling to Settings appearance disclosure
   await page.locator('[data-settings-nav="appearance"]').click();
   for (const selector of ['#settingsSurfaceDepth', '#settingsInterfaceDetails']) {
     const summary = page.locator(`${selector} > summary`);
-    await summary.evaluate(element => {
+    const scrollAttempt = await summary.evaluate((element, selector) => {
       const topChrome = document.querySelector('.top-nav[aria-label="Primary workspace views"]');
       const banner = document.getElementById('sutraUpdateBanner');
       if (!topChrome || !banner || banner.hidden || !banner.getClientRects().length) {
         throw new Error('The visible update banner and canonical navigation are required for this reachability check.');
       }
 
-      // On phones Settings switches to page-level scrolling inside #mainContent;
-      // find that owning scroller instead of assuming window or the bottom nav.
+      // Settings can use a nested or shell-owned scroller depending on the
+      // active layout; find the nearest element that can actually scroll.
       let scroller = element.parentElement;
       while (scroller && scroller !== document.body && scroller !== document.documentElement) {
         const overflowY = getComputedStyle(scroller).overflowY;
@@ -81,11 +81,40 @@ test('update advice does not prevent scrolling to Settings appearance disclosure
       // the top edge at zero, while the injected phone nav bounds the bottom.
       const safeTop = topChrome.getBoundingClientRect().bottom + 8;
       const delta = element.getBoundingClientRect().top - safeTop;
+      const owner = scroller || document.scrollingElement;
+      const ownerStyle = owner ? getComputedStyle(owner) : null;
+      const ownerName = scroller
+        ? `${scroller.tagName.toLowerCase()}${scroller.id ? `#${scroller.id}` : ''}${typeof scroller.className === 'string' && scroller.className.trim() ? `.${scroller.className.trim().split(/\s+/).join('.')}` : ''}`
+        : 'document.scrollingElement';
+      const snapshot = () => ({
+        scrollTop: owner ? Math.round(owner.scrollTop * 10) / 10 : null,
+        scrollHeight: owner ? owner.scrollHeight : null,
+        clientHeight: owner ? owner.clientHeight : null,
+        maxScrollTop: owner ? Math.max(0, owner.scrollHeight - owner.clientHeight) : null,
+        rect: owner ? (() => {
+          const rect = owner.getBoundingClientRect();
+          return { top: Math.round(rect.top), bottom: Math.round(rect.bottom), height: Math.round(rect.height) };
+        })() : null
+      });
+      const before = snapshot();
+      const summaryTopBefore = Math.round(element.getBoundingClientRect().top * 10) / 10;
       if (scroller) scroller.scrollTop += delta;
       else window.scrollBy(0, delta);
-    });
+      return {
+        selector,
+        scrollOwner: ownerName,
+        overflowY: ownerStyle?.overflowY || 'unknown',
+        scrollBehavior: ownerStyle?.scrollBehavior || 'unknown',
+        safeTop: Math.round(safeTop * 10) / 10,
+        requestedDelta: Math.round(delta * 10) / 10,
+        summaryTopBefore,
+        before,
+        after: snapshot(),
+        summaryTopAfter: Math.round(element.getBoundingClientRect().top * 10) / 10
+      };
+    }, selector);
 
-    const reachability = await summary.evaluate(element => {
+    const getReachability = () => summary.evaluate((element, scrollAttempt) => {
       const topChrome = document.querySelector('.top-nav[aria-label="Primary workspace views"]');
       const banner = document.getElementById('sutraUpdateBanner');
       const actionBar = document.getElementById('settingsActionBar');
@@ -93,6 +122,24 @@ test('update advice does not prevent scrolling to Settings appearance disclosure
       const visibleTop = node => node && !node.hidden && node.getClientRects().length
         ? node.getBoundingClientRect().top
         : window.innerHeight;
+      let liveScroller = element.parentElement;
+      while (liveScroller && liveScroller !== document.body && liveScroller !== document.documentElement) {
+        const overflowY = getComputedStyle(liveScroller).overflowY;
+        if (/(auto|scroll)/.test(overflowY) && liveScroller.scrollHeight > liveScroller.clientHeight) break;
+        liveScroller = liveScroller.parentElement;
+      }
+      if (!liveScroller || liveScroller === document.body || liveScroller === document.documentElement) liveScroller = null;
+      const liveOwner = liveScroller || document.scrollingElement;
+      const liveOwnerStyle = liveOwner ? getComputedStyle(liveOwner) : null;
+      const liveOwnerRect = liveOwner?.getBoundingClientRect();
+      const liveOwnerName = liveScroller
+        ? `${liveScroller.tagName.toLowerCase()}${liveScroller.id ? `#${liveScroller.id}` : ''}${typeof liveScroller.className === 'string' && liveScroller.className.trim() ? `.${liveScroller.className.trim().split(/\s+/).join('.')}` : ''}`
+        : 'document.scrollingElement';
+      const rectOf = node => {
+        if (!node) return null;
+        const rect = node.getBoundingClientRect();
+        return Object.fromEntries(['top', 'right', 'bottom', 'left', 'width', 'height'].map(key => [key, Math.round(rect[key] * 10) / 10]));
+      };
       const bandTop = topChrome.getBoundingClientRect().bottom;
       const bandBottom = Math.min(visibleTop(banner), visibleTop(actionBar), visibleTop(bottomNav));
       const rect = element.getBoundingClientRect();
@@ -100,10 +147,43 @@ test('update advice does not prevent scrolling to Settings appearance disclosure
       return {
         bannerVisible: !banner.hidden && banner.getClientRects().length > 0,
         summaryInsideFreeBand: rect.top >= bandTop && rect.bottom <= bandBottom,
-        hitSummary: hit === element || element.contains(hit)
+        hitSummary: hit === element || element.contains(hit),
+        selector: scrollAttempt.selector,
+        viewport: { width: window.innerWidth, height: window.innerHeight, scrollY: Math.round(window.scrollY * 10) / 10 },
+        scrollAttempt,
+        liveScrollOwner: {
+          name: liveOwnerName,
+          overflowY: liveOwnerStyle?.overflowY || 'unknown',
+          scrollBehavior: liveOwnerStyle?.scrollBehavior || 'unknown',
+          scrollTop: liveOwner ? Math.round(liveOwner.scrollTop * 10) / 10 : null,
+          scrollHeight: liveOwner?.scrollHeight ?? null,
+          clientHeight: liveOwner?.clientHeight ?? null,
+          maxScrollTop: liveOwner ? Math.max(0, liveOwner.scrollHeight - liveOwner.clientHeight) : null,
+          rect: liveOwnerRect ? { top: Math.round(liveOwnerRect.top), bottom: Math.round(liveOwnerRect.bottom), height: Math.round(liveOwnerRect.height) } : null
+        },
+        geometry: {
+          summary: rectOf(element),
+          topChrome: rectOf(topChrome),
+          banner: rectOf(banner),
+          actionBar: rectOf(actionBar),
+          bottomNav: rectOf(bottomNav),
+          freeBand: { top: Math.round(bandTop * 10) / 10, bottom: Math.round(bandBottom * 10) / 10 },
+          hitTarget: hit ? `${hit.tagName.toLowerCase()}${hit.id ? `#${hit.id}` : ''}${typeof hit.className === 'string' && hit.className.trim() ? `.${hit.className.trim().split(/\s+/).join('.')}` : ''}` : null
+        }
       };
-    });
-    expect(reachability).toEqual({ bannerVisible: true, summaryInsideFreeBand: true, hitSummary: true });
+    }, scrollAttempt);
+    let latestReachability;
+    try {
+      await expect.poll(async () => {
+        latestReachability = await getReachability();
+        const { bannerVisible, summaryInsideFreeBand, hitSummary } = latestReachability;
+        return { bannerVisible, summaryInsideFreeBand, hitSummary };
+      }, { timeout: 10_000 }).toEqual({ bannerVisible: true, summaryInsideFreeBand: true, hitSummary: true });
+    } catch (cause) {
+      const geometry = latestReachability ? JSON.stringify(latestReachability) : 'unavailable';
+      const original = cause instanceof Error ? `${cause.name}: ${cause.message}\n${cause.stack || ''}` : String(cause);
+      throw new Error(`Settings update-banner reachability geometry: ${geometry}\nOriginal failure:\n${original}`, { cause });
+    }
     await summary.click();
     await expect(page.locator(selector)).toHaveAttribute('open', '');
     await expect(banner).toBeVisible();
