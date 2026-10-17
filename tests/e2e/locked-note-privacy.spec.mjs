@@ -162,7 +162,8 @@ test('Assistant context fails closed when the privacy boundary is unavailable', 
   expect(report.diagnosed).toBe(true);
 });
 
-test('Assistant locked-page access requires consent and PIN without unlocking the editor', async ({ page }) => {
+for (const depth of ['currentView', 'minimal']) {
+test(`Assistant locked-page access requires consent and PIN without unlocking the editor (${depth})`, async ({ page }) => {
   await openApp(page);
   const targetId = await page.evaluate(async ({ pin, secret }) => {
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
@@ -176,14 +177,19 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
       createdAt: now,
       updatedAt: now
     });
+    payload.pages.push({
+      id: 'unrelated-assistant-note', title: 'Assistant private draft ordinary notes',
+      content: '<p>UNRELATED_ZOOM_RECORD must not enter this page-scoped request.</p>',
+      blocks: [], createdAt: now, updatedAt: now
+    });
     window.deserializeWorkspace(payload);
     await window.__sutraPublicBetaTestHooks.lockPageWithPin(targetId, pin);
-    window.loadPage(targetId);
+    window.loadPage('unrelated-assistant-note');
     return targetId;
   }, { pin: PIN, secret: SECRET });
 
   await page.evaluate(() => {
-    window.__assistantLockedAccessResult = window.flowAssistant.requestLockedPageAccessForPrompt('Read this current note and explain it.');
+    window.__assistantLockedAccessResult = window.flowAssistant.requestLockedPageAccessForPrompt('Read the locked note "Assistant private draft". What should I bring?');
   });
   await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
   await expect(page.locator('#customConfirmTitle')).toHaveText('Allow Assistant access once?');
@@ -193,13 +199,15 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
   await page.locator('#customPromptInput').fill(PIN);
   await page.locator('#customPromptConfirmBtn').click();
 
-  const report = await page.evaluate(async ({ targetId, secret }) => {
+  const report = await page.evaluate(async ({ targetId, secret, depth }) => {
     const result = await window.__assistantLockedAccessResult;
-    const enrichment = window.flowAssistant.buildRequestEnrichment('Read this current note and explain it.', 'openai', {
-      lockedPageAccessTicket: result.ticket
+    const question = 'Read the locked note "Assistant private draft". What should I bring?';
+    const local = window.flowAssistant.tryHandleCommand(question, { lockedPageAccessTicket: result.ticket });
+    const enrichment = window.flowAssistant.buildRequestEnrichment(question, 'openai', {
+      lockedPageAccessTicket: result.ticket, depth
     });
-    const reusedEnrichment = window.flowAssistant.buildRequestEnrichment('Read this current note and explain it.', 'openai', {
-      lockedPageAccessTicket: result.ticket
+    const reusedEnrichment = window.flowAssistant.buildRequestEnrichment(question, 'openai', {
+      lockedPageAccessTicket: result.ticket, depth
     });
     const contextAfter = window.getFlowAssistantContext({ depth: 'currentView' });
     const editorText = document.getElementById('editor')?.textContent || '';
@@ -208,6 +216,9 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
     window.flowAssistant.consumeLockedPageAccess(result.ticket);
     return {
       result,
+      locallyIntercepted: local.handled === true,
+      sources: enrichment.sources.map(source => ({ noteId: source.noteId, readOnce: source.readOnce })),
+      includesUnrelated: enrichment.systemPrompt.includes('UNRELATED_ZOOM_RECORD'),
       sentContextContainsSecret: JSON.stringify(enrichment.context).includes(secret),
       reusedGrantContainsSecret: JSON.stringify(reusedEnrichment?.context || {}).includes(secret),
       pageStillEditorLocked: !window.flowAtelier.unlockedPageIds.has(targetId),
@@ -215,9 +226,13 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
       afterGrantLeaks: JSON.stringify(contextAfter).includes(secret),
       persistedSettingUnchanged: settings?.allowLockedNotes === false
     };
-  }, { targetId, secret: SECRET });
+  }, { targetId, secret: SECRET, depth });
 
   expect(report.result.ok).toBe(true);
+  expect(report.locallyIntercepted).toBe(false);
+  expect(report.sources.length).toBeGreaterThan(0);
+  expect(report.sources.every(source => source.noteId === targetId && source.readOnce === true)).toBe(true);
+  expect(report.includesUnrelated).toBe(false);
   expect(report.sentContextContainsSecret).toBe(true);
   expect(report.reusedGrantContainsSecret).toBe(false);
   expect(report.pageStillEditorLocked).toBe(true);
@@ -225,6 +240,7 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
   expect(report.afterGrantLeaks).toBe(false);
   expect(report.persistedSettingUnchanged).toBe(true);
 });
+}
 
 test('Assistant prompt enrichment rechecks memory permission at the final context boundary', async ({ page }) => {
   await openApp(page);

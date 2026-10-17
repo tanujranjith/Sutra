@@ -42,7 +42,7 @@ const buildSystemPromptParts = compileFunction('buildSystemPromptParts', [
   promptWindow
 ]);
 
-function noteRetriever(pages, core = noteCore) {
+function noteRetriever(pages, core = noteCore, authorizedPageIds = []) {
   privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
   const window = { SutraAssistantPrivacy: privacy, SutraNotesKnowledgeCore: core };
   return compileFunction('retrieveNoteSources', [
@@ -51,7 +51,7 @@ function noteRetriever(pages, core = noteCore) {
   ], [
     window,
     options => options || {},
-    () => [],
+    () => authorizedPageIds,
     () => ({ pages }),
     rows => rows.map(page => `${page.id}:${page.updatedAt || ''}`).join('|'),
     () => null,
@@ -63,7 +63,8 @@ function createEnrichment({
   depth = 'minimal', noteSources = [], onNotesRead = () => {}, onMemoryRead = () => {},
   contextOverrides = {}, chatMemoryMode = 'stateless', conversationMessages = [], attachments = [],
   promptBuilder = buildSystemPromptParts, memoryAllowed = true,
-  memoryPrivacy = { canRead: () => memoryAllowed }, memorySnippets = [], onMemoryUsed = () => {}
+  memoryPrivacy = { canRead: () => memoryAllowed }, memorySnippets = [], onMemoryUsed = () => {},
+  lockedTicket = null, onTicketConsumed = () => {}
 } = {}) {
   const context = {
     schema: 'flow-context/1', view: 'today', depth, summary: 'User is on the today view.',
@@ -83,8 +84,8 @@ function createEnrichment({
     'getActiveTutoringContract', 'getVisionCapability', 'consumeLockedPageAccess'
   ], [
     (_key, fallback) => fallback,
-    () => null,
-    () => [],
+    options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket : null,
+    options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket.pageIds : [],
     ctx => ctx,
     options => structuredClone({ ...context, depth: options && options.depth || context.depth }),
     () => ({
@@ -101,7 +102,7 @@ function createEnrichment({
     ctx => ctx,
     () => null,
     () => null,
-    () => {}
+    onTicketConsumed
   ]);
   return enrich;
 }
@@ -196,6 +197,45 @@ test('Minimal enrichment does not read saved memory or retrieve note excerpts', 
   assert.deepEqual(enrichment.sources, []);
   assert.deepEqual(enrichment.context.retrievedNotes || [], []);
   assert.equal(enrichment.context.notesEvidenceStatus, 'not_requested');
+});
+
+test('a verified page read searches only its target, including generic prompts, and retains exclusions', () => {
+  const pages = [
+    { id: 'sealed-atlas', title: 'Sealed Atlas', isLocked: true, content: '<p>Violet folders at eight.</p>' },
+    { id: 'other-atlas', title: 'Sealed Atlas ordinary notes', content: '<p>UNRELATED_RECORD must not be selected.</p>' }
+  ];
+  const retrieve = noteRetriever(pages, noteCore, ['sealed-atlas']);
+  const named = retrieve('Read the Sealed Atlas note.');
+  assert.ok(named.sources.length > 0);
+  assert.ok(named.sources.every(row => row.noteId === 'sealed-atlas'));
+  assert.doesNotMatch(JSON.stringify(named.sources), /UNRELATED_RECORD/);
+
+  const generic = retrieve('Read this note.');
+  assert.ok(generic.sources.some(row => row.quote.includes('Violet folders')));
+  assert.deepEqual(retrieve('Read this note.', { scope: { type: 'all', excludedNoteIds: ['sealed-atlas'] } }).sources, []);
+  assert.deepEqual(retrieve('Read this note.', { scope: { type: 'all', excludedSourceIds: named.sources.map(row => row.id) } }).sources, []);
+  assert.deepEqual(retrieve('Read this note.', { scope: { type: 'note', noteId: 'other-atlas' } }).sources, []);
+  assert.ok(noteRetriever(pages)('Sealed Atlas').sources.every(row => row.noteId !== 'sealed-atlas'));
+});
+
+test('Minimal permits a verified explicit page read without automatic memory and reports only its retained source', () => {
+  const ticket = { pageIds: ['sealed-atlas'] };
+  let consumed;
+  let memoryReads = 0;
+  let noteReads = 0;
+  const enrichment = createEnrichment({
+    depth: 'minimal', lockedTicket: ticket,
+    noteSources: [{ id: 'sealed-atlas:0:0', noteId: 'sealed-atlas', title: 'Sealed Atlas', quote: 'Violet folders at eight.', score: 12 }],
+    onNotesRead: () => { noteReads++; },
+    onMemoryRead: () => { memoryReads++; },
+    onTicketConsumed: value => { consumed = value; }
+  })('Read the Sealed Atlas note.', 'gemini', { lockedPageAccessTicket: ticket });
+  assert.equal(noteReads, 1);
+  assert.equal(memoryReads, 0);
+  assert.equal(consumed, ticket);
+  assert.match(enrichment.systemPrompt, /Violet folders/);
+  assert.deepEqual(enrichment.sources.map(row => [row.noteId, row.readOnce]), [['sealed-atlas', true]]);
+  assert.equal(enrichment.context.notesEvidenceStatus, 'supported');
 });
 
 test('denied memory is not read before budgeting or included in selection metadata', () => {

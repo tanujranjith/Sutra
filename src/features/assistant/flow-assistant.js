@@ -4922,7 +4922,11 @@
         const b = bridge();
         const allPages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
         const wantsHelp = /\b(?:help\s*(?:&|and)\s*docs|documentation|sutra\s+(?:help|features|settings))\b|\b(?:how|where)\b.{0,50}\bsutra\b/i.test(String(userText || ''));
-        const pages = allPages.filter(page => page && (wantsHelp || !(page.systemRole === 'help-docs' || page.builtInId === 'help-docs' || page.id === 'help_page' || (page.isSystemPage && String(page.title || '').toLowerCase() === 'help & docs'))));
+        // A verified one-request ticket identifies an explicit page, not a
+        // request to search similarly named notes throughout the workspace.
+        const pages = allPages.filter(page => page
+            && (!assistantAccessIds.length || assistantAccessIds.includes(String(page.id)))
+            && (wantsHelp || !(page.systemRole === 'help-docs' || page.builtInId === 'help-docs' || page.id === 'help_page' || (page.isSystemPage && String(page.title || '').toLowerCase() === 'help & docs'))));
         // The editor's unlock set is intentionally not used here. A page PIN
         // entered to edit a note must not silently authorize Assistant access.
         const unlockedIds = new Set(assistantAccessIds);
@@ -4943,7 +4947,7 @@
         const scope = options.scope && typeof options.scope === 'object'
             ? options.scope
             : { type: 'all' };
-        const result = core.search(notesKnowledgeCache.index, userText, {
+        const searchOptions = {
             scope,
             currentNoteId: active && active.id || '',
             limit: options.limit || 8,
@@ -4951,13 +4955,21 @@
             staleAfterDays: 180,
             excludedSourceIds: Array.isArray(scope.excludedSourceIds) ? scope.excludedSourceIds : [],
             excludedNoteIds: Array.isArray(scope.excludedNoteIds) ? scope.excludedNoteIds : []
-        });
+        };
+        let result = core.search(notesKnowledgeCache.index, userText, searchOptions);
+        // "Read this note" need not contain terms from the note's body/title.
+        // Only an already verified, page-scoped ticket permits this bounded
+        // fallback. Conversation/source exclusions still apply to both searches.
+        if (assistantAccessIds.length && !result.sources.length) {
+            result = core.search(notesKnowledgeCache.index, '', Object.assign({}, searchOptions, { allowEmptyQuery: true }));
+            result.query = String(userText || '');
+        }
         const seen = new Set();
         const perNote = new Map();
         result.sources = result.sources.filter(source => {
             const key = source.noteId + ':' + source.quote;
             const count = perNote.get(source.noteId) || 0;
-            if (!source.id || source.score < 6 || seen.has(key) || seen.has('id:' + source.id) || count >= 2) return false;
+            if (!source.id || (source.score < 6 && !assistantAccessIds.includes(String(source.noteId))) || seen.has(key) || seen.has('id:' + source.id) || count >= 2) return false;
             seen.add(key); seen.add('id:' + source.id); perNote.set(source.noteId, count + 1); return true;
         }).slice(0, 4);
         result.evidenceStatus = result.sources.length ? 'supported' : 'missing';
@@ -5075,8 +5087,16 @@
         const literalReply = /\b(?:reply|respond|say|answer)\s+(?:(?:with|using)\s+)?(?:only|exactly|just)\b/i.test(String(userText || ''))
             && !/\b(?:my|our|this|current|active|workspace|notes?|tasks?|to[ -]?dos?|homework|assignments?|calendar|schedule|grades?|courses?|exams?|essays?|college|documents?|pages?|attachments?|files?)\b/i.test(String(userText || ''));
         if (literalReply) accessOptions.depth = 'minimal';
-        if (accessTicket) accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
+        if (accessTicket) {
+            accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
+            // The explicit page is the workspace evidence for this request.
+            // Do not pick up another open note, stale editor selection, memory,
+            // or an automatic workspace summary while obtaining that evidence.
+            accessOptions.depth = 'minimal';
+            accessOptions.includeSelection = false;
+        }
         let ctx = applyRelevantWorkspaceContext(getFlowAssistantContext(accessOptions), userText, accessOptions);
+        if (accessTicket) ctx.summary = 'One explicitly authorized note is available for this request.';
         const canReadSavedMemory = () => {
             const privacy = window.SutraAssistantPrivacy;
             try {
@@ -5098,12 +5118,14 @@
         } catch (e) { /* memory is best-effort */ }
         try {
             const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
-            if (pk && typeof pk.search === 'function') {
+            if (!accessTicket && pk && typeof pk.search === 'function') {
                 const hits = pk.search(userText, 2).filter(h => h.score >= 4);
                 if (hits.length) ctx.productKnowledge = hits.map(h => ({ topic: h.entry.title, summary: h.entry.summary, availability: h.entry.availability }));
             }
         } catch (e) { /* product knowledge is best-effort */ }
-        const noteRetrieval = ctx.depth === 'minimal' || (ctx.workspaceRetrieval && ctx.workspaceRetrieval.taskDetailsOnly)
+        // Minimal suppresses automatic retrieval, not an explicitly consented
+        // page. That ticket still narrows retrieval to its single target.
+        const noteRetrieval = !accessTicket && (ctx.depth === 'minimal' || (ctx.workspaceRetrieval && ctx.workspaceRetrieval.taskDetailsOnly))
             ? { sources: [], evidenceStatus: 'not_requested' } : retrieveNoteSources(userText, {
             scope: options.scope || options.conversationScope,
             approvedAreas: accessOptions.approvedAreas,
@@ -7077,7 +7099,10 @@
         // contains a keyword like "ap"/"exam" — let it reach the provider, which
         // can propose the real action. This is the belt to the prefix-strip
         // suspenders above (in case a command phrasing isn't matched exactly).
-        if (!ACTION_VERB_RE.test(cmdLc)) {
+        // Consent + PIN identifies a content request. A generic Help keyword
+        // match must not consume its one-request ticket before enrichment.
+        if (!ACTION_VERB_RE.test(cmdLc)
+            && !(options.lockedPageAccessTicket && currentLockedPageAccessTicket(options))) {
             const known = routeProductKnowledge(text, lc);
             if (known) return known;
         }

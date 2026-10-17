@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261016-ci-memory-boundary1",
-    "hash": "13fd49b433d35933"
+    "stamp": "20261017-locked-target1",
+    "hash": "b4a1f7364f679e8e"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261016-ci-memory-boundary1",
-    "hash": "1c2050412950dae4"
+    "stamp": "20261017-locked-target1",
+    "hash": "bd0a471ed39f5ef0"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

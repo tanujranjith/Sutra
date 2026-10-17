@@ -213,6 +213,14 @@ may identify a locked source without quoting or linking its contents.
 Context collection also preserves the canonical locked document: the blank
 editor privacy surface must never be copied back into the protected note.
 
+A verified one-time page read uses that page as its workspace evidence, even
+when Context depth is Minimal. It does not add similarly named notes, another
+open editor's content/selection, automatic workspace summaries, or saved memory.
+The page's excerpts remain bounded by the request budget and source exclusions;
+the ticket cannot be reused. Content questions with a valid ticket bypass the
+generic product-Help fallback. Explicit local note searches and ordinary
+how-to questions about PIN protection retain their local behavior.
+
 The **What Sutra knows about me** view combines readable-note counts, explicit
 memories and their source links, current Assistant permissions, and detected
 project context. It is a transparency and management view over the same local
