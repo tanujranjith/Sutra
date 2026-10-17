@@ -43947,8 +43947,8 @@ function buildOnboardingPlanPreview() {
   <li>Quick Capture previews class and activity matches. When several destinations match, choose one or explicitly choose no class before saving. Imported Homework notes and Reference URLs remain editable in task details.</li>
   <li>Assistant task-details questions use the saved notes and Reference URL. Sources used lists selected tasks, exams, and notes; approved PIN reads are labeled as one-time reads.</li>
   <li>Life → Quick Calculator accepts keyboard arithmetic, parentheses, Enter, Backspace, and Escape. College score edits keep Tab focus while updating rankings.</li>
-  <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps current and undated work with each class, with separate collapsed Past-due and Completed sections. Search and filters show matching tasks right away.</li>
-  <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
+  <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps all unfinished work with its class, including past-due tasks; only Completed is collapsed separately. Search and filters show matching tasks right away.</li>
+  <li>Schedule, Complete, and More sit together on each task row. When motion is enabled, a brief completion effect acknowledges an accepted local action. Save confirmation and failures remain visible separately.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>
   <li>The Class Dashboard shows open homework, upcoming class deadlines, linked notes, and any AP subject tied to that class.</li>
@@ -44062,7 +44062,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Timeline, Schedule This, And Calendar',
                     body: `
 <ul>
-  <li>Timeline supports Month, Planner, Week, Day, and Year planning views. (The standalone 3-Day view was retired; older 3-day data folds into the Day view.)</li>
+  <li>Timeline supports Month, Planner, Week, and Day planning views. (The standalone 3-Day view was retired; older 3-day data folds into the Day view.)</li>
   <li><strong>Schedule this</strong> creates a prep block from homework, college, and deadline items without retyping the block.</li>
   <li>Timeline shows Sutra time blocks. Import external calendar events via <code>.ics</code> import in Settings → Advanced.</li>
   <li><code>.ics</code> import/export is the portable calendar format for Timeline data.</li>
@@ -44159,7 +44159,7 @@ function buildOnboardingPlanPreview() {
 </ul>
 <h3>Provider limitations (important)</h3>
 <ul>
-  <li>Sutra is a static browser app with a strict security policy (CSP). <strong>WebDAV, Custom HTTP, and most custom Supabase/S3 destinations need a self-hosted build</strong> with the origin added to the CSP. OneDrive and Dropbox require your own OAuth app configuration. S3 is preview/planned, not a finished transport. Sutra labels each state in the panel.</li>
+  <li>Sutra is a static browser app with a strict security policy (CSP). Hosted <code>*.supabase.co</code> projects are permitted; arbitrary WebDAV, Custom HTTP, and self-hosted Supabase origins need a self-hosted build with the origin added to the CSP. OneDrive and Dropbox require your own OAuth app configuration. S3 is preview/planned, not a finished transport. Sutra labels each state in the panel.</li>
   <li><strong>Box</strong> can't be connected in the hosted browser app: its sign-in requires a confidential client secret a static app can't hold safely (unlike Google Drive, OneDrive, and Dropbox). Use <strong>Manual encrypted file</strong> and save into a Box-synced folder, or self-host with a small token-exchange proxy.</li>
 </ul>
 <h3>Security model</h3>
@@ -44233,7 +44233,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Local-First Warning',
                     body: `
 <ul>
-  <li>Sutra is local-first. Your primary workspace lives in browser storage on this device unless you export it or explicitly enable encrypted Google Drive sync.</li>
+  <li>Sutra is local-first. Your primary workspace lives in browser storage. Exports, explicitly selected Assistant requests, and separately enabled encrypted backups or Sync can send the chosen content outside this device. Enabled automatic backup and Sync can run while the app is open without a new click.</li>
   <li>No login is required for the core product, and no backend is required for your local notes, classes, AP planning, or college planning.</li>
   <li>If you clear browser data without a backup, local data can be lost.</li>
 </ul>
@@ -56370,8 +56370,8 @@ function getActiveEditor() {
         }
 
         // True only if the page CSP's connect-src already permits this origin. The
-        // hosted build pins exact Supabase origins (no wildcards allowed by the CSP
-        // guard), so a BYO origin that isn't pinned will be blocked by the browser
+        // hosted build permits reviewed origins and bounded host families,
+        // so a BYO origin outside that policy will be blocked by the browser
         // before any request leaves — we detect that up front and explain it.
         function sutraCloudOriginAllowedByCsp(url) {
             try {
@@ -56439,7 +56439,7 @@ function getActiveEditor() {
                 return { ok: false, status: 'service-role', message: 'That looks like a service_role / secret key. Never paste it into Sutra — use the public anon key only.' };
             }
             if (!sutraCloudOriginAllowedByCsp(cleanUrl)) {
-                return { ok: false, status: 'csp-blocked', message: 'This build’s security policy (CSP) does not allow that Supabase origin. Custom Supabase needs a self-hosted build with your project ref added to the app CSP. Official Sutra Cloud works in the hosted version.' };
+                return { ok: false, status: 'csp-blocked', message: 'This build’s security policy (CSP) does not allow that Supabase origin. Hosted *.supabase.co projects are supported; other origins need a self-hosted build with the destination added to the CSP.' };
             }
             try {
                 const resp = await fetch(`${cleanUrl}/auth/v1/settings`, { headers: { apikey: String(anonKey).trim() } });
@@ -57106,7 +57106,7 @@ function getActiveEditor() {
             description: 'Your own (or the official) Supabase project. Encrypted backups in private Storage with Row Level Security.',
             icon: 'fa-database',
             requiresCustomCredentials: true,
-            cspNote: 'A custom Supabase project ref must be in the app CSP; in the hosted build only the configured project works (others need a self-hosted build).',
+            cspNote: 'Hosted *.supabase.co projects are permitted by the app CSP. Other Supabase origins need a self-hosted build with the destination added to the policy.',
             instructions: [
                 'Create a Supabase project and run supabase/schema.sql.',
                 'Enable email auth (one-time code).',
