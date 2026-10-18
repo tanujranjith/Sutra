@@ -45,7 +45,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 24. ~~US Letter default and A4 selection.~~
 25. ~~Imported task Notes/Reference URL editing, reopen/reload, and unknown fields.~~
 26. ~~Stateful follow-up: Gemini read staged task notes/Reference URL, resolved the follow-up correctly, cited the right task, and retained working citations and fields after reload.~~
-27. One-time PIN read fixes committed at `60c5ac0`: content requests bypass generic Help, ticketed evidence is restricted to the consented page, and Minimal can include that explicitly authorized source. Manual Chrome retest reached the provider disclosure with local routing On and exactly one correct locked/read-once source; no selection, memory, or history. Open: final live answer/post-response receipt and editor/reload checks after the user accepts Sutra's remote-AI acknowledgement; automated regressions await CI.
+27. ~~Successful one-time PIN read: Gemini answered the harmless locked-note question correctly; only the consented page appeared in pre-send/post-response sources, with the correct read-once PIN label and no selection/memory/history. Editor stayed locked, source cards withheld the protected excerpt, a later read required fresh consent, and the saved answer/citation/receipt survived reload. QA access restored to Off.~~
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
 29. ~~True Chrome zoom at 67%/150% across Home, Create editing, Assistant composer, and Settings search/save. User set real browser zoom; manual QA confirmed layout containment and note persistence on October 17.~~
 30. ~~Bundled Sutra icons in light/dark themes, phone navigation, and cached loading with the local server stopped.~~
@@ -103,10 +103,37 @@ Notes-only access, the original question passed consent/PIN and reached the
 pre-send disclosure. Its expanded receipt listed only `QA Locked Consent`,
 locked/read once with PIN for this request, with minimal workspace context,
 no selected text, no memory, no prior conversation, and Data transmitted: No.
-No generation request has been submitted for this retest yet. The user must
-accept the visible Send & don't ask again control, which also saves the app's
-remote-AI acknowledgement. Temporary Notes-only access remains enabled while
-that concrete request is pending and must be restored to Off after the retest.
+That was the pre-send checkpoint. The user then explicitly approved the remote-AI
+acknowledgement and test submission. The earlier tab was no longer available;
+the current local tab contained the original local Help reply and an empty
+pending thread, with no completed provider answer to inspect. The test was
+repeated with the same exact question, provider/model, Low effort, and fresh
+consent/PIN checks. Its expanded pre-send receipt again listed only the target.
+
+The completed live answer correctly said the practice meeting is Thursday at
+4 PM and to bring the blue folder, citing `QA Locked Consent`. Its receipt named
+Google Gemini / gemini-3.8-flash, minimal workspace context, only Notes, only
+the locked/read-once source, no selection/history/memory, and transmission of
+message + notes. The source card displayed title and metadata without the raw
+protected excerpt. Response details reported 2.0 seconds, 910 input tokens,
+37 output tokens, 947 total, reasoning Low. This is observed usage for this
+completed call; provider billing and any unobserved earlier submission were
+not inspected.
+
+Clicking the answer's citation opened the PIN screen. The protected reminder
+was absent from both classic and Modern Editor DOM. A subsequent identical
+read required fresh consent and was cancelled before any provider request.
+Reload preserved the correct answer, working citation, one-source card, and
+informational read-once receipt without retaining a permission grant. The
+source card still withheld its protected excerpt after reload.
+
+Workspace access was restored to No workspace access and Notes to Use access
+mode. Assistant master/Pack were initially turned Off, then re-enabled only to
+show the completed chat at the user's request; workspace access remained Off.
+Original Current view depth and local routing On were retained. The harmless
+locked note and QA chat remain only in this local workspace. No additional
+generation calls were used for reload, citation, fresh-consent checks, or
+reopening the saved result. Automated regressions remain pending under item 45.
 
 ## Initial locked-source QA and trademark recommendation — October 17, 2026
 
