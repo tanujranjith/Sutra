@@ -388,8 +388,8 @@
     "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20261017-alert-delivery3",
-    "hash": "405c27c017119721"
+    "stamp": "20261018-alert-toggle1",
+    "hash": "a63b0b7a4274b1a6"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20261015-formula-cache2",

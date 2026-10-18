@@ -32,6 +32,9 @@ test('browser alerts require opt-in and granted permission, deduplicate and open
   sent[0].onclick();
   assert.deepEqual(read, ['deadline-1']);
   assert.deepEqual(opened, [['homework', 'task-1']]);
+  state.prefs.browserNotificationsEnabled = false;
+  notify({ ...item, key: 'disabled-new-reminder' });
+  assert.equal(sent.length, 1);
 });
 
 function compile(name, dependencies) {
@@ -130,3 +133,79 @@ test('Send test reports browser submission separately from the in-app fallback',
   assert.match(toasts[1].subtitle, /Browser alert requested/);
   assert.equal(requests.length, 2);
 });
+
+test('browser-alert button disables opt-in without requesting permission again', () => {
+  const state = { prefs: { browserNotificationsEnabled: true } };
+  const Notification = { permission: 'granted' };
+  let permissionRequests = 0;
+  const label = compile('_getBrowserPermLabel', { _state: state, global: { Notification }, Notification });
+  const toggle = compile('toggleBrowserNotifications', {
+    _state: state,
+    updatePreferences: delta => Object.assign(state.prefs, delta),
+    requestBrowserPermission: () => { permissionRequests += 1; },
+    _getBrowserPermLabel: label
+  });
+  assert.equal(label(), 'Turn off browser alerts');
+  toggle({ disabled: false });
+  assert.equal(state.prefs.browserNotificationsEnabled, false);
+  assert.equal(permissionRequests, 0);
+  assert.equal(label(), 'Enable browser alerts');
+});
+
+test('enabling browser alerts waits for permission and restores the button on failure', () => {
+  const state = { prefs: { browserNotificationsEnabled: false } };
+  let finish;
+  const toggle = compile('toggleBrowserNotifications', {
+    _state: state,
+    updatePreferences: delta => Object.assign(state.prefs, delta),
+    requestBrowserPermission: callback => { finish = callback; },
+    _getBrowserPermLabel: () => 'Could not enable — try again'
+  });
+  const button = { disabled: false, textContent: '' };
+  toggle(button);
+  assert.equal(button.disabled, true);
+  finish('error');
+  assert.equal(button.disabled, false);
+  assert.equal(state.prefs.browserNotificationsEnabled, false);
+  assert.match(button.textContent, /try again/);
+  toggle(button);
+  finish('granted');
+  assert.equal(button.disabled, false);
+  assert.equal(state.prefs.browserNotificationsEnabled, true);
+});
+
+for (const mode of ['off', 'master-off', 'on', 'disabled-during-registration']) {
+  test(`background reminder registration respects opt-out: ${mode}`, async () => {
+    const state = { prefs: { enabled: mode !== 'master-off', browserNotificationsEnabled: mode !== 'off' } };
+    const calls = [];
+    let release, started;
+    const pending = new Promise(resolve => { release = resolve; });
+    const entered = new Promise(resolve => { started = resolve; });
+    const Notification = { permission: 'granted' };
+    const registration = { periodicSync: {
+      register: async tag => {
+        calls.push(['register', tag]);
+        started();
+        if (mode === 'disabled-during-registration') await pending;
+      },
+      unregister: async tag => calls.push(['unregister', tag])
+    } };
+    const reconcile = compile('registerBackgroundReminders', {
+      _state: state, global: { Notification }, Notification,
+      navigator: {
+        serviceWorker: { ready: Promise.resolve(registration) },
+        permissions: { query: async () => ({ state: 'granted' }) }
+      }
+    });
+    const result = reconcile();
+    if (mode === 'disabled-during-registration') {
+      await entered;
+      state.prefs.browserNotificationsEnabled = false;
+      release();
+    }
+    await result;
+    assert.deepEqual(calls, mode === 'on' ? [['register', 'sutra-daily-reminder']]
+      : mode === 'disabled-during-registration' ? [['register', 'sutra-daily-reminder'], ['unregister', 'sutra-daily-reminder']]
+      : [['unregister', 'sutra-daily-reminder']]);
+  });
+}

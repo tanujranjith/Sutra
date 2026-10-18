@@ -1306,19 +1306,29 @@
     // the .ics calendar handoff remains the cross-device "remind me when closed".
     function registerBackgroundReminders() {
         try {
-            if (!_state.prefs || !_state.prefs.browserNotificationsEnabled) return;
             if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
-            navigator.serviceWorker.ready.then(function (reg) {
+            var enabled = function () {
+                return !!(_state.prefs && _state.prefs.enabled && _state.prefs.browserNotificationsEnabled
+                    && ('Notification' in global) && Notification.permission === 'granted');
+            };
+            return navigator.serviceWorker.ready.then(function (reg) {
                 if (!reg || !reg.periodicSync) return;
+                var cancel = function () {
+                    return reg.periodicSync.unregister('sutra-daily-reminder').catch(function () { /* unsupported */ });
+                };
+                if (!enabled()) return cancel();
                 var doRegister = function () {
-                    reg.periodicSync.register('sutra-daily-reminder', { minInterval: 22 * 60 * 60 * 1000 }).catch(function () { /* unsupported / not installed */ });
+                    if (!enabled()) return cancel();
+                    return reg.periodicSync.register('sutra-daily-reminder', { minInterval: 22 * 60 * 60 * 1000 })
+                        .then(function () { if (!enabled()) return cancel(); })
+                        .catch(function () { /* unsupported / not installed */ });
                 };
                 if (navigator.permissions && navigator.permissions.query) {
-                    navigator.permissions.query({ name: 'periodic-background-sync' })
-                        .then(function (status) { if (status.state === 'granted') doRegister(); })
+                    return navigator.permissions.query({ name: 'periodic-background-sync' })
+                        .then(function (status) { if (status.state === 'granted') return doRegister(); })
                         .catch(doRegister);
                 } else {
-                    doRegister();
+                    return doRegister();
                 }
             }).catch(function () { /* no SW */ });
         } catch (e) { /* unsupported */ }
@@ -1369,7 +1379,7 @@
             _state.prefs.rules = _sanitizeRules(delta.rules);
         }
         _saveState();
-        if (delta.browserNotificationsEnabled) registerBackgroundReminders();
+        if ('browserNotificationsEnabled' in delta || 'enabled' in delta) registerBackgroundReminders();
         refresh();
         _renderNotificationSettingsUI();
     }
@@ -1482,11 +1492,9 @@
         });
 
         var permBtn = document.getElementById('notifBrowserPermBtn');
+        if (permBtn) permBtn.setAttribute('aria-pressed', String(!!p.browserNotificationsEnabled));
         if (permBtn) permBtn.addEventListener('click', function () {
-            requestBrowserPermission(function (perm) {
-                permBtn.textContent = _getBrowserPermLabel(perm);
-                if (perm === 'granted') updatePreferences({ browserNotificationsEnabled: true });
-            });
+            toggleBrowserNotifications(permBtn);
         });
 
         var replayEl = document.getElementById('notifPrefReplay');
@@ -1605,12 +1613,26 @@
     }
 
     function _getBrowserPermLabel(perm) {
+        if (_state.prefs && _state.prefs.browserNotificationsEnabled) return 'Turn off browser alerts';
         var p = perm || (('Notification' in global) ? Notification.permission : 'unsupported');
         if (p === 'unsupported') return 'Not supported';
-        if (p === 'granted') return 'Enabled';
+        if (p === 'granted') return 'Enable browser alerts';
         if (p === 'denied') return 'Blocked (check browser)';
         if (p === 'error') return 'Could not enable — try again';
         return 'Enable browser alerts';
+    }
+
+    function toggleBrowserNotifications(button) {
+        if (_state.prefs.browserNotificationsEnabled) {
+            updatePreferences({ browserNotificationsEnabled: false });
+            return;
+        }
+        button.disabled = true;
+        requestBrowserPermission(function (perm) {
+            button.disabled = false;
+            if (perm === 'granted') updatePreferences({ browserNotificationsEnabled: true });
+            else button.textContent = _getBrowserPermLabel(perm);
+        });
     }
 
     function sendTestNotification() {
@@ -1710,6 +1732,7 @@
 
         _loadState();
         _pruneOldDismissed();
+        registerBackgroundReminders();
 
         // Replay reminders that fired while Sutra was closed (delayed so the
         // workspace bridges are hydrated before we derive deadlines).

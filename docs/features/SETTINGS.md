@@ -62,3 +62,8 @@ its toast distinguishes that submission from an in-app-only test. A successful
 submission does not establish Windows delivery, which can be affected by OS settings.
 Notification rows use the same title/help markup as other Settings, so search
 results name each control and focus it rather than repeating the category name.
+The browser-alert button becomes **Turn off browser alerts** after opt-in.
+Turning it off saves immediately and unregisters the optional daily background
+reminder, including a registration still pending when the preference changes.
+Chrome's site permission is retained, so alerts can be re-enabled without changing
+browser settings; that permission alone does not enable Sutra alerts.
