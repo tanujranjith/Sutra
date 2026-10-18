@@ -30,7 +30,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 9. ~~Paged boundaries, text placement, tables, manual breaks, and editor zoom.~~
 10. ~~Class/activity recognition, ambiguity correction, and manual destination choice.~~
 11. Backups: scheduled arrival and full restore of notes, tasks, images, and attachments. Open: provider setup/private passphrase and complete encrypted backup round-trip. File uploads now work.
-12. Browser/OS notifications: delivery, correct destination, and deduplication. Partial: in-app Send test toast appeared. Actual Windows notification delivery was not observed.
+12. Browser/OS notifications: actual Windows delivery and live OS-alert deduplication remain open. October 17 review fixed task-category filtering, already-urgent startup/opt-in delivery, constructor retries, permission errors, and specific-item routing. Manual Chrome QA confirmed the in-app-only test disclosure, meaningful Settings search/labels, and a staged task reminder opening that exact task. Browser permission remains ungranted; no OS delivery claimed.
 13. ~~Application Sheets tabs, Add Row, editing, persistence, and checkbox labels.~~
 14. ~~SAT/ACT dates and countdown boundaries.~~
 15. ~~College/major rankings, unrated exclusion, and College Matrix input focus.~~
@@ -52,7 +52,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
 32. ~~Grammar/spelling/rephrase: live short drafts, editable review, insertion and selected-text replacement, Cancel, and editor Undo passed in Chrome.~~
 33. ~~Writing guards: empty /grammar disables Generate; changing the note during generation closes the stale review and preserves the newer text.~~
-34. Strengthened page PIN: wrong/right PIN, immediate editor cleanup on manual relock, intact content after unlock/reload passed manual Chrome QA on October 17. Open: PIN change/removal and legacy upgrade were not manually tested.
+34. Strengthened page PIN: wrong/right PIN, immediate editor cleanup on manual relock, intact content after unlock/reload passed manual Chrome QA on October 17. Review also fixed stale management authorization after relock/replacement or blocked writes; normal/duress changes recheck after derivation and removal after confirmation. Open: manual PIN change/removal and legacy upgrade; new regression coverage awaits CI.
 35. ~~Workspace lock: user-created local test credential; wrong/right PIN, retry delay, refresh locking, real inactivity locking, background isolation and separate page-lock preservation passed manual Chrome QA on October 17.~~
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
@@ -74,6 +74,59 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 53. ~~Workspace PIN setup and timeout forms hide irrelevant credential fields; local manual verification passed.~~
 54. ~~Homework storage policy reconciled with the existing current-UI IndexedDB store; migration/recovery record explicitly preserves and documents separate legacy v1 mutation paths. No runtime or task data changed.~~
 55. Trademark policy: recommendation prepared October 17: keep Apache 2.0, update TRADEMARK.md to Sutra with its former name, permit accurate attribution/references, and distinguish unofficial forks from the official project. Owner decision remains open; no legal files changed.
+
+## Remaining-item review and user validation — October 17, 2026
+
+Local commit `de7010f` fixes PIN-management authorization and notification delivery.
+The byte-for-byte core recovery copy was verified before editing. Required core
+integrity and staged-hook checks passed all 27 assertions without changing the
+size allowance; owning asset/cache generators completed. `git diff --check`
+passed. No automated unit/E2E suites, installs, provider calls, pushes, merges,
+deployments, or cloud configuration changes were performed in this review.
+
+Luna xhigh independently inspected notifications and the relevant Sync/backup
+paths. The parent checked the reported defects against source, implemented the
+fixes, reviewed the complete diffs, and corrected a milestone routing regression
+identified in the second review. A separate review found no concrete regression
+in the new PIN guards or their prepared tests. These reviews do not replace CI.
+
+Manual local Chrome QA loaded the new core/notification stamps with canonical
+startup ready. With browser alerts off, Send test accurately disclosed that only
+an in-app alert was produced. Notification title/help markup now uses canonical
+Settings components instead of concatenated text; searching browser notifications
+returned one actionable control rather than repeated category labels.
+One harmless task, `QA notification routing review`, was added in the disposable
+localhost:5287 workspace. It appeared in Notifications, and clicking it opened
+Edit Task with that exact title and due date. Cancel closed without editing it.
+The staged task remains for optional user testing. No notification permission
+was requested, and no new PIN was created or changed by the agent.
+
+The existing CI fixture fix was re-reviewed against the shared canonical startup
+and save barrier. It remains unverified on WebKit until the next authorized push
+and full browser matrix run. Source spot-checks of live Sync/backup reconnect,
+foreground polling, daily scheduling, cross-tab locks, and retry handling found
+no additional concrete defect; service-backed behavior remains open.
+
+User validation still needed (use a disposable workspace):
+
+- [ ] **34: PIN change/removal.** Set/change the PIN yourself; after relock and
+  reload, old PIN fails and new PIN works. Cancel removal keeps protection;
+  confirmed removal retains content after reload. Check a legacy locked-note
+  backup, if available, upgrades on normal unlock and remains readable after reload.
+- [ ] **12: Windows alerts.** Enable browser permission explicitly, choose Send
+  test, and confirm a real Windows notification. Confirm an urgent reminder
+  appears once per open session, clicking it opens the correct item, and disabling
+  alerts prevents further OS notifications. Also check an already-urgent item
+  on opening Sutra and after granting permission.
+- [ ] **7: Live Sync.** Use a configured test account and second session/device;
+  check automatic transfer, offline edits/reconnect, and conflict preservation.
+- [ ] **11: Scheduled backup/restore.** Configure a test destination and enter
+  a private backup passphrase yourself. Confirm scheduled arrival; restore into
+  a separate disposable workspace and check notes, tasks, images, and attachments.
+- [ ] **45: CI approval.** Authorize a later branch push/full browser matrix;
+  confirm the WebKit fixture and new PIN/notification regressions pass.
+- [ ] **55: Owner decision.** Choose whether to adopt the prepared Apache 2.0
+  plus updated Sutra trademark recommendation. No legal files were changed.
 
 ## Locked-source fix follow-up — October 17, 2026
 
