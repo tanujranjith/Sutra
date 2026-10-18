@@ -499,9 +499,9 @@ Per the release process, the suite also includes rebrand and responsive guards (
 
 Sutra is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for the full terms.
 
-You may use, modify, and distribute this project under Apache 2.0. When redistributing or building derivative works, please retain the `LICENSE` and `NOTICE` files in full, clearly indicate that your version has been modified, and use the recommended attribution phrase: **"Based on Sutra by Tanuj Ranjith."** (Sutra was formerly NoteFlow Atelier; the legacy attribution phrase remains accurate for older forks.)
+You may use, modify, and distribute this project, including commercially, under Apache 2.0. It does not require downstream modifications to be published. When redistributing, follow section 4: include the license, identify modified files, and retain the applicable copyright, attribution, and NOTICE content as required. Suggested credit: **"Based on Sutra by Tanuj Ranjith."** That exact phrase is optional, not an additional license condition. Sutra was formerly NoteFlow Atelier; the legacy attribution phrase remains accurate for older forks.
 
-The Sutra name, logo, and official branding should not be used in a way that implies endorsement or official affiliation with the original project. See [`TRADEMARK.md`](TRADEMARK.md) for brand usage guidelines.
+Truthful references to Sutra are welcome. Separately marketed forks should use a distinct product name and logo and clearly identify their unofficial status. Do not imply endorsement or official affiliation that does not exist. See [`TRADEMARK.md`](TRADEMARK.md) for the brand guidelines; they do not change the code license.
 
 > **NoteFlow Classic** is a separate legacy app that lives under `noteflow-classic/`. It is not Sutra and is maintained independently.
 
