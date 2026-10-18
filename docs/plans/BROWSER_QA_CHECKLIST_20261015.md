@@ -171,8 +171,9 @@ With final CSS loaded, parent Chrome checks at 390, 639, 768, and 1024px confirm
 document width equals viewport, both action buttons are 44px tall, and left,
 center, and right hit targets reach the intended buttons. The parent also
 verified the notification search result and actual control focus. These parent
-geometry checks had no active update notice; the notice-active result is from
-the subagent's observed tablet pass and awaits the prepared CI regression.
+geometry checks initially had no active update notice. When the live update
+notice appeared, the parent repeated final checks at 390, 768, and 1024px:
+the notice stayed above both buttons and all three hit targets remained clear.
 Browser viewport was reset, temporary tab closed, and Settings left open for
 the user's visual review. Asset/cache generators and git diff --check passed.
 No automated unit/E2E suites, installs, provider requests, pushes, merges, or
