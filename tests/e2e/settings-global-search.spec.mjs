@@ -30,7 +30,13 @@ test('update notice leaves Settings Save and Revert reachable on desktop and pho
     banner.textContent = 'A new Sutra version is ready. Your workspace stays saved locally.';
     document.body.appendChild(banner);
   });
-  for (const viewport of [{ width: 1642, height: 966 }, { width: 390, height: 844 }]) {
+  for (const viewport of [
+    { width: 1642, height: 966 },
+    { width: 1024, height: 800 },
+    { width: 768, height: 844 },
+    { width: 639, height: 844 },
+    { width: 390, height: 844 }
+  ]) {
     await page.setViewportSize(viewport);
     if (viewport.width < 640 && await page.locator('#settingsBackToCategories').isVisible()) {
       await page.locator('#settingsBackToCategories').click();
@@ -42,8 +48,13 @@ test('update notice leaves Settings Save and Revert reachable on desktop and pho
       return ['settingsApplyBtn', 'settingsRevertBtn'].map(id => {
         const button = document.getElementById(id);
         const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-        return { clear: banner.bottom <= rect.top, reachable: hit === button || button.contains(hit) };
+        // The floating Assistant previously covered only the right side of
+        // Save, so a center-only hit test missed the unusable touch area.
+        const reachable = [0.15, 0.5, 0.85].every(fraction => {
+          const hit = document.elementFromPoint(rect.x + rect.width * fraction, rect.y + rect.height / 2);
+          return hit === button || button.contains(hit);
+        });
+        return { clear: banner.bottom <= rect.top, reachable };
       });
     });
     expect(clearance).toEqual([{ clear: true, reachable: true }, { clear: true, reachable: true }]);
@@ -51,6 +62,16 @@ test('update notice leaves Settings Save and Revert reachable on desktop and pho
     await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'false');
     if (viewport.width < 640) await page.locator('#settingsBackToCategories').click();
   }
+});
+
+test('dynamic notification search names the setting and focuses its actual control', async ({ page }) => {
+  await openSettings(page);
+  await page.locator('#settingsSearchInput').fill('quiet hours');
+  const result = page.getByRole('region', { name: 'Matching settings' })
+    .getByRole('button', { name: /^Quiet hours, Notifications\./ });
+  await expect(result).toBeVisible();
+  await result.click();
+  await expect(page.locator('#notifPrefQuiet')).toBeFocused();
 });
 
 test('Settings hierarchy keeps everyday controls visible and advanced packs disclosed on demand', async ({ page }) => {

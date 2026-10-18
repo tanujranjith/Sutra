@@ -2064,6 +2064,8 @@ body.pref-high-contrast #view-settings .cc-page .cc-sidebar-disclosure-copy {
     padding: 0 40px 0 36px;
 }
 #view-settings .cc-search-input { height: 44px; font-size: 0.8rem; }
+/* The search field already has its own accessible, touch-sized clear button. */
+#view-settings #settingsSearchInput::-webkit-search-cancel-button { display: none; }
 #view-settings .cc-search-icon { left: 12px; font-size: 0.9rem; }
 #view-settings .cc-search-clear { width: 44px; height: 44px; right: 0; top: 0; }
 #view-settings .cc-search-shortcut,

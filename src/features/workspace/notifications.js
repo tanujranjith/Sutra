@@ -1468,6 +1468,12 @@
             + '<span class="cc-row-help">Test an in-app alert and, when enabled, a browser notification</span></div>'
             + '<button type="button" class="cc-btn cc-btn-quiet" id="notifTestBtn" style="font-size:.78rem">Send test</button></div>';
 
+        // Dynamic rows use the same semantic boundary as static Settings rows,
+        // so search names the setting instead of the section's generic heading.
+        root.querySelectorAll('.cc-row').forEach(function (row) {
+            if (row.querySelector('button, input, select, textarea')) row.setAttribute('data-setting-item', '');
+        });
+
         // Wire events
         var enabledEl = document.getElementById('notifPrefEnabled');
         if (enabledEl) enabledEl.addEventListener('change', function () {

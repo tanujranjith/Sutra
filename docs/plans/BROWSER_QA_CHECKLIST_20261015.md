@@ -65,7 +65,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: latest recorded matrix at `d95489e` has 16 successful jobs and one WebKit closing-connection fixture failure. Local fix `66bd37f` now waits for canonical startup/save before installing its fake database; parent independently reviewed it. Open: CI rerun of that fix and subsequent local commits, requiring later push authorization. Hosting settings remain unchanged.
 46. ~~Save-conflict fix: startup recovery/repair now coordinates conditional writes, journals replaced roots, and identifies accepted writes. Timeline create/edit/reload and genuine two-tab stale-write protection passed manually.~~
-47. ~~Settings option 3 redesign: independently reviewed, compared with the selected mockup, and checked in Chrome on desktop, tablet, and 390px/320px phones; staged preview, Revert, Save/reload, searchable disclosures, and Dark theme verified.~~
+47. Settings visual follow-up: original option 3 workflow checks remain recorded. October 18 CSS cleanup fixes nested mobile padding, tablet action/footer and floating-control overlap, mismatched button heights, and duplicate search-clear icons; notification search labels/focus are corrected. Final manual phone/tablet geometry passed. Open: user visual approval of the updated look; automated regressions remain under item 45.
 48. ~~Theme creation in Assistant: live Gemini 3.8 Flash + Low generation/refinement, inline palette review, explicit Preview/Revert/Apply, saved palette/reply reload, and local /theme off passed.~~
 49. ~~Settings and workspace search upgrade: everyday phrases/typos, relevant field-level results, exact-control focus, shared workspace Settings results, keyboard navigation, draft/disclosure preservation, and phone containment passed manual Chrome QA. Luna diffs and privacy boundaries independently reviewed; automated regressions remain under item 45.~~
 50. ~~Assistant response details, receipt labels, and source panels adapt to theme colors; light/dark/custom-light stats contrast checked and faint-label/dark-fallback defects fixed.~~
@@ -144,6 +144,41 @@ changed to Enable browser alerts with aria-pressed false. Reload retained Off,
 and Send test accurately reported an in-app-only notification. Browser permission
 was not revoked or re-requested; alerts were left Off. Asset/cache generators
 and git diff --check passed; automated tests were prepared for CI, not run locally.
+
+## Settings CSS and search follow-up — October 18, 2026
+
+The user reopened Settings appearance after approving PIN and notification
+behavior. GPT-6.1 Sol at medium effort inspected the live local UI and changed
+only scoped CSS. The parent reviewed its selectors, cascade, and breakpoint
+effects, requested bounded notice spacing and canonical navigation clearance,
+and independently corrected tablet Save Changes wrapping to a different height.
+
+The final changes remove legacy nested card padding below 768px, keep tablet
+actions at the viewport edge with reserved content space, cap the update notice,
+hide duplicate floating utilities only within compact Settings, and keep one
+accessible search-clear control. No preference model, PIN, or core runtime changed.
+The parent also marked dynamic notification rows as semantic Settings rows;
+searching quiet hours now names that setting and focuses its actual unchecked
+control without changing it.
+
+The subagent checked Appearance, Notifications, Assistant, Data, and search;
+its final 768/1024px update-notice footer edge checks passed. Its last phone check
+was interrupted by a persisted stale-page warning from concurrent QA tabs.
+After the temporary tab was closed, the parent reloaded and used normal Retry
+Save; the warning cleared. No force overwrite, storage reset, or data wipe was used.
+
+With final CSS loaded, parent Chrome checks at 390, 639, 768, and 1024px confirmed
+document width equals viewport, both action buttons are 44px tall, and left,
+center, and right hit targets reach the intended buttons. The parent also
+verified the notification search result and actual control focus. These parent
+geometry checks had no active update notice; the notice-active result is from
+the subagent's observed tablet pass and awaits the prepared CI regression.
+Browser viewport was reset, temporary tab closed, and Settings left open for
+the user's visual review. Asset/cache generators and git diff --check passed.
+No automated unit/E2E suites, installs, provider requests, pushes, merges, or
+deployments ran. Prepared CI coverage expands action-edge checks to tablet sizes
+and verifies dynamic notification search labels/focus. User visual approval of
+item 47 remains open; items 34 and 12 remain closed by user approval.
 
 ## Locked-source fix follow-up — October 17, 2026
 

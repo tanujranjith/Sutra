@@ -73,6 +73,49 @@ body.settings-anchored-mode #view-settings .cc-page {
     #view-settings .cc-action-status { font-size: 0.73rem; }
 }
 
+@media (max-width: 768px) {
+    /* Match the shared mobile card breakpoint: its !important padding must
+       not stack additional insets inside Settings' flat content groups. */
+    #view-settings .cc-page .cc-section { padding: 0 !important; }
+    #view-settings .cc-page .cc-group { padding: 12px 0 !important; }
+    #view-settings .cc-page .cc-group.cc-appearance-foundation { padding: 0 !important; }
+}
+
+@media (max-width: 1024px) {
+    /* Assistant remains in navigation and Settings. Its duplicate floating
+       launcher otherwise covers Save Changes in the compact workspace. */
+    body:has(#view-settings.active) :is(#chatbotBtn, #focusModeQuickToggle, #feedbackFabBtn) { display: none !important; }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+    body:has(#view-settings.active) { --settings-compact-banner-max-height: min(240px, 40dvh); }
+    /* The compact page scrolls as a whole. Keep its actions at the viewport
+       edge instead of letting the grid's sticky row cut across the content. */
+    #view-settings .cc-page .cc-action-bar {
+        position: fixed;
+        left: 228px;
+        right: 16px;
+        width: auto;
+        bottom: calc(16px + var(--sutra-focus-player-height, 0px) + env(safe-area-inset-bottom, 0px));
+        padding-inline: 20px;
+    }
+    #view-settings .cc-page .cc-action-buttons .cc-btn { min-width: 128px; white-space: nowrap; }
+    body:has(#view-settings.active) .sutra-update-banner {
+        bottom: calc(136px + var(--sutra-focus-player-height, 0px) + env(safe-area-inset-bottom, 0px));
+        max-height: var(--settings-compact-banner-max-height);
+    }
+    body:has(#view-settings.active):has(.sutra-update-banner:not([hidden])):not(:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .sidebar-open, .notif-panel-open)) {
+        --settings-compact-update-clearance: var(--settings-compact-banner-max-height);
+    }
+    body.settings-anchored-mode #view-settings .cc-page {
+        padding-bottom: calc(144px + var(--sutra-focus-player-height, 0px) + env(safe-area-inset-bottom, 0px) + var(--settings-compact-update-clearance, 0px));
+    }
+}
+
+@media (min-width: 641px) and (max-width: 760px) {
+    #view-settings .cc-page .cc-action-bar { left: 16px; }
+}
+
 #testingHubReviewMount {
     --bg-2: var(--bg-elevated, var(--bg-secondary, #fff));
     --review-surface: var(--bg-elevated, var(--bg-secondary, #fff));

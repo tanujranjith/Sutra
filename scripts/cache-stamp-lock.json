@@ -388,8 +388,8 @@
     "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20261018-alert-toggle1",
-    "hash": "a63b0b7a4274b1a6"
+    "stamp": "20261018-alert-toggle2",
+    "hash": "8c07ee6b36dc690d"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20261015-formula-cache2",
@@ -712,8 +712,8 @@
     "hash": "d250ec565ffba14d"
   },
   "styles/responsive/student-workspaces-polish.css": {
-    "stamp": "20261016-settings-notice-flow3",
-    "hash": "e2fd00d650109269"
+    "stamp": "20261018-settings-css5",
+    "hash": "f0e8d9f1bf7b0a2a"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -756,8 +756,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20261016-settings-notice-clearance4",
-    "hash": "e8f1f3a04e9e1f95"
+    "stamp": "20261018-settings-controls1",
+    "hash": "35e45928008a2f7c"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20261001-mobile-agenda1",

@@ -36,6 +36,12 @@ bottom bar, and category reset options remain available.
 
 The compact phone layout omits the workspace preview and keeps touch targets at
 least 44 pixels.
+On phones and tablets, flat sections and groups align with the content rail
+without stacking legacy card padding. Duplicate floating Assistant, fullscreen,
+and feedback shortcuts are hidden while Settings is open in the compact shell;
+canonical controls remain available elsewhere in the workspace.
+Tablet Save/Revert actions stay at the viewport edge with final-content scroll
+space; an update notice sits above them with a bounded, scrollable height.
 The pending-changes bar stays above the phone navigation, safe-area inset, and
 any active Focus player, so Save Changes and Revert remain reachable.
 The optional app-update notice sits above this action bar on desktop and phones.
