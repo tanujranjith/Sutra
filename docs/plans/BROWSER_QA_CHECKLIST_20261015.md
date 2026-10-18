@@ -30,7 +30,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 9. ~~Paged boundaries, text placement, tables, manual breaks, and editor zoom.~~
 10. ~~Class/activity recognition, ambiguity correction, and manual destination choice.~~
 11. Backups: scheduled arrival and full restore of notes, tasks, images, and attachments. Open: provider setup/private passphrase and complete encrypted backup round-trip. File uploads now work.
-12. Browser/OS notifications: actual Windows delivery and live OS-alert deduplication remain open. October 17 review fixed task-category filtering, already-urgent startup/opt-in delivery, constructor retries, permission errors, and specific-item routing. Manual Chrome QA confirmed the in-app-only test disclosure, meaningful Settings search/labels, and a staged task reminder opening that exact task. Browser permission remains ungranted; no OS delivery claimed.
+12. ~~Browser/OS notifications: user validated October 18. Follow-up off-switch fixed in `c5e17a9`; local Chrome confirmed turning alerts Off persists across reload and Send test becomes in-app-only. Optional background registration now respects opt-out, including pending registration; prepared automated regressions remain under item 45.~~
 13. ~~Application Sheets tabs, Add Row, editing, persistence, and checkbox labels.~~
 14. ~~SAT/ACT dates and countdown boundaries.~~
 15. ~~College/major rankings, unrated exclusion, and College Matrix input focus.~~
@@ -52,7 +52,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
 32. ~~Grammar/spelling/rephrase: live short drafts, editable review, insertion and selected-text replacement, Cancel, and editor Undo passed in Chrome.~~
 33. ~~Writing guards: empty /grammar disables Generate; changing the note during generation closes the stale review and preserves the newer text.~~
-34. Strengthened page PIN: wrong/right PIN, immediate editor cleanup on manual relock, intact content after unlock/reload passed manual Chrome QA on October 17. Review also fixed stale management authorization after relock/replacement or blocked writes; normal/duress changes recheck after derivation and removal after confirmation. Open: manual PIN change/removal and legacy upgrade; new regression coverage awaits CI.
+34. ~~Page PIN protection and management: user validated October 18. Prior manual checks covered wrong/right PIN, relock cleanup, and content after unlock/reload; stale authorization guards are fixed. Prepared automated regressions remain under item 45.~~
 35. ~~Workspace lock: user-created local test credential; wrong/right PIN, retry delay, refresh locking, real inactivity locking, background isolation and separate page-lock preservation passed manual Chrome QA on October 17.~~
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
@@ -107,13 +107,14 @@ and full browser matrix run. Source spot-checks of live Sync/backup reconnect,
 foreground polling, daily scheduling, cross-tab locks, and retry handling found
 no additional concrete defect; service-backed behavior remains open.
 
-User validation still needed (use a disposable workspace):
+User validation record (use a disposable workspace; items 34 and 12 closed by
+the user's October 18 approval and the local off-switch retest):
 
-- [ ] **34: PIN change/removal.** Set/change the PIN yourself; after relock and
+- [x] **34: PIN change/removal.** Set/change the PIN yourself; after relock and
   reload, old PIN fails and new PIN works. Cancel removal keeps protection;
   confirmed removal retains content after reload. Check a legacy locked-note
   backup, if available, upgrades on normal unlock and remains readable after reload.
-- [ ] **12: Windows alerts.** Enable browser permission explicitly, choose Send
+- [x] **12: Windows alerts.** Enable browser permission explicitly, choose Send
   test, and confirm a real Windows notification. Confirm an urgent reminder
   appears once per open session, clicking it opens the correct item, and disabling
   alerts prevents further OS notifications. Also check an already-urgent item
@@ -127,6 +128,22 @@ User validation still needed (use a disposable workspace):
   confirm the WebKit fixture and new PIN/notification regressions pass.
 - [ ] **55: Owner decision.** Choose whether to adopt the prepared Apache 2.0
   plus updated Sutra trademark recommendation. No legal files were changed.
+
+## User approval and alert opt-out — October 18, 2026
+
+The user approved items 34 and 12, with one follow-up: browser alerts could not
+be disabled after enabling. Local commit `c5e17a9` adds the explicit off action
+and distinguishes Sutra opt-in from Chrome's retained permission. It also
+unregisters the optional daily background reminder on opt-out/master Off and
+rechecks pending registration before/after completion. Settings explains the
+behavior. No new workspace fields or core runtime changes were needed.
+
+Manual Chrome QA on localhost:5287 started with the user's opt-in enabled.
+The button read Turn off browser alerts with aria-pressed true. Clicking it
+changed to Enable browser alerts with aria-pressed false. Reload retained Off,
+and Send test accurately reported an in-app-only notification. Browser permission
+was not revoked or re-requested; alerts were left Off. Asset/cache generators
+and git diff --check passed; automated tests were prepared for CI, not run locally.
 
 ## Locked-source fix follow-up — October 17, 2026
 
