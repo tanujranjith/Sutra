@@ -119,3 +119,114 @@ test('deletion authorization token rechecks the captured page identities and loc
   pages.splice(0, 1, lockedPage(page.id, page.lockHash));
   assert.equal(authorization.isCurrent(), false);
 });
+
+function managementFixture() {
+  const page = lockedPage('manage-page');
+  const pages = [page];
+  const unlockedPageIds = new Set([page.id]);
+  const flags = {
+    workspaceImportInProgress: false,
+    sutraRemoteCommitPending: false,
+    sutraRevocationLockActive: false,
+    persistenceWritesBlocked: false
+  };
+  const canManagePageLock = target => compile('canManagePageLock', { pages, unlockedPageIds, ...flags })(target);
+  let saves = 0;
+  const dependencies = {
+    pages, unlockedPageIds, canManagePageLock,
+    generateLockSalt: async () => 'new-salt',
+    hashPinWithSalt: async () => 'new-verifier',
+    verifyPageDuressPin: async () => false,
+    savePagesToLocal: () => { saves += 1; },
+    renderPagesList() {}, reportError() {}
+  };
+  return { page, pages, unlockedPageIds, flags, dependencies, saves: () => saves };
+}
+
+test('PIN changes require a live unlocked page before deriving a replacement', async () => {
+  const fixture = managementFixture();
+  fixture.unlockedPageIds.clear();
+  let derived = false;
+  const change = compile('changePageLock', {
+    ...fixture.dependencies,
+    hashPinWithSalt: async () => { derived = true; return 'new-verifier'; }
+  });
+  assert.equal((await change(fixture.page.id, '1357')).code, 'not-authorized');
+  assert.equal(derived, false);
+  assert.equal(fixture.saves(), 0);
+});
+
+for (const mutation of ['relock', 'replace', 'rotate', 'workspaceImportInProgress', 'sutraRemoteCommitPending', 'sutraRevocationLockActive', 'persistenceWritesBlocked']) {
+  test(`PIN change preserves the existing lock after ${mutation} during derivation`, async () => {
+    const fixture = managementFixture();
+    const pending = deferred();
+    const entered = deferred();
+    const change = compile('changePageLock', {
+      ...fixture.dependencies,
+      hashPinWithSalt: () => { entered.resolve(); return pending.promise; }
+    });
+    const result = change(fixture.page.id, '1357');
+    await entered.promise;
+    if (mutation === 'relock') fixture.unlockedPageIds.clear();
+    else if (mutation === 'replace') fixture.pages.splice(0, 1, lockedPage(fixture.page.id));
+    else if (mutation === 'rotate') fixture.page.lockHash = 'rotated';
+    else fixture.flags[mutation] = true;
+    const before = fixture.page.lockHash;
+    pending.resolve('new-verifier');
+    assert.equal((await result).code, 'changed');
+    assert.equal(fixture.page.lockHash, before);
+    assert.equal(fixture.saves(), 0);
+  });
+}
+
+test('an authorized PIN change saves the new verifier and preserves the session unlock', async () => {
+  const fixture = managementFixture();
+  const change = compile('changePageLock', fixture.dependencies);
+  assert.equal((await change(fixture.page.id, '1357')).ok, true);
+  assert.equal(fixture.page.lockHash, 'new-verifier');
+  assert.equal(fixture.page.lockSalt, 'new-salt');
+  assert.equal(fixture.unlockedPageIds.has(fixture.page.id), true);
+  assert.equal(fixture.saves(), 1);
+});
+
+for (const mutation of ['cancel', 'relock', 'replace', 'rotate', 'persistenceWritesBlocked', 'none']) {
+  test(`PIN removal rechecks authorization after confirmation: ${mutation}`, async () => {
+    const fixture = managementFixture();
+    const confirmation = deferred();
+    let removed = false;
+    const remove = compile('confirmPageLockRemoval', {
+      ...fixture.dependencies,
+      showCustomConfirmDialog: () => confirmation.promise,
+      showToast() {},
+      removePageLock: () => { removed = true; },
+      currentPageId: fixture.page.id,
+      hideLockedPageScreen() {}, getPrimaryEditor: () => null, loadPageContentIntoEditor() {}, notifyNotePageLoaded() {}
+    });
+    const result = remove(fixture.page.id);
+    if (mutation === 'relock') fixture.unlockedPageIds.clear();
+    if (mutation === 'replace') fixture.pages.splice(0, 1, lockedPage(fixture.page.id));
+    if (mutation === 'rotate') fixture.page.lockSalt = 'changed-salt';
+    if (mutation === 'persistenceWritesBlocked') fixture.flags.persistenceWritesBlocked = true;
+    confirmation.resolve(mutation !== 'cancel');
+    assert.equal(await result, mutation === 'none');
+    assert.equal(removed, mutation === 'none');
+  });
+}
+
+test('duress setup cannot persist after the page relocks during derivation', async () => {
+  const fixture = managementFixture();
+  const pending = deferred();
+  const entered = deferred();
+  const setup = compile('setPageDuressPin', {
+    ...fixture.dependencies,
+    verifyPagePin: async () => false,
+    createPageDuressVerifier: () => { entered.resolve(); return pending.promise; }
+  });
+  const result = setup(fixture.page.id, '135790');
+  await entered.promise;
+  fixture.unlockedPageIds.clear();
+  pending.resolve('alternate-verifier');
+  assert.equal((await result).code, 'changed');
+  assert.equal(fixture.page.lockDuressVerifier, undefined);
+  assert.equal(fixture.saves(), 0);
+});

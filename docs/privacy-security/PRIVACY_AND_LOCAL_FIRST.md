@@ -158,6 +158,12 @@ with the page through normalization, version history, backups, and encrypted
 Sync; no extra PIN field or storage is introduced. Older Sutra versions cannot
 verify the new format, so open these workspaces with the updated app.
 
+PIN management requires the page to remain unlocked in the current session.
+Changing a normal or duress PIN rechecks page identity and lock state after key
+derivation; removing a normal PIN rechecks them after confirmation. Automatic
+relocking, a replaced page, changed lock metadata, or blocked workspace writes
+cancel the operation without changing the existing protection.
+
 **This does not encrypt local note content.** Someone who can inspect or modify
 the browser profile can bypass an in-app lock. It protects normal Sutra screens,
 not browser developer tools, disk access, or previously exported plaintext.

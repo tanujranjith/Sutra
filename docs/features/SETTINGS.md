@@ -51,3 +51,14 @@ other action result focuses its control without activating it.
 
 Settings navigation and disclosure state are presentation state only. They introduce no workspace
 fields, migrations, or changes to backup and Sync content.
+
+Notifications require both Sutra's notification preference and browser permission
+before sending OS alerts. Urgent unread reminders present at startup or opt-in
+can send once per open session after the startup grace period; they do not replay
+the in-app toast stack. Task reminders use the Tasks category and its timing rules.
+Clicks open the specific task/homework item or use the canonical deadline route.
+**Send test** attempts an actual browser notification when enabled and permitted;
+its toast distinguishes that submission from an in-app-only test. A successful
+submission does not establish Windows delivery, which can be affected by OS settings.
+Notification rows use the same title/help markup as other Settings, so search
+results name each control and focus it rather than repeating the category name.

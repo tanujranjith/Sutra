@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261017-help-contracts1",
-    "hash": "435cb667cc7c981c"
+    "stamp": "20261017-pin-management1",
+    "hash": "cd4eada5dfa095eb"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -388,8 +388,8 @@
     "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "eeadd011283c2ee3"
+    "stamp": "20261017-alert-delivery3",
+    "hash": "405c27c017119721"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20261015-formula-cache2",

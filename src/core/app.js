@@ -50324,7 +50324,7 @@ function getActiveEditor() {
 
         async function changePageLock(pageId, newPin) {
             const page = pages.find(p => p.id === pageId);
-            if (!page) return false;
+            if (!canManagePageLock(page)) return { ok: false, code: 'not-authorized' };
             const expectedHash = page.lockHash;
             const expectedSalt = page.lockSalt;
             const expectedDuress = page.lockDuressVerifier;
@@ -50336,8 +50336,8 @@ function getActiveEditor() {
             let hash;
             try { hash = await hashPinWithSalt(newPin, salt); }
             catch (error) { reportError(error, { where: 'pageLock:change' }); return { ok: false, code: 'unavailable' }; }
-            if (!pages.includes(page) || page.lockHash !== expectedHash || page.lockSalt !== expectedSalt || page.lockDuressVerifier !== expectedDuress
-                || unlockedPageIds.has(pageId) !== wasUnlocked || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) {
+            if (!canManagePageLock(page) || page.lockHash !== expectedHash || page.lockSalt !== expectedSalt || page.lockDuressVerifier !== expectedDuress
+                || unlockedPageIds.has(pageId) !== wasUnlocked) {
                 return { ok: false, code: 'changed' };
             }
             page.lockHash = hash;
@@ -50351,13 +50351,18 @@ function getActiveEditor() {
 
         async function setPageDuressPin(pageId, pin) {
             const page = pages.find(p => p.id === pageId);
-            if (!page || !page.isLocked || !page.lockHash || !page.lockSalt || !unlockedPageIds.has(pageId)) {
+            if (!canManagePageLock(page)) {
                 return { ok: false, code: 'not-authorized' };
             }
-            if (await verifyPagePin(pin, page.lockHash, page.lockSalt)) {
+            const hash = page.lockHash, salt = page.lockSalt, duress = page.lockDuressVerifier;
+            if (await verifyPagePin(pin, hash, salt)) {
                 return { ok: false, code: 'matches-normal' };
             }
-            page.lockDuressVerifier = await createPageDuressVerifier(pin);
+            const verifier = await createPageDuressVerifier(pin);
+            if (!canManagePageLock(page) || page.lockHash !== hash || page.lockSalt !== salt || page.lockDuressVerifier !== duress) {
+                return { ok: false, code: 'changed' };
+            }
+            page.lockDuressVerifier = verifier;
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             renderPagesList();
@@ -50366,7 +50371,7 @@ function getActiveEditor() {
 
         function clearPageDuressPin(pageId) {
             const page = pages.find(p => p.id === pageId);
-            if (!page || !unlockedPageIds.has(pageId)) return false;
+            if (!canManagePageLock(page)) return false;
             page.lockDuressVerifier = null;
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
@@ -50393,6 +50398,37 @@ function getActiveEditor() {
             unlockedPageIds.delete(pageId);
             savePagesToLocal();
             renderPagesList();
+        }
+
+        function canManagePageLock(page) {
+            return !!(page && pages.includes(page) && page.isLocked && page.lockHash && page.lockSalt
+                && unlockedPageIds.has(page.id) && !workspaceImportInProgress && !sutraRemoteCommitPending
+                && !sutraRevocationLockActive && !persistenceWritesBlocked);
+        }
+
+        async function confirmPageLockRemoval(pageId) {
+            const page = pages.find(p => p.id === pageId);
+            if (!canManagePageLock(page)) { showToast('Unlock the page again to manage its PIN.'); return false; }
+            const hash = page.lockHash, salt = page.lockSalt, duress = page.lockDuressVerifier;
+            const confirmed = await showCustomConfirmDialog({
+                title: 'Remove PIN protection',
+                message: 'Are you sure you want to remove the PIN from this page? Anyone can then open it without a PIN.',
+                confirmText: 'Remove PIN',
+                confirmVariant: 'danger'
+            });
+            if (!confirmed) return false;
+            if (!canManagePageLock(page) || page.lockHash !== hash || page.lockSalt !== salt || page.lockDuressVerifier !== duress) {
+                showToast('PIN protection was not removed. Unlock the page again and retry.'); return false;
+            }
+            removePageLock(pageId);
+            showToast('PIN protection removed.');
+            if (pageId === currentPageId) {
+                hideLockedPageScreen();
+                const primaryEditor = getPrimaryEditor();
+                if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                notifyNotePageLoaded(page.id);
+            }
+            return true;
         }
 
         function manualLockPage(pageId) {
@@ -50803,26 +50839,7 @@ function getActiveEditor() {
                 const pageId = _lockModalTargetPageId;
                 closeModal_();
                 if (!pageId) return;
-                const confirmed = await showCustomConfirmDialog({
-                    title: 'Remove PIN protection',
-                    message: 'Are you sure you want to remove the PIN from this page? Anyone can then open it without a PIN.',
-                    confirmText: 'Remove PIN',
-                    confirmVariant: 'danger'
-                });
-                if (confirmed) {
-                    removePageLock(pageId);
-                    showToast('PIN protection removed.');
-                    // If this is the current page, refresh its display
-                    if (pageId === currentPageId) {
-                        const page = pages.find(p => p.id === pageId);
-                        if (page) {
-                            hideLockedPageScreen();
-                            const primaryEditor = getPrimaryEditor();
-                            if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
-                            notifyNotePageLoaded(page.id);
-                        }
-                    }
-                }
+                await confirmPageLockRemoval(pageId);
             });
         }
 
@@ -78506,6 +78523,7 @@ ${cspMeta}
                 searchSettings: (query, options) => searchSettingsForGlobalSearch(query, options),
                 openGlobalSearchPanel: (q) => (_origGlobalSearch ? (_origGlobalSearch(q), true) : undefined),
                 openTaskModal: (taskId, preset) => (_origOpenTaskModal ? (_origOpenTaskModal(taskId, preset), true) : undefined),
+                openDeadlineSource: (item) => openDeadlineSource(item),
                 createTask: (input, options) => createCanonicalTask(input, options),
                 flushAppSaveNow: (reason) => flushAppSaveNow(reason || 'bridge-save'),
                 exportWorkspaceAsAtelier: () => (_origExportAtelier ? (_origExportAtelier(), true) : undefined)
