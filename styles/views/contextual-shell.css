@@ -1491,3 +1491,19 @@ body[data-view="notes"].notes-split-active #splitNotesToggleBtn {
     outline-color: Highlight;
   }
 }
+.page-space-move-form {
+  display: grid;
+  gap: 10px;
+  color: var(--text-primary);
+}
+.page-space-move-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.page-space-move-form p { margin: 0; line-height: 1.5; }
+.page-space-move-form [role="status"] { color: var(--text-secondary); }

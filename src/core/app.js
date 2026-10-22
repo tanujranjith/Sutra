@@ -1587,6 +1587,11 @@ function getPageActionsConfig(pageId) {
         },
         ...lockActions,
         {
+            className: 'fas fa-folder-open',
+            label: 'Move to space',
+            onClick: () => window.flowAtelier.openMovePageToSpace(page.id)
+        },
+        {
             className: 'fas fa-copy',
             label: 'Duplicate page',
             onClick: () => duplicatePage(page.id)
@@ -38326,6 +38331,109 @@ function buildOnboardingPlanPreview() {
             try { if (typeof filterPages === 'function') filterPages(); } catch(e) {}
         }
 
+        // Move existing records in place: type-specific models and asset IDs stay
+        // owned by their original pages. Titles encode the sidebar hierarchy.
+        function planPageSpaceMove(pageId, spaceId) {
+            const page = pages.find(item => item && item.id === pageId);
+            const target = spaces.find(space => space && space.id === spaceId);
+            if (!page || !target || isHelpDocsPage(page)) return { error: 'This page cannot be moved.' };
+            const sourceId = page.spaceId || 'default';
+            if (sourceId === target.id) return { error: 'Choose a different space.' };
+            const prefix = page.title + '::';
+            const members = pages.filter(item => item && (item.spaceId || 'default') === sourceId
+                && (item.id === page.id || item.title.startsWith(prefix)));
+            if (members.some(isHelpDocsPage)) return { error: 'Help & Docs must stay in its own space.' };
+            const rootTitle = page.title.split('::').pop();
+            const moves = members.map(item => ({ page: item, title: rootTitle + item.title.slice(page.title.length) }));
+            const occupied = new Set(pages.filter(item => item && (item.spaceId || 'default') === target.id).map(item => item.title));
+            const titles = new Set();
+            for (const item of moves) {
+                if (occupied.has(item.title) || titles.has(item.title)) {
+                    return { error: 'The destination already has a page with this name. Rename the page or choose another space.' };
+                }
+                titles.add(item.title);
+            }
+            const ids = new Set(members.map(item => item.id));
+            const pair = getNotesSplitPair();
+            const unpairs = !!(pair && ids.has(pair.left) !== ids.has(pair.right));
+            return { page, target, sourceId, moves, ids, unpairs };
+        }
+
+        function movePageToSpace(pageId, spaceId) {
+            if (!workspaceHydrationComplete || workspaceImportInProgress || persistenceWritesBlocked
+                || sutraRemoteCommitPending || sutraRevocationLockActive
+                || document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') {
+                showToast('Wait until workspace saving is available before moving pages.');
+                return null;
+            }
+            // Flush while both editors still belong to the source space.
+            flushVisibleNotesEditorsBeforeLeaving();
+            const plan = planPageSpaceMove(pageId, spaceId);
+            if (plan.error) { showToast(plan.error); return null; }
+            if (plan.unpairs) setSplitViewEnabled(false);
+            const pinned = getPinnedPagesState().notesBySpace;
+            const movingPins = (pinned[plan.sourceId] || []).filter(id => plan.ids.has(id));
+            const now = new Date().toISOString();
+            plan.moves.forEach(item => {
+                item.page.spaceId = plan.target.id;
+                item.page.title = item.title;
+                item.page.updatedAt = now;
+            });
+            if (movingPins.length) {
+                pinned[plan.sourceId] = pinned[plan.sourceId].filter(id => !plan.ids.has(id));
+                pinned[plan.target.id] = Array.from(new Set([...(pinned[plan.target.id] || []), ...movingPins]));
+            }
+            cleanupPinnedNotePageRefs();
+            persistAppData();
+            switchSpace(plan.target.id);
+            loadPage(plan.page.id);
+            showToast(`Moved ${plan.moves.length === 1 ? 'page' : `${plan.moves.length} pages`} to ${plan.target.name}.`);
+            return plan.page;
+        }
+
+        function openMovePageToSpace(pageId) {
+            const page = pages.find(item => item && item.id === pageId);
+            if (!page || isHelpDocsPage(page)) return;
+            const destinations = spaces.filter(space => space && space.id !== (page.spaceId || 'default'));
+            if (!destinations.length) { showToast('Create another space from the Spaces menu first.'); return; }
+            const body = document.createElement('div');
+            body.className = 'page-space-move-form';
+            const label = document.createElement('label');
+            label.textContent = 'Destination space';
+            const select = document.createElement('select');
+            select.id = 'movePageSpaceSelect';
+            label.htmlFor = select.id;
+            destinations.forEach(space => {
+                const option = document.createElement('option');
+                option.value = space.id;
+                option.textContent = `${space.icon || ''} ${space.name}`.trim();
+                select.appendChild(option);
+            });
+            const description = document.createElement('p');
+            const status = document.createElement('p');
+            status.setAttribute('role', 'status');
+            body.append(label, select, description, status);
+            function refreshPreview() {
+                const plan = planPageSpaceMove(pageId, select.value);
+                description.textContent = plan.error ? 'Choose a destination for this page and its children.' : `Move “${page.title.split('::').pop()}”${plan.moves.length > 1 ? ` and its ${plan.moves.length - 1} child ${plan.moves.length === 2 ? 'page' : 'pages'}` : ''} to the top level of this space. Content, attachments, links, and PIN protection stay with each page.${plan.unpairs ? ' This moves one member out of its split pair and unpairs the notes.' : ''}`;
+                status.textContent = plan.error || '';
+            }
+            select.addEventListener('change', refreshPreview);
+            refreshPreview();
+            const modal = openSutraModal({
+                titleText: 'Move to space', bodyNode: body,
+                buttons: [
+                    { label: 'Cancel', value: false },
+                    { label: 'Move', primary: true, keepOpen: true, onClick: () => {
+                        const plan = planPageSpaceMove(pageId, select.value);
+                        if (plan.error) { status.textContent = plan.error; return; }
+                        if (movePageToSpace(pageId, select.value)) modal.close(true);
+                    } }
+                ]
+            });
+            select.focus();
+        }
+
         function renderSpacesCurrentDisplay() {
             const space = getCurrentSpace();
             const iconEl = document.getElementById('spacesCurrentIcon');
@@ -52505,6 +52613,11 @@ function getActiveEditor() {
                     }
                     ])
                 ];
+                if (!isSystemPage) actionItems.splice(actionItems.length - 1, 0, {
+                    className: 'fas fa-folder-open',
+                    title: 'Move to space',
+                    onClick: () => openMovePageToSpace(page.id)
+                });
                 actionItems.forEach((action) => {
                     iconsWrap.appendChild(makeActionIcon(action.className, action.title, action.onClick));
                 });
@@ -52621,6 +52734,7 @@ function getActiveEditor() {
             activeSpaceId = (appSettings && appSettings.activeSpaceId) || 'default';
             if (!spaces.find(s => s.id === activeSpaceId)) activeSpaceId = 'default';
             ensureHelpPagesForAllSpaces();
+            renderSpacesCurrentDisplay();
             // Load Cram Hub sessions (Section 31)
             cramSessions = Array.isArray(appData && appData.cramSessions) ? appData.cramSessions : [];
             // Part 5 — trash + focus history
@@ -62026,16 +62140,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     return page;
                 },
                 movePageToSpace(pageId, spaceId) {
-                    const page = pages.find(item => item && item.id === pageId);
-                    const target = spaces.find(space => space && space.id === spaceId);
-                    if (!page || !target || isHelpDocsPage(page)) return null;
-                    cleanupPinnedNotePageRefs();
-                    page.spaceId = target.id;
-                    page.updatedAt = new Date().toISOString();
-                    cleanupPinnedNotePageRefs();
-                    persistAppData();
-                    renderPagesList();
-                    return page;
+                    return movePageToSpace(pageId, spaceId);
                 },
                 togglePinPage: (pageId, spaceId) => toggleNotePagePin(pageId, spaceId || activeSpaceId || 'default'),
                 getPinnedNoteIds: (spaceId) => getPinnedNoteIdsForSpace(spaceId || activeSpaceId || 'default'),
@@ -78429,6 +78534,7 @@ ${cspMeta}
                 get currentPageId() { return currentPageId; },
                 getNotesSplitPair: () => getNotesSplitPair(),
                 unpairNotes: () => setSplitViewEnabled(false),
+                openMovePageToSpace: (pageId) => openMovePageToSpace(pageId),
                 get activeSpaceId() { return activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default'; },
                 get activeView() { return activeView; },
                 get unlockedPageIds() { return unlockedPageIds; },

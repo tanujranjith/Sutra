@@ -89,6 +89,22 @@ rendered position so inline layout offsets do not accumulate across sheets.
 Painted gaps then align to the measured sheet boundary. The spacer remains
 view-only and does not change stored note content.
 
+## Moving pages between spaces
+
+Choose **Move to space** from a page or folder's sidebar actions, select a
+destination, then confirm **Move**. Notes/documents, HTML pages, Slides, Sheets,
+Canvas, and pages with attachments use the same action. The moved page opens in
+the destination space. Help & Docs stays protected in its own space.
+
+A parent moves with its descendants. A nested page becomes a top-level page in
+the destination; its children's relative hierarchy remains intact. Conflicting
+titles stop the move and ask for a rename or another destination; nothing is
+overwritten. IDs, type-specific records, unknown fields, attached asset references,
+links, PIN protection, and pinned status remain with the pages. Pending editor
+changes flush before metadata changes. No new durable fields or attachment copies
+are introduced. Moving both split members together preserves the pair; moving
+only one member explicitly warns that confirming will unpair them.
+
 ## Page tags
 
 Use **Add tag** below the page title in either editor. Enter or leaving the field

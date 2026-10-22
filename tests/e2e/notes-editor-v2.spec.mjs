@@ -1281,6 +1281,103 @@ test('one keyboard-accessible note menu contains insert and page tools and prese
   await expect(page.locator('#notesSidebarPair .notes-sidebar-unpair')).toHaveCount(2);
 });
 
+test('Move to space preserves mixed page models, assets, children, PINs, and pins through reload', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  const staged = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const target = hooks.createSpace('Move destination');
+    hooks.switchSpace('default');
+    const folder = hooks.createNoteInActiveSpace('Mixed folder', '');
+    folder.type = 'folder';
+    const note = hooks.createNoteInActiveSpace('Mixed folder::Document', '<p>Document with asset</p>');
+    note.futureMetadata = { retained: true, assetId: 'stable-asset-reference' };
+    note.blocks = [{ id: 'asset-block', type: 'image', src: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' }];
+    const html = window.SutraHTMLPages.createPage('Mixed folder::HTML');
+    html.htmlDocument.source = '<!doctype html><h1>HTML move sentinel</h1>';
+    const slides = window.SutraSlides.createPage('Mixed folder::Slides');
+    const sheets = window.SutraSheets.createPage('Mixed folder::Sheets');
+    const canvas = hooks.createCanvasInActiveSpace('Mixed folder::Canvas');
+    const nested = hooks.createNoteInActiveSpace('Mixed folder::Document::Child', '<p>Nested child</p>');
+    const outsider = hooks.createNoteInActiveSpace('Unrelated source note', '<p>Stay here</p>');
+    await hooks.lockPageWithPin(html.id, '4826');
+    hooks.togglePinPage(html.id, 'default');
+    window.loadPage(folder.id);
+    await window.flowAtelier.flushAppSaveNow('e2e-before-space-move');
+    const members = [note, html, slides, sheets, canvas, nested].map(item => {
+      const copy = JSON.parse(JSON.stringify(item));
+      delete copy.updatedAt;
+      return copy;
+    });
+    return { target: target.id, folder: folder.id, html: html.id, outsider: outsider.id, members };
+  });
+  await page.getByRole('button', { name: 'More actions for Mixed folder', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Move to space', exact: true });
+  await expect(dialog).toContainText('its 6 child pages');
+  await dialog.getByLabel('Destination space').selectOption(staged.target);
+  await dialog.getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.locator('#spacesCurrentName')).toHaveText('Move destination');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-after-space-move'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  const result = await page.evaluate(({ ids, target }) => ({
+    members: ids.map(id => window.flowAtelier.pages.find(item => item.id === id)),
+    outsider: window.flowAtelier.pages.find(item => item.title === 'Unrelated source note'),
+    pins: window.__sutraPublicBetaTestHooks.getPinnedNoteIds(target),
+    sourcePins: window.__sutraPublicBetaTestHooks.getPinnedNoteIds('default')
+  }), { ids: staged.members.map(item => item.id), target: staged.target });
+  await expect(page.locator('#spacesCurrentName')).toHaveText('Move destination');
+  staged.members.forEach((before, index) => {
+    expect(result.members[index]).toMatchObject({ ...before, spaceId: staged.target });
+  });
+  expect(result.outsider.spaceId).toBe('default');
+  expect(result.pins).toContain(staged.html);
+  expect(result.sourcePins).not.toContain(staged.html);
+});
+
+test('Move to space cancels cleanly, refuses duplicate titles, and rebases a nested subtree', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  const staged = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const target = hooks.createSpace('Existing names');
+    hooks.createNoteInActiveSpace('Child', '<p>Destination original</p>');
+    hooks.switchSpace('default');
+    const parent = hooks.createNoteInActiveSpace('Parent', '<p>Source parent</p>');
+    parent.type = 'folder';
+    const child = hooks.createNoteInActiveSpace('Parent::Child', '<p>Source original</p>');
+    const nested = hooks.createNoteInActiveSpace('Parent::Child::Grandchild', '<p>Grandchild original</p>');
+    window.loadPage(child.id);
+    return { target: target.id, child: child.id, nested: nested.id };
+  });
+  const openMove = async () => {
+    await page.getByRole('button', { name: 'More actions for Child', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Move to space', exact: true });
+  };
+  let dialog = await openMove();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).spaceId, staged.child)).toBe('default');
+  dialog = await openMove();
+  await dialog.getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(dialog.getByRole('status')).toContainText('already has a page');
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.child)).toBe('Parent::Child');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'More actions for Child', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.locator('#renamePageName').fill('Parent::Unique child');
+  await page.locator('#renamePageModal').getByRole('button', { name: 'Save', exact: true }).click();
+  await page.locator('#editorV2Host .ProseMirror').fill('Pending source edit');
+  await page.getByRole('button', { name: 'More actions for Unique child', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Move to space', exact: true }).getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Pending source edit');
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.child)).toBe('Unique child');
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.nested)).toBe('Unique child::Grandchild');
+});
+
 test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);
