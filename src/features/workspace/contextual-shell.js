@@ -207,8 +207,9 @@
     details.className = 'notes-toolbar-overflow';
     var summary = document.createElement('summary');
     summary.className = 'toolbar-btn notes-toolbar-overflow-toggle';
-    summary.setAttribute('aria-label', 'More note tools');
-    summary.setAttribute('title', 'More note tools');
+    summary.setAttribute('aria-label', 'Insert and note tools');
+    summary.setAttribute('title', 'Insert and note tools');
+    summary.setAttribute('aria-haspopup', 'menu');
     var summaryIcon = document.createElement('i');
     summaryIcon.className = 'fas fa-ellipsis';
     summaryIcon.setAttribute('aria-hidden', 'true');
@@ -216,9 +217,31 @@
     var menu = document.createElement('div');
     menu.className = 'notes-toolbar-overflow-menu';
     menu.setAttribute('role', 'menu');
-    menu.setAttribute('aria-label', 'More note tools');
+    menu.id = 'notesToolsMenu';
+    summary.setAttribute('aria-controls', menu.id);
+    menu.setAttribute('aria-label', 'Insert and note tools');
     menu.hidden = true;
     details.appendChild(summary);
+
+    function section(label) {
+      var heading = document.createElement('div');
+      heading.className = 'notes-tools-section';
+      heading.setAttribute('role', 'presentation');
+      heading.textContent = label;
+      menu.appendChild(heading);
+    }
+    section('Insert');
+    var inserts = document.getElementById('insertMoreMenu');
+    if (inserts) {
+      Array.from(inserts.querySelectorAll('button')).forEach(function (control) {
+        control.classList.add('notes-overflow-item');
+        control.setAttribute('role', 'menuitem');
+        menu.appendChild(control);
+      });
+    }
+    var insertToggle = document.getElementById('insertMoreBtn');
+    if (insertToggle) { insertToggle.hidden = true; insertToggle.style.display = 'none'; }
+    section('Page and view');
 
     var secondarySelectors = [
       '#splitNotesToggleBtn',
@@ -259,6 +282,7 @@
       var rect = summary.getBoundingClientRect();
       menu.style.top = Math.round(rect.bottom + 8) + 'px';
       menu.style.right = Math.max(10, Math.round(window.innerWidth - rect.right)) + 'px';
+      menu.style.maxHeight = Math.min(640, Math.max(120, window.innerHeight - rect.bottom - 18)) + 'px';
     }
 
     function closeMenu() {
@@ -268,24 +292,57 @@
     }
 
     summary.setAttribute('aria-expanded', 'false');
-    details.addEventListener('toggle', function () {
+    function syncMenu() {
       menu.hidden = !details.open;
       summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
-      if (details.open) positionMenu();
+      if (details.open) {
+        positionMenu();
+        menu.scrollTop = 0;
+        var label = document.getElementById('suggestingModeLabel');
+        if (label) label.textContent = document.body.classList.contains('suggesting-mode') ? 'Turn off suggesting' : 'Turn on suggesting';
+      }
+    }
+    details.addEventListener('toggle', syncMenu);
+    summary.addEventListener('click', function (event) {
+      event.preventDefault();
+      details.open = !details.open;
+      syncMenu();
     });
 
     details.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        details.open = true;
+        menu.hidden = false;
+        positionMenu();
+        var items = menu.querySelectorAll('button:not(:disabled)');
+        (event.key === 'ArrowDown' ? items[0] : items[items.length - 1])?.focus();
+        return;
+      }
       if (event.key !== 'Escape') return;
       closeMenu();
       summary.focus();
     });
     menu.addEventListener('keydown', function (event) {
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        var items = Array.from(menu.querySelectorAll('button:not(:disabled)'));
+        var index = items.indexOf(document.activeElement);
+        var next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[next]?.focus();
+        return;
+      }
       if (event.key !== 'Escape') return;
+      event.preventDefault();
       closeMenu();
       summary.focus();
     });
     menu.addEventListener('click', function (event) {
-      if (event.target.closest('button')) closeMenu();
+      if (event.target.closest('button') && !event.target.closest('.notes-overflow-zoom')) closeMenu();
+    });
+    menu.addEventListener('mousedown', function (event) {
+      if (event.target.closest('button')) event.preventDefault();
     });
     window.addEventListener('resize', function () {
       if (details.open) positionMenu();
@@ -293,6 +350,91 @@
     document.addEventListener('pointerdown', function (event) {
       if (details.open && !details.contains(event.target) && !menu.contains(event.target)) closeMenu();
     });
+  }
+
+  function initNoteTabs() {
+    var toolbar = document.querySelector('#view-notes .toolbar-wrapper');
+    if (!toolbar || document.getElementById('notesPageTabs')) return;
+    var strip = document.createElement('nav');
+    strip.id = 'notesPageTabs';
+    strip.className = 'notes-page-tabs';
+    strip.setAttribute('aria-label', 'Open pages');
+    strip.hidden = true;
+    toolbar.parentNode.insertBefore(strip, toolbar);
+    var opened = [];
+
+    function render() {
+      var bridge = window.flowAtelier;
+      if (!bridge || !Array.isArray(bridge.pages)) return;
+      var pages = bridge.pages;
+      var current = bridge.currentPageId;
+      var pair = bridge.getNotesSplitPair?.();
+      opened = opened.filter(function (id) { return pages.some(function (p) { return p.id === id; }); });
+      [pair?.left, pair?.right, current].forEach(function (id) {
+        if (id && !opened.includes(id)) opened.push(id);
+      });
+      if (pair) {
+        opened = opened.filter(function (id) { return id !== pair.right; });
+        opened.splice(opened.indexOf(pair.left) + 1, 0, pair.right);
+      }
+      var focusedId = strip.contains(document.activeElement) ? document.activeElement.dataset.pageId : null;
+      strip.replaceChildren();
+      var pairGroup = null;
+      opened.forEach(function (id) {
+        var page = pages.find(function (p) { return p.id === id; });
+        if (!page) return;
+        var paired = pair && (id === pair.left || id === pair.right);
+        if (paired && !pairGroup) {
+          pairGroup = document.createElement('div');
+          pairGroup.className = 'notes-paired-tabs';
+          pairGroup.setAttribute('role', 'group');
+          pairGroup.setAttribute('aria-label', 'Paired notes');
+          strip.appendChild(pairGroup);
+        }
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'notes-page-tab';
+        button.dataset.pageId = id;
+        button.textContent = String(page.title || 'Untitled').split('::').pop();
+        button.title = button.textContent + (paired ? ' — paired note' : '');
+        if (id === current || (paired && current === pair.left)) button.setAttribute('aria-current', 'page');
+        button.addEventListener('click', function () { bridge.loadPage(id); });
+        (paired ? pairGroup : strip).appendChild(button);
+        if (pair && id === pair.right) {
+          var unpair = document.createElement('button');
+          unpair.type = 'button';
+          unpair.className = 'notes-unpair-button';
+          var unlinkIcon = document.createElement('i');
+          unlinkIcon.className = 'fas fa-unlink';
+          unlinkIcon.setAttribute('aria-hidden', 'true');
+          unpair.appendChild(unlinkIcon);
+          unpair.title = 'Unpair notes';
+          unpair.setAttribute('aria-label', 'Unpair notes');
+          unpair.addEventListener('click', function () {
+            bridge.unpairNotes();
+            (document.querySelector('#editorV2Host .ProseMirror') || document.getElementById('editor'))?.focus();
+          });
+          pairGroup.appendChild(unpair);
+        }
+      });
+      strip.hidden = !pair;
+      if (focusedId) Array.from(strip.querySelectorAll('[data-page-id]')).find(function (b) { return b.dataset.pageId === focusedId; })?.focus({ preventScroll: true });
+    }
+    strip.addEventListener('keydown', function (event) {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      var buttons = Array.from(strip.querySelectorAll('button'));
+      var index = buttons.indexOf(document.activeElement);
+      if (index < 0) return;
+      event.preventDefault();
+      var next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next]?.focus();
+    });
+    window.addEventListener('sutra:note-page-loaded', render);
+    window.addEventListener('sutra:notes-pair-changed', render);
+    var tree = document.getElementById('pagesList');
+    if (tree) new MutationObserver(render).observe(tree, { childList: true, subtree: true });
+    render();
   }
 
   function init() {
@@ -303,6 +445,7 @@
       });
     }
     enhanceNotesToolbar();
+    initNoteTabs();
     initPageTreeGuides();
     settleSync(document.body && document.body.dataset.view);
 

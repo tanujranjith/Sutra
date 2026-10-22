@@ -40,6 +40,26 @@ the next page is loaded. Modern Editor V2 restores the comparison note's scroll
 position when switching between notes. A locked note stays read-only in the
 comparison pane until it is opened and unlocked in the main pane.
 
+Split View pairs specific pages. The open-page strip keeps the two paired tabs
+adjacent in a flat, underlined group with an explicit **Unpair notes** icon. Opening or
+creating another page shows that page normally without replacing either member.
+Select either paired tab to return to the same two panes; choosing the right tab
+activates its editor. A protected right-hand page opens in the primary pane for
+the normal PIN flow. The comparison selector explicitly changes the partner.
+Unpair or Close Split View ends the pairing and hides the tab strip; deleting or expiring a member also
+ends it instead of silently substituting another page. Focus mode temporarily
+hides the split without unpairing it.
+
+The pair uses the existing split-pane contexts, secondary-page setting, and
+split-view preference, so it survives reload and the existing backup paths.
+The list of ordinary open tabs is session-only and adds no workspace fields.
+Pending edits in both panes save through their existing paths before navigation.
+
+The toolbar's **Insert and note tools** menu combines the former plus dropdown
+and three-dot menu. Its Insert and Page and view sections retain all actions,
+including page breaks, split controls, document tools, and zoom. It scrolls
+within the viewport and supports arrow keys, Home/End, and Escape.
+
 The text-colour and highlight toolbar controls offer preset swatches in the
 native colour picker and still allow a custom colour. These choices format the
 current selection and do not add editor-only state to the page.

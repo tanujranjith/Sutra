@@ -1148,6 +1148,126 @@ test('Split View mounts independent Modern Editor instances', async ({ page }) =
   await expect(secondaryHandle).toHaveCount(0);
 });
 
+test('paired note tabs survive unrelated navigation, reload, and explicit unpairing', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'Pair Alpha');
+  await page.locator('#editorV2Host .ProseMirror').fill('Alpha original');
+  await createBlankNote(page, 'Pair Beta');
+  await page.locator('#editorV2Host .ProseMirror').fill('Beta original');
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  const tabs = page.locator('#notesPageTabs');
+  await expect(tabs.getByRole('group', { name: 'Paired notes' })).toBeVisible();
+  await expect(tabs.locator('.notes-paired-tabs [data-page-id]')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  await page.locator('#editorV2SecondaryHost .ProseMirror').fill('Alpha pending edit');
+  // Creating a page while the secondary pane is active must not replace either member.
+  await createBlankNote(page, 'Separate Gamma');
+  await page.locator('#editorV2Host .ProseMirror').fill('Gamma original');
+  await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
+  await expect(tabs.locator('.notes-paired-tabs [data-page-id]')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  await tabs.getByRole('button', { name: 'Pair Alpha', exact: true }).click();
+  await expect(page.locator('#pageTitle')).toHaveValue('Pair Beta');
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toHaveText('Alpha pending edit');
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Beta original');
+  await tabs.getByRole('button', { name: 'Separate Gamma', exact: true }).click();
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-pair-reload'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  await completeOnboarding(page);
+  await openNotesView(page);
+  await expect(page.locator('.notes-paired-tabs [data-page-id]')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  await page.locator('#pagesList .page-item').filter({ hasText: 'Separate Gamma' }).locator('.page-title').click();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Gamma original');
+  await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
+  await page.locator('#notesPageTabs').getByRole('button', { name: 'Pair Beta', exact: true }).click();
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toHaveText('Alpha pending edit');
+  await page.getByRole('button', { name: 'Unpair notes', exact: true }).click();
+  await expect(page.locator('#notesPageTabs')).toBeHidden();
+  await expect(page.locator('.notes-paired-tabs')).toHaveCount(0);
+  await expect(page.locator('#editorV2SecondaryHost')).toHaveCount(0);
+  await page.locator('#pagesList').getByText('Pair Alpha', { exact: true }).click();
+  await expect(page.locator('#pageTitle')).toHaveValue('Pair Alpha');
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Alpha pending edit');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-unpair-reload'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  await expect(page.locator('.notes-paired-tabs')).toHaveCount(0);
+});
+
+test('a protected paired tab uses the normal main-pane PIN flow without replacing its partner', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'Protected pair member');
+  await page.locator('#editorV2Host .ProseMirror').fill('Protected pair sentinel');
+  const protectedId = await page.evaluate(() => window.flowAtelier.currentPageId);
+  await page.evaluate(async id => {
+    await window.flowAtelier.flushAppSaveNow('e2e-paired-protected-note');
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(id, '4826');
+  }, protectedId);
+  await createBlankNote(page, 'Public pair member');
+  const publicId = await page.evaluate(() => window.flowAtelier.currentPageId);
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  await expect(page.locator('#editorV2SecondaryHost')).toBeHidden();
+  await page.locator('#notesPageTabs').getByRole('button', { name: 'Protected pair member', exact: true }).click();
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await expect(page.locator('#pageTitle')).toHaveValue('Protected pair member');
+  expect(await page.evaluate(() => window.flowAtelier.getNotesSplitPair())).toEqual({ left: protectedId, right: publicId });
+  await expect(page.locator('#editor')).not.toContainText('Protected pair sentinel');
+  await expect(page.locator('#editorV2Host')).not.toContainText('Protected pair sentinel');
+  await page.locator('#lockScreenPinInput').fill('4826');
+  await page.locator('#lockScreenForm button[type="submit"]').click();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText('Protected pair sentinel');
+  await expect(page.locator('.notes-paired-tabs [data-page-id]')).toHaveText(['Protected pair member', 'Public pair member']);
+});
+
+test('Classic paired edits flush before unrelated navigation and return to the same pages', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  for (const name of ['Classic Alpha', 'Classic Beta', 'Classic Gamma']) await createBlankNote(page, name);
+  await page.evaluate(() => {
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.loadPage(window.flowAtelier.pages.find(p => p.title === 'Classic Beta').id);
+    document.getElementById('splitNotesToggleBtn').click();
+  });
+  await page.locator('#editorSecondary').fill('Classic secondary edit');
+  await page.locator('#pagesList').getByText('Classic Gamma', { exact: true }).click();
+  await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
+  await page.locator('#notesPageTabs').getByRole('button', { name: 'Classic Alpha', exact: true }).click();
+  await expect(page.locator('#pageTitle')).toHaveValue('Classic Beta');
+  await expect(page.locator('#editorSecondary')).toHaveText('Classic secondary edit');
+});
+
+test('one keyboard-accessible note menu contains insert and page tools and preserves the caret', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'Unified tools');
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('Before');
+  await editor.press('End');
+  const toggle = page.locator('.notes-toolbar-overflow-toggle');
+  await toggle.press('ArrowDown');
+  const menu = page.getByRole('menu', { name: 'Insert and note tools', exact: true });
+  await expect(menu).toBeVisible();
+  await expect(page.locator('#insertMoreBtn')).toBeHidden();
+  await expect(menu.getByRole('menuitem', { name: 'Video', exact: true })).toBeVisible();
+  await expect(menu.locator('#pagesToggleBtn')).toHaveCount(1);
+  await expect(menu.locator('#splitNotesToggleBtn')).toHaveCount(1);
+  await expect(menu.locator('#editorZoomDisplay')).toHaveText('100%');
+  await menu.getByRole('menuitem', { name: 'Page break', exact: true }).click();
+  await expect(editor.locator('.atelier-page-break')).toHaveCount(1);
+  await expect(menu).toBeHidden();
+  await expect(editor).toContainText('Before');
+  await toggle.press('ArrowDown');
+  await page.keyboard.press('End');
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(toggle).toBeFocused();
+});
+
 test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);

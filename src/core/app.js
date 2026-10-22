@@ -9991,7 +9991,6 @@ function populateProgressDashboard() {
         let currentPageId = null;
         let secondaryPageId = null;
         let activeEditorPane = 'primary';
-        let splitViewEnabledBeforeFocusMode = false;
         let sidebarWasOpenBeforeFocusMode = false;
         let focusModeFullscreenLinked = false;
         let splitSecondaryDebounceTimer = null;
@@ -32267,6 +32266,8 @@ function buildOnboardingPlanPreview() {
             const expiredIds = new Set(expiredPages.map(page => String(page.id || '')));
             const currentWasRemoved = currentPageId && expiredIds.has(String(currentPageId));
             const secondaryWasRemoved = secondaryPageId && expiredIds.has(String(secondaryPageId));
+            if (expiredIds.has(String(splitPaneContexts?.leftContext?.selectedNoteId))
+                || expiredIds.has(String(appSettings?.notesSplitSecondaryPageId))) setSplitViewEnabled(false);
 
             pages = (Array.isArray(pages) ? pages : []).filter(page => !expiredIds.has(String(page && page.id || '')));
             tasks = (Array.isArray(tasks) ? tasks : []).map(task => {
@@ -32508,19 +32509,13 @@ function buildOnboardingPlanPreview() {
             const nextEnabled = !!enabled;
             const includeFullscreen = options && options.includeFullscreen === true;
             if (nextEnabled) {
-                splitViewEnabledBeforeFocusMode = !!appSettings.notesSplitViewEnabled;
-                if (splitViewEnabledBeforeFocusMode) {
-                    setSplitViewEnabled(false, { persist: false });
-                }
+                flushSecondaryPageBeforeContextChange();
                 const sidebar = document.getElementById('sidebar');
                 const sidebarOpen = !!(sidebar && !sidebar.classList.contains('collapsed'));
                 sidebarWasOpenBeforeFocusMode = sidebarOpen;
                 if (sidebarOpen) {
                     toggleSidebar();
                 }
-            } else if (splitViewEnabledBeforeFocusMode) {
-                setSplitViewEnabled(true, { persist: false });
-                splitViewEnabledBeforeFocusMode = false;
             }
 
             if (!nextEnabled) {
@@ -32534,6 +32529,7 @@ function buildOnboardingPlanPreview() {
             }
             appSettings.focusModeEnabled = nextEnabled;
             applyFocusModeState();
+            applySplitViewState();
             if (includeFullscreen) {
                 if (nextEnabled) {
                     focusModeFullscreenLinked = true;
@@ -34110,7 +34106,7 @@ function buildOnboardingPlanPreview() {
             if (splitNotesToggleBtn && splitNotesToggleBtn.dataset.bound !== 'true') {
                 splitNotesToggleBtn.dataset.bound = 'true';
                 splitNotesToggleBtn.addEventListener('click', () => {
-                    const next = !(appSettings && appSettings.notesSplitViewEnabled);
+                    const next = !isNotesSplitViewVisible();
                     setSplitViewEnabled(next);
                 });
             }
@@ -37473,38 +37469,18 @@ function buildOnboardingPlanPreview() {
 
         // ===== INSERT MORE DROPDOWN (Section 4 cleanup) =====
         function toggleInsertMoreMenu(event) {
-            const menu = document.getElementById('insertMoreMenu');
-            if (!menu) return;
-            const isOpen = menu.style.display === 'block';
-            if (isOpen) { menu.style.display = 'none'; return; }
-            // Position the menu below the button
-            const btn = document.getElementById('insertMoreBtn');
-            if (btn) {
-                const rect = btn.getBoundingClientRect();
-                menu.style.top = (rect.bottom + 6) + 'px';
-                // Align to right edge if would overflow
-                const menuWidth = 220;
-                const leftPos = rect.left;
-                const rightPos = rect.right - menuWidth;
-                if (leftPos + menuWidth > window.innerWidth - 12) {
-                    menu.style.left = Math.max(12, rightPos) + 'px';
-                } else {
-                    menu.style.left = leftPos + 'px';
-                }
-            }
-            menu.style.display = 'block';
-            // Update suggesting mode label
-            const label = document.getElementById('suggestingModeLabel');
-            if (label) {
-                const isOn = document.body.classList.contains('suggesting-mode');
-                label.textContent = isOn ? 'Turn off suggesting' : 'Turn on suggesting';
-            }
+            document.querySelector('.notes-toolbar-overflow-toggle')?.click();
             if (event) event.stopPropagation();
         }
 
         function closeInsertMoreMenu() {
             const menu = document.getElementById('insertMoreMenu');
             if (menu) menu.style.display = 'none';
+            const details = document.querySelector('.notes-toolbar-overflow');
+            if (details) details.open = false;
+            const tools = document.getElementById('notesToolsMenu');
+            if (tools) tools.hidden = true;
+            document.querySelector('.notes-toolbar-overflow-toggle')?.setAttribute('aria-expanded', 'false');
         }
 
         // ===== SUGGESTING MODE (Section 12) =====
@@ -44462,7 +44438,7 @@ ${renderedSections}
 
         function syncNotesSecondaryEditorV2() {
             const mirror = getSecondaryEditor();
-            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && appSettings.notesSplitViewEnabled && window.SutraNotesEditorV2?.isAvailable());
+            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && isNotesSplitViewVisible() && window.SutraNotesEditorV2?.isAvailable());
             let host = document.getElementById('editorV2SecondaryHost');
             if (!enabled) {
                 flushSecondaryPageBeforeContextChange();
@@ -44698,7 +44674,7 @@ function getActiveEditor() {
     const secondaryVisible = !!(
         secondary &&
         appSettings &&
-        appSettings.notesSplitViewEnabled &&
+        isNotesSplitViewVisible() &&
         secondaryPane &&
         secondaryPane.style.display !== 'none'
     );
@@ -45353,6 +45329,19 @@ function getActiveEditor() {
             return pages.filter(page => page && !isHelpDocsPage(page) && normalizePageType(page.type) !== PAGE_TYPES.CANVAS && !isFolderPage(page));
         }
 
+        function getNotesSplitPair() {
+            if (!appSettings?.notesSplitViewEnabled) return null;
+            const left = splitPaneContexts?.leftContext?.selectedNoteId || currentPageId;
+            const right = appSettings.notesSplitSecondaryPageId || secondaryPageId;
+            const available = getAvailableSplitPages();
+            if (!left || !right || left === right || !available.some(p => p.id === left) || !available.some(p => p.id === right)) return null;
+            return { left, right };
+        }
+
+        function isNotesSplitViewVisible() {
+            return !appSettings?.focusModeEnabled && getNotesSplitPair()?.left === currentPageId;
+        }
+
         function getFallbackSecondaryPageId() {
             const candidates = getAvailableSplitPages().filter(page => page.id !== currentPageId);
             return candidates[0] ? candidates[0].id : null;
@@ -45509,6 +45498,9 @@ function getActiveEditor() {
             try { updateSplitPaneContext('right', { selectedNoteId: page.id, scrollPosition: editor.scrollTop || 0 }); } catch (err) { /* non-critical */ }
             if (shouldPersist && appSettings) {
                 appSettings.notesSplitSecondaryPageId = page.id;
+                updateSplitPaneContext('left', { selectedNoteId: currentPageId });
+                setSplitViewSelection('notes', 'notes');
+                renderNotesTabsSignal();
                 persistAppData();
             }
         }
@@ -45533,7 +45525,7 @@ function getActiveEditor() {
         }
 
         function applySplitViewState() {
-            const enabled = !!(appSettings && appSettings.notesSplitViewEnabled);
+            const enabled = isNotesSplitViewVisible();
             const secondaryPane = document.getElementById('notesSecondaryPane');
             const container = document.getElementById('notesEditorContainer');
             const toggleBtn = document.getElementById('splitNotesToggleBtn');
@@ -45542,6 +45534,7 @@ function getActiveEditor() {
             if (container) container.classList.toggle('split-active', enabled);
             if (secondaryPane) secondaryPane.setAttribute('aria-hidden', enabled ? 'false' : 'true');
             if (toggleBtn) toggleBtn.classList.toggle('active', enabled);
+            renderNotesTabsSignal();
 
             if (!enabled) {
                 syncNotesSecondaryEditorV2();
@@ -45552,14 +45545,7 @@ function getActiveEditor() {
             setActiveEditorPane('primary');
             syncNotesSplitPaneStickyMetrics();
             renderSplitNoteSelect();
-            const fallbackId = getFallbackSecondaryPageId();
-            // Prefer the deeper pane-context restore over the legacy single-id
-            // setting, so a saved Notes+Notes split pairing comes back exactly.
-            const ctxRightId = (splitPaneContexts && splitPaneContexts.rightContext && splitPaneContexts.rightContext.selectedNoteId) || null;
-            const preferredId = (secondaryPageId && secondaryPageId !== currentPageId)
-                ? secondaryPageId
-                : (ctxRightId || (appSettings && appSettings.notesSplitSecondaryPageId) || fallbackId);
-            loadSecondaryPage(preferredId, { persist: false });
+            loadSecondaryPage(getNotesSplitPair().right, { persist: false });
             // Mark the current pane pairing so future cross-view splits know.
             setSplitViewSelection('notes', 'notes');
         }
@@ -45580,12 +45566,19 @@ function getActiveEditor() {
                 if (!secondaryPageId || secondaryPageId === currentPageId) {
                     secondaryPageId = appSettings.notesSplitSecondaryPageId || fallbackId;
                 }
+                if (secondaryPageId === currentPageId) secondaryPageId = fallbackId;
+                updateSplitPaneContext('left', { selectedNoteId: currentPageId });
+                setSplitViewSelection('notes', 'notes');
             } else {
                 flushSecondaryPageBeforeContextChange();
             }
 
             appSettings.notesSplitViewEnabled = nextEnabled;
             appSettings.notesSplitSecondaryPageId = secondaryPageId || null;
+            if (shouldPersist) {
+                ensureWorkspacePreferences();
+                appSettings.preferences.editor.splitViewDefault = nextEnabled;
+            }
             applySplitViewState();
             if (shouldPersist) persistAppData();
         }
@@ -45595,11 +45588,15 @@ function getActiveEditor() {
             flushSecondaryPageBeforeContextChange();
             const target = secondaryPageId;
             const oldPrimaryId = currentPageId;
+            updateSplitPaneContext('left', { selectedNoteId: target });
+            appSettings.notesSplitSecondaryPageId = oldPrimaryId;
+            secondaryPageId = oldPrimaryId;
             loadPage(target);
-            if (oldPrimaryId && oldPrimaryId !== target) {
-                secondaryPageId = oldPrimaryId;
-                loadSecondaryPage(oldPrimaryId);
-            }
+            persistAppData();
+        }
+
+        function renderNotesTabsSignal() {
+            window.dispatchEvent(new CustomEvent('sutra:notes-pair-changed'));
         }
 
         function ensureInlineValidationHint(inputEl) {
@@ -49061,6 +49058,32 @@ function getActiveEditor() {
 
         function loadPage(pageId) {
             purgeExpiredTemporaryPages({ silent: true });
+            const pair = getNotesSplitPair();
+            if (pair && pageId === pair.right) {
+                const target = pages.find(p => p.id === pair.right);
+                if (target && !isPageContentAuthorized(target)) {
+                    flushVisibleNotesEditorsBeforeLeaving();
+                    updateSplitPaneContext('left', { selectedNoteId: pair.right });
+                    appSettings.notesSplitSecondaryPageId = pair.left;
+                    secondaryPageId = pair.left;
+                    loadPage(pair.right);
+                    persistAppData();
+                    return;
+                }
+                if (currentPageId !== pair.left) loadPage(pair.left);
+                setActiveEditorPane('secondary');
+                (document.querySelector('#editorV2SecondaryHost .ProseMirror') || getSecondaryEditor())?.focus();
+                return;
+            }
+            flushSecondaryPageBeforeContextChange();
+            if (pair && currentPageId === pair.left && pageId !== pair.left) {
+                const outgoingRight = pages.find(p => p.id === pair.right);
+                if (outgoingRight?.isLocked && (outgoingRight.lockAutoLock || 'navigation') === 'navigation') {
+                    unlockedPageIds.delete(pair.right);
+                    clearAutoLockTimer(pair.right);
+                    getSecondaryEditor()?.replaceChildren();
+                }
+            }
 
             // Auto-lock the outgoing page when navigating away
             if (currentPageId && currentPageId !== pageId) {
@@ -49083,7 +49106,7 @@ function getActiveEditor() {
                 window.SutraFolderWorkspace?.close();
                 document.body.classList.remove('folder-page-active');
                 currentPageId = pageId;
-                try { updateSplitPaneContext('left', { selectedNoteId: pageId }); } catch (err) { /* non-critical */ }
+                if (!pair || pageId === pair.left) updateSplitPaneContext('left', { selectedNoteId: pageId });
                 const uiState = ensureUiState();
                 if (uiState) {
                     uiState.lastOpenedPageId = pageId;
@@ -49158,16 +49181,7 @@ function getActiveEditor() {
                 restorePrimaryNotesScrollTop(getStoredPageScrollTop(pageId));
                 try { renderBacklinksPanel(isCanvasPage || isFolder ? null : pageId); } catch (err) { /* non-critical */ }
 
-                if (appSettings && appSettings.notesSplitViewEnabled) {
-                    if (!secondaryPageId || secondaryPageId === currentPageId) {
-                        secondaryPageId = getFallbackSecondaryPageId();
-                    }
-                    if (secondaryPageId) {
-                        loadSecondaryPage(secondaryPageId, { persist: true });
-                    } else {
-                        setSplitViewEnabled(false);
-                    }
-                }
+                applySplitViewState();
                 renderComments();
                 reopenLinkedPdfForNotePage(page);
 
@@ -49539,6 +49553,8 @@ function getActiveEditor() {
                 });
             }
             removeShortcutsForDeletedPages(Array.from(idsToDelete));
+            if (idsToDelete.has(splitPaneContexts?.leftContext?.selectedNoteId)
+                || idsToDelete.has(appSettings?.notesSplitSecondaryPageId)) setSplitViewEnabled(false);
             if (secondaryPageId && idsToDelete.has(secondaryPageId)) {
                 secondaryPageId = null;
                 if (appSettings) appSettings.notesSplitSecondaryPageId = null;
@@ -49559,14 +49575,8 @@ function getActiveEditor() {
             }
 
             renderSplitNoteSelect();
-            if (appSettings && appSettings.notesSplitViewEnabled) {
-                const fallback = secondaryPageId || getFallbackSecondaryPageId();
-                if (fallback) {
-                    loadSecondaryPage(fallback, { persist: true });
-                } else {
-                    setSplitViewEnabled(false);
-                }
-            }
+            if (appSettings?.notesSplitViewEnabled && !getNotesSplitPair()) setSplitViewEnabled(false);
+            else applySplitViewState();
             renderPagesList();
             if (options.toast !== false) showToast(permanent ? 'Page removed.' : 'Page deleted successfully!');
             if (permanent) {
@@ -50196,7 +50206,7 @@ function getActiveEditor() {
             const page = typeof pageOrId === 'object' && pageOrId
                 ? pageOrId : pages.find(entry => entry && String(entry.id) === String(pageOrId || ''));
             return !!(page && pages.includes(page) && activeView === 'notes'
-                && (String(page.id) === String(currentPageId) || (appSettings.notesSplitViewEnabled && String(page.id) === String(secondaryPageId)))
+                && (String(page.id) === String(currentPageId) || (isNotesSplitViewVisible() && String(page.id) === String(secondaryPageId)))
                 && String(page.spaceId || 'default') === String(activeSpaceId || 'default')
                 && !page.isSystemPage && !isHelpDocsPage(page) && isPageContentAuthorized(page)
                 && workspaceHydrationComplete && !workspaceImportInProgress && !sutraRemoteCommitPending
@@ -78417,6 +78427,8 @@ ${cspMeta}
                 get trash() { return trash; },
                 get focusSessions() { return focusSessions; },
                 get currentPageId() { return currentPageId; },
+                getNotesSplitPair: () => getNotesSplitPair(),
+                unpairNotes: () => setSplitViewEnabled(false),
                 get activeSpaceId() { return activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default'; },
                 get activeView() { return activeView; },
                 get unlockedPageIds() { return unlockedPageIds; },

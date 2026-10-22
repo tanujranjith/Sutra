@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261017-pin-management1",
-    "hash": "cd4eada5dfa095eb"
+    "stamp": "20261021-paired-notes3",
+    "hash": "b2103fbe3368428b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -340,8 +340,8 @@
     "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20261011-header-flow4",
-    "hash": "d2d01e3d4679216e"
+    "stamp": "20261021-paired-notes3",
+    "hash": "dcc5b2c11d7e26d6"
   },
   "src/features/workspace/create-page-templates.js": {
     "stamp": "20261003-create-review7",
@@ -368,8 +368,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261017-help-contracts1",
-    "hash": "fad9f3ddcbce7b0a"
+    "stamp": "20261021-paired-notes3",
+    "hash": "78a5895d5741b231"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -744,8 +744,8 @@
     "hash": "f01c288d9abf0b74"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261011-header-flow4",
-    "hash": "566794d464e835e9"
+    "stamp": "20261021-paired-notes3",
+    "hash": "9a90a2a1527d65f1"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",
