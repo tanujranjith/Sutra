@@ -720,3 +720,13 @@ Disposable data stays only in this QA browser origin: one goal, one major with
 two ratings, one SAT result, one task and one linked schedule block. Packs were
 enabled and dark theme selected in that origin only. Original user data was not
 imported or replaced. Provider requests and AI credit usage: zero.
+
+## October 22: Sidebar split tabs and cross-space moves
+
+- [x] Paired notes occupy one sidebar row with two adjacent tab cells and an unpair control on each. No top tab bar or separate paired-note list. Chrome measured both cells at the same vertical position. Opening Gamma preserved Beta + Alpha; returning restored both panes and the saved secondary edit. Unpair restored the ordinary rows, and reload retained the pair before unpairing.
+- [x] Move to space is available from page and folder actions. In the disposable localhost:5297 workspace, a note and HTML page moved between Notes and QA Destination with content/source intact after reload. A parent moved with a child and then with Slides, Sheets, and Canvas children. The spreadsheet formula =2*3 still displayed 6 after move and reload; Slides and Canvas opened in their correct editors. A conflicting title was refused without overwriting either page; Cancel retained the source edit.
+- [x] Corrected the stale active-space label after reload. Help & Docs and feature documentation describe the move workflow.
+
+Data impact: existing page records and IDs are retained; spaceId and, for a nested subtree, its title prefix change. No new durable fields or attachment copies. The user's 127.0.0.1 workspace was not edited. QA staging remains only in the separate localhost origin. No provider requests or AI credits used.
+
+Validation: required core runtime checks and staged hook passed 27 assertions; runtime-integrity and static-server guard self-tests passed. Edited JavaScript syntax and whitespace checks passed. Asset manifest and cache-stamp lock regenerated. CI regressions cover mixed models/asset references, unknown fields, PIN/pinned preservation, cancellation, name conflicts, nested moves, pending edits, and sidebar pairing. Those automated browser regressions were prepared but not run locally; latest CI remains pending while no-push applies. Cross-device Sync and full backup/restore are not established by these manual move checks.

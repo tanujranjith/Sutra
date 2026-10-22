@@ -427,7 +427,7 @@
           var member = members.find(function (p) { return p.id === row.dataset.pageId; });
           // Keep a parent entry when it owns children so its expand/collapse
           // control and original hierarchy remain available.
-          if (bridge.pages.some(function (p) { return p.title && p.title.startsWith(member.title + '::'); })) return;
+          if (bridge.pages.some(function (p) { return (p.spaceId || 'default') === (member.spaceId || 'default') && p.title && p.title.startsWith(member.title + '::'); })) return;
           hiddenRows.push({ row: row, hidden: row.hidden });
           row.hidden = true;
         });
