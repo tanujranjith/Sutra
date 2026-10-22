@@ -95,3 +95,32 @@ test('canonical render model gives both shells identical visible content, action
   assert.equal(dock.sources[0].noteId, 'n1');
   assert.equal(dock.claimType, 'workspace_fact');
 });
+
+
+test('shared response receipt retains live source identity, actual areas/history and context reductions', () => {
+  const safety = require('../../src/features/assistant/assistant-safety.js');
+  const receipt = core.buildResponseReceipt({
+    context: { depth: 'workspace', accessReport: { areasRead: ['planning'] } },
+    requestMessages: [{ role: 'user', content: 'Earlier question' }, { role: 'assistant', content: 'Earlier answer' }, { role: 'user', content: 'Compare my tasks' }],
+    sources: [{ kind: 'task', id: 'orchid', title: 'Old title', href: 'sutra://entity/task%3Aorchid' }],
+    contextBudget: { reduced: true, reductionReasons: ['Whole evidence records omitted'], omitted: [{ id: 'one' }, { id: 'two' }] }
+  }, { provider: 'Mock provider', model: 'Mock model', dataTransmitted: true }, {
+    safety, workspaceAccess: 'minimal', resolveSource: (kind, id) => kind === 'task' && id === 'orchid' ? { title: 'Live Orchid', href: 'sutra://task/orchid' } : null
+  });
+  assert.equal(receipt.workspaceAccess, 'workspace');
+  assert.equal(receipt.priorConversationIncluded, true);
+  assert.deepEqual(receipt.areasInspected, ['planning']);
+  assert.ok(receipt.transmittedCategories.includes('recent conversation'));
+  assert.equal(receipt.sources[0].title, 'Live Orchid');
+  assert.equal(receipt.contextReduced, true); assert.equal(receipt.omittedSourceCount, 2);
+});
+
+test('shared receipt fails closed without safety and keeps local provider/data disclosure accurate', () => {
+  assert.equal(core.buildResponseReceipt(null, {}, {}), null);
+  const safety = require('../../src/features/assistant/assistant-safety.js');
+  const receipt = core.buildResponseReceipt({ context: {}, requestMessages: [{ role: 'user', content: 'Question' }] },
+    { local: true, provider: 'Must not be labeled as contacted', dataTransmitted: true, deterministicEngines: ['Local help'] }, { safety, workspaceAccess: 'currentView' });
+  assert.equal(receipt.workspaceAccess, 'currentView');
+  assert.equal(receipt.provider, ''); assert.equal(receipt.dataTransmitted, false);
+  assert.equal(receipt.priorConversationIncluded, false); assert.deepEqual(receipt.transmittedCategories, []);
+});

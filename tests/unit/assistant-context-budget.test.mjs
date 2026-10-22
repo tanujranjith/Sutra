@@ -77,12 +77,13 @@ function createEnrichment({
     SutraProductKnowledge: { search: () => [] }
   };
   const enrich = compileFunction('buildRequestEnrichment', [
-    'getPref', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
+    'shouldInvestigateWorkspace', 'getPref', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
     'applyRelevantWorkspaceContext', 'getFlowAssistantContext', 'memStore', 'getActiveViewName',
     'retrieveNoteSources', 'window', 'getChatMemoryMode', 'buildConversationMessages',
     'getAttachments', 'buildSystemPromptParts', 'filterAssistantContext',
     'getActiveTutoringContract', 'getVisionCapability', 'consumeLockedPageAccess'
   ], [
+    () => false,
     (_key, fallback) => fallback,
     options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket : null,
     options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket.pageIds : [],

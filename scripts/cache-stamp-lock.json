@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261017-locked-target1",
-    "hash": "b4a1f7364f679e8e"
+    "stamp": "20261022-investigation1",
+    "hash": "0c0fc07058622522"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-create-split4",
-    "hash": "e4746d5259fbf427"
+    "stamp": "20261022-investigation1",
+    "hash": "5c9690d6e7e12184"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -184,8 +184,8 @@
     "hash": "7168f34034a3e5ce"
   },
   "src/features/assistant/assistant-core.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "feb2a1e8eb4256c1"
+    "stamp": "20261022-investigation2",
+    "hash": "5c158a6430141e22"
   },
   "src/features/assistant/assistant-permissions.js": {
     "stamp": "20261015-reliability2",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261017-locked-target1",
-    "hash": "bd0a471ed39f5ef0"
+    "stamp": "20261022-investigation1",
+    "hash": "825d5bc86b8f6cc2"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -232,8 +232,8 @@
     "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "c300f97999504e62"
+    "stamp": "20261022-investigation1",
+    "hash": "c1d006f6810ee509"
   },
   "src/features/assistant/writing-commands.js": {
     "stamp": "20261015-writing1",
@@ -304,8 +304,8 @@
     "hash": "987666d734d79136"
   },
   "src/features/workspace/audit-fixes.js": {
-    "stamp": "20260918-glass-clearance5",
-    "hash": "dd9049c797a135c3"
+    "stamp": "20261022-investigation1",
+    "hash": "b6ff6487dd3b13a1"
   },
   "src/features/workspace/backup-confidence.js": {
     "stamp": "20260915-cloud1",
@@ -504,8 +504,8 @@
     "hash": "949e9c15ba5ad93d"
   },
   "src/sync/sync-engine.js": {
-    "stamp": "20261015-conflict-review1",
-    "hash": "6932bd5c514d5c21"
+    "stamp": "20261022-investigation1",
+    "hash": "8a6a0917c99ac835"
   },
   "src/sync/sync-merge.js": {
     "stamp": "20260807-duress2",
@@ -720,8 +720,8 @@
     "hash": "d250ec565ffba14d"
   },
   "styles/responsive/student-workspaces-polish.css": {
-    "stamp": "20261018-settings-css5",
-    "hash": "f0e8d9f1bf7b0a2a"
+    "stamp": "20261022-investigation1",
+    "hash": "658cf8d9ab59a208"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -748,8 +748,8 @@
     "hash": "7bb9325f231114c9"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20261015-response-contrast3",
-    "hash": "f01c288d9abf0b74"
+    "stamp": "20261022-investigation1",
+    "hash": "2997dd1fc0a4a8cc"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20261021-space-move1",
@@ -764,8 +764,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20261018-settings-controls1",
-    "hash": "35e45928008a2f7c"
+    "stamp": "20261022-investigation1",
+    "hash": "2de33d6dec1d428b"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20261001-mobile-agenda1",

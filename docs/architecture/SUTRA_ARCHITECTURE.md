@@ -46,6 +46,13 @@ outside the optional Assistant pack, so disabled/lazy Assistant UI cannot discar
 saved source identities. Missing source cards can recover metadata from their
 saved response receipt; this does not retrieve bodies or grant access.
 
+The on-demand investigation loop and pure response-receipt builder also live in
+`SutraAssistantCore`. `flow-assistant.js` owns canonical registry reads, current
+privacy/scope checks, source clarification and progress UI; `app.js` retains the
+provider harness and both chat entry points. Every investigation transport goes
+through that existing harness, with at most three calls and no automatic retries.
+No durable index or second workspace is introduced.
+
 ### Core safety layer (loaded before everything else)
 
 The safety layer also includes **`src/core/migrations.js`**

@@ -548,9 +548,11 @@
                 '- **Minimal** — almost nothing beyond your message.',
                 '- **Current view** — only what is on the active screen / current area.',
                 '- **Workspace-aware** — relevant permitted records from across your workspace; it does not send everything or grant access.',
+                'With a connected provider, try **investigate my Orchid assignment notes** or **compare my Orchid and Cedar assignment records**. Sutra can search local canonical records on demand, show similar matches for you to choose, then send only selected bounded evidence. Sources used shows what was actually sent. Stop cancels both the request and a pending source choice.',
+                'An investigation can make up to **three provider calls**, which may increase provider charges. Each lookup returns at most four records and each text request stays within 6,000 estimated tokens including a 1,536-token answer reserve. Partial-result notices explain limits. Access denials and exclusions still apply; this loop never reads locked notes or reuses a one-time PIN grant.',
                 'Locked-note contents are excluded by default at every depth. An explicit request about an identified locked page starts a separate one-time permission and page-PIN check; that grant applies only to the current request. API keys are never included. Change context depth in Settings ▸ Assistant or by asking the assistant.'
             ],
-            keywords: ['workspace access', 'context depth', 'minimal', 'current view', 'full workspace', 'how much context', 'what can it see'],
+            keywords: ['workspace access', 'context depth', 'minimal', 'current view', 'full workspace', 'how much context', 'what can it see', 'investigate', 'compare records', 'workspace lookup', 'lookup cost'],
             nav: { view: 'settings', section: 'assistant' },
             relatedActions: ['change_context_depth', 'navigate'],
             related: ['assistant-settings', 'privacy-local-first']

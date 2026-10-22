@@ -74381,35 +74381,19 @@ ${cspMeta}
         }
 
         function buildAssistantResponseReceipt(enrichment, meta = {}) {
-            const safety = window.SutraAssistantSafety;
-            if (!safety || typeof safety.normalizeReceipt !== 'function') return null;
-            const ctx = enrichment && enrichment.context || {};
-            const access = ctx.accessReport || {};
-            const attachments = enrichment && Array.isArray(enrichment.attachments) ? enrichment.attachments : [];
-            const messages = enrichment && Array.isArray(enrichment.requestMessages) ? enrichment.requestMessages : [];
-            const budget = enrichment && enrichment.contextBudget;
-            const areas = Array.isArray(access.areasRead) ? access.areasRead : [];
-            const sources = (enrichment && Array.isArray(enrichment.sources) ? enrichment.sources : []).map(source => ({
-                kind: source.noteId ? 'note' : source.kind, id: source.noteId || source.id, title: source.title,
-                updatedAt: source.updatedAt, version: source.version, href: source.href, readOnce: source.readOnce === true,
-                status: source.stale ? 'stale' : 'available'
-            }));
-            const categories = ['message'].concat(areas);
-            if (ctx.selection) categories.push('selected text');
-            if (messages.length > 1) categories.push('recent conversation');
-            if (ctx.memoryUsedIds && ctx.memoryUsedIds.length) categories.push('saved memory snippets');
-            if (attachments.length) categories.push('attachments');
-            return safety.normalizeReceipt({
-                local: meta.local === true, status: meta.status || 'complete', provider: meta.provider || '', model: meta.model || '',
-                workspaceAccess: ctx.depth || getWorkspacePreference('assistant.contextDepth', 'currentView'), selectedTextIncluded: !!ctx.selection,
-                priorConversationIncluded: messages.length > 1, areasInspected: areas, sources, memoryUsedIds: ctx.memoryUsedIds || [],
-                attachments: attachments.map(item => ({ name: item.name, type: item.category || item.mediaType, processingPath: item.processingPlan, status: 'included' })),
-                deterministicEngines: meta.deterministicEngines || (meta.local ? ['Sutra Intelligence'] : []), actionsProposed: meta.actionsProposed || [],
-                dataTransmitted: meta.local !== true && meta.dataTransmitted !== false, transmittedCategories: meta.local ? [] : categories,
-                contextReduced: !!(budget && budget.reduced), reductionReasons: budget && budget.reductionReasons || [],
-                omittedSourceCount: budget && budget.omitted ? budget.omitted.length : (ctx.contextBudget && ctx.contextBudget.omittedSourceCount) || 0,
-                errorCategory: meta.errorCategory || '', partial: meta.partial === true
-            }, resolveAssistantReceiptSource);
+            const core = window.SutraAssistantCore;
+            if (!core || typeof core.buildResponseReceipt !== 'function') return null;
+            return core.buildResponseReceipt(enrichment, meta, {
+                safety: window.SutraAssistantSafety, resolveSource: resolveAssistantReceiptSource,
+                workspaceAccess: getWorkspacePreference('assistant.contextDepth', 'currentView')
+            });
+        }
+
+        function performAssistantChatRequest(requestOptions, context) {
+            const assistant = window.flowAssistant;
+            return assistant && typeof assistant.performWorkspaceInvestigation === 'function'
+                ? assistant.performWorkspaceInvestigation(requestOptions, { ...context, request: performIntelligenceRequest })
+                : performIntelligenceRequest(requestOptions);
         }
 
         function buildAssistantGateReceipt(errorCategory, meta = {}) {
@@ -77272,6 +77256,11 @@ ${cspMeta}
                 <p style="margin:0 0 10px;">Your API key is stored in this browser's <strong>session storage</strong> (cleared when the tab closes) and is never written into workspace backups. Session storage still relies on this page being free of malicious scripts.</p>
                 <p style="margin:0;opacity:0.85;">Response quality depends on the provider and model you select. Review AI-generated suggestions before applying them.</p>
             `;
+            if (detail.workspaceInvestigation) {
+                const notice = document.createElement('p');
+                notice.textContent = 'This workspace investigation may make up to three provider calls. Only bounded, permitted matches and selected records are sent. Ambiguous matches require your choice; Stop cancels further lookups.';
+                body.appendChild(notice);
+            }
             if (detail.receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
                 const receiptEl = window.SutraAssistantSafety.renderReceipt(detail.receipt, {
                     document, resolveSource: resolveAssistantReceiptSource,
@@ -78222,6 +78211,7 @@ ${cspMeta}
                     send: (surface, options) => surface === 'full' ? asstSend() : sendChat(options || {}),
                     cancel: (surface) => {
                         if (surface === 'full') return asstStopRequest();
+                        window.flowAssistant?.cancelWorkspaceInvestigation?.();
                         activeIntelligenceRequests.forEach((entry, id) => {
                             if (entry && entry.kind === 'chat') cancelIntelligenceRequest(id);
                         });
@@ -78455,7 +78445,7 @@ ${cspMeta}
                 const acknowledged = await ensureAiSendDisclosure({
                     providerLabel: providerConfig.label,
                     model: selectedModel,
-                    receipt: preSendReceipt
+                    receipt: preSendReceipt, workspaceInvestigation: flowEnrichment?.workspaceInvestigation === true
                 });
                 if (!acknowledged) {
                     appendChatNotice('Cancelled — nothing was sent to the AI provider.', { receipt: buildAssistantResponseReceipt(flowEnrichment, { local: true, status: 'cancelled', errorCategory: 'cancellation', dataTransmitted: false }) });
@@ -78497,7 +78487,7 @@ ${cspMeta}
                 // explicit processing plans from the capability registry.
                 const flowAttachments = flowEnrichment && Array.isArray(flowEnrichment.attachments) ? flowEnrichment.attachments : [];
 
-                const result = await performIntelligenceRequest({
+                const result = await performAssistantChatRequest({
                     kind: 'chat',
                     provider,
                     providerConfig,
@@ -78525,10 +78515,10 @@ ${cspMeta}
                     },
                     onRequestStarted: (requestId) => {
                         showThinkingIndicator({
-                            onCancel: () => cancelIntelligenceRequest(requestId)
+                            onCancel: () => { window.flowAssistant?.cancelWorkspaceInvestigation?.(); cancelIntelligenceRequest(requestId); }
                         });
                     }
-                });
+                }, { enrichment: flowEnrichment, userText: text, scope: ensureCurrentConversation().scope, messagesHost: messagesEl, isCancelled: () => currentChatId !== sendChatId });
 
                 hideThinkingIndicator();
                 const isStale = currentChatId !== sendChatId;
@@ -78594,7 +78584,7 @@ ${cspMeta}
                 const parsedActions = window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
                     ? window.flowAssistant.parseActions(persistClean, { userText: text }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
-                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
+                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, partial: result.partial === true, actionsProposed: actionTypes });
                 if (isStale) {
                     // Conversation changed mid-flight: persist into the original
                     // conversation's message array, never the visible transcript.
@@ -80542,6 +80532,7 @@ ${cspMeta}
         }
         function asstStopRequest() {
             asstStream.cancelled = true;
+            window.flowAssistant?.cancelWorkspaceInvestigation?.();
             if (asstActiveRequestId) { try { cancelIntelligenceRequest(asstActiveRequestId); } catch (e) { /* settled */ } }
         }
 
@@ -80718,7 +80709,7 @@ ${cspMeta}
             });
             // First remote request privacy disclosure (local endpoints skip this).
             if (!isLocalProvider) {
-                const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model: selectedModel, receipt: preSendReceipt });
+                const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model: selectedModel, receipt: preSendReceipt, workspaceInvestigation: flowEnrichment?.workspaceInvestigation === true });
                 if (!acknowledged) {
                     asstNotice('Cancelled — nothing was sent to the AI provider.', { receipt: buildAssistantResponseReceipt(flowEnrichment, { local: true, status: 'cancelled', errorCategory: 'cancellation', dataTransmitted: false }) });
                     return;
@@ -80755,7 +80746,7 @@ ${cspMeta}
                     : [{ role: 'user', content: sendText }];
                 const flowAttachments = flowEnrichment && Array.isArray(flowEnrichment.attachments) ? flowEnrichment.attachments : [];
 
-                const result = await performIntelligenceRequest({
+                const result = await performAssistantChatRequest({
                     kind: 'chat',
                     provider,
                     providerConfig,
@@ -80783,7 +80774,7 @@ ${cspMeta}
                         updateAsstLivePlaceholder(livePlaceholder, textSoFar);
                     },
                     onRequestStarted: (rid) => { asstActiveRequestId = rid; }
-                });
+                }, { enrichment: flowEnrichment, userText: sendText, scope: ensureCurrentConversation().scope, messagesHost: asstCache.msgs, isCancelled: () => asstStream.cancelled || currentChatId !== sendChatId });
 
                 asstHideTyping(typing);
                 asstActiveRequestId = null;
@@ -80827,7 +80818,7 @@ ${cspMeta}
                 const parsedActions = !themeChatRequest && window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
                     ? window.flowAssistant.parseActions(persistClean, { userText: displayText || sendText }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
-                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
+                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, partial: result.partial === true, actionsProposed: actionTypes });
                 const persistMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
                 // Ephemeral per-response stats (session Map keyed by this id).
                 const _respStatsId = registerIntelligenceResponseStats(result, { reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto') });

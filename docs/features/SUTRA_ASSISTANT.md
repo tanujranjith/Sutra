@@ -129,6 +129,48 @@ With local routing enabled, requests such as “search my notes for…” and �
 my notes say about…” run entirely on-device and return quoted, clickable note
 evidence without requiring a provider.
 
+### On-demand workspace investigation
+
+Explicit workspace requests such as “investigate my Orchid assignment notes” or
+“compare my Orchid and Cedar assignment records” can ask the connected provider
+to search and then read additional permitted canonical records. Ordinary factual
+questions retain the existing single-request context selection; greetings, Minimal
+context, current-note/selected-text requests, attachments, theme creation, and
+one-time PIN reads keep their existing paths. Local note searches still run
+on-device when local routing is enabled.
+
+An investigation starts without an automatic workspace body dump or saved memory.
+The provider can request a specific local search, receive at most four matching
+records as metadata, and request at most four of those records as bounded evidence.
+Similar matches prompt **Which matching sources should I read?** before any body
+is sent. Choose one source or several to compare. Distinct comparison sources
+remain separate, and the answer is instructed to disclose contradictions and
+missing evidence. Search matches and bodies are re-resolved against canonical
+state and current permissions before every send. Locked notes never enter this
+loop, including notes unlocked in the editor; it cannot unlock a page or reuse a
+one-time PIN ticket. Exclusions, private/financial preferences, retired wellness
+records, Help pages, note/course scope and per-area denials continue to apply.
+
+The same text-only lookup protocol works through the existing Gemini, OpenAI and
+other configured provider adapters, without native tool support. A provider may
+answer directly when the supplied evidence is sufficient. A lookup has at most
+three provider calls, with automatic transport retries disabled inside this loop.
+Every serialized text request stays within 6,000 estimated tokens including the
+1,536-token answer reserve. Whole evidence records and older conversation turns
+may be omitted together with their source cards; explicit user input is never
+cut. An oversized request makes no call. Budget/turn limits and malformed lookup
+requests produce a visible partial-result explanation rather than implying a
+complete investigation.
+
+The UI shows concise lookup progress and the final answer. Lookup JSON, hidden
+reasoning, intermediate answers and controllers are not saved as conversation
+turns. **Sources used** and the response receipt reflect metadata/evidence actually
+sent, including a stopped or failed lookup; response token/latency totals aggregate
+its provider turns. Stop cancels the active transport and pending source choice.
+Changing permissions while choosing also cancels that choice. Final action
+proposals still use the existing review, Apply, cancellation and Undo lifecycle.
+No workspace schema, persistent index or second data store is introduced.
+
 ### Selected-text awareness
 
 The Assistant is aware of **text you have selected**. If you highlight a passage
@@ -220,6 +262,10 @@ The page's excerpts remain bounded by the request budget and source exclusions;
 the ticket cannot be reused. Content questions with a valid ticket bypass the
 generic product-Help fallback. Explicit local note searches and ordinary
 how-to questions about PIN protection retain their local behavior.
+
+The shared receipt builder lives in `SutraAssistantCore.buildResponseReceipt`;
+core supplies its safety service, live source resolver and context-depth fallback
+so both chat surfaces keep the same disclosure rules.
 
 The **What Sutra knows about me** view combines readable-note counts, explicit
 memories and their source links, current Assistant permissions, and detected
@@ -779,6 +825,10 @@ indicator) to reveal it.
 - **Legacy aliases (retained so existing code/plugins keep working):**
   `window.flowAssistant`, `window.getFlowAssistantContext`, and
   `window.flowIntelligence` point at the same objects.
+- **Investigation seam:** `SutraAssistantCore.runWorkspaceInvestigation` owns the
+  pure bounded loop; `flowAssistant.performWorkspaceInvestigation` injects canonical
+  reads, per-read privacy checks, clarification UI and the existing core transport.
+  `flowAssistant.cancelWorkspaceInvestigation` is called by both chat Stop controls.
 - **Source:** `src/features/assistant/flow-assistant.js` (panel + actions) and
   `src/features/assistant/flow-intelligence.js` (`deriveStudentContext`).
 

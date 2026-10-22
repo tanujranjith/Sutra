@@ -12,7 +12,7 @@ async function openFullAssistant(page) {
   });
   await page.goto('/Sutra.html');
   await waitForAppReady(page);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
     window.markStudentOnboardingCompleted?.(true);
     const overlay = document.getElementById('studentOnboardingOverlay');
@@ -23,7 +23,7 @@ async function openFullAssistant(page) {
       overlay.style.setProperty('display', 'none', 'important');
     }
     document.body.classList.remove('onboarding-open');
-    window.SutraFeatureRegistry?.enable('assistant', { test: true });
+    await window.SutraFeatureRegistry.enable('assistant', { test: true });
     window.flowAssistant?.init?.();
     window.setWorkspacePreference('assistant.enabled', true);
     window.setWorkspacePreference('assistant.contextDepth', 'workspace');
@@ -50,7 +50,13 @@ test('full Assistant retains task evidence across Stateful URL follow-ups and di
   const requests = [];
   await page.route('https://api.openai.com/v1/chat/completions', async route => {
     requests.push(route.request().postDataJSON());
-    const reply = 'Mocked Assistant reply ' + requests.length + '.';
+    const investigation = requests.length >= 3;
+    const step = requests.length - 3;
+    const reply = investigation ? (step === 0 ? '```sutra-lookup\n{"search":"Orchid Biology Midterm"}\n```' : step === 1 ? '```sutra-lookup\n{"read":["task:orchid-task","testing_exam:custom:biology-midterm"]}\n```' : 'Mocked Assistant reply 3.') : 'Mocked Assistant reply ' + requests.length + '.';
+    if (investigation) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: reply } }] }) });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'text/event-stream',
@@ -148,5 +154,5 @@ test('full Assistant retains task evidence across Stateful URL follow-ups and di
   await expect(persistedReply.locator('.assistant-sources')).not.toContainText('UNRELATED_SOURCE_SENTINEL');
   await expect(persistedReply.locator('.assistant-response-receipt')).toContainText('Orchid protocol worksheet (task)');
   await expect(persistedReply.locator('.assistant-response-receipt')).toContainText('Biology Midterm (testing_exam)');
-  expect(requests).toHaveLength(3);
+  expect(requests).toHaveLength(5);
 });

@@ -5074,9 +5074,245 @@
         return ctx;
     }
 
+
+    function shouldInvestigateWorkspace(userText, options = {}) {
+        if (options.disableInvestigation || currentLockedPageAccessTicket(options) || getAttachments().length) return false;
+        const depth = normalizeDepth(options.depth);
+        if (depth === 'minimal' || (depth === 'currentView' && getActiveViewName() !== 'assistantview')) return false;
+        const scope = options.scope || options.conversationScope || {};
+        if (scope.type && !['all', 'workspace', 'note', 'page', 'course'].includes(scope.type)) return false;
+        const text = String(userText || '');
+        if (/\b(?:this|current|open|active)\s+(?:note|page|canvas|slide)|\b(?:selected|highlighted)\s+text\b/i.test(text)) return false;
+        return /\b(?:my|our|workspace)\b/i.test(text)
+            && /\b(?:find|search|investigate|compare)\b|\blook\s+up\b/i.test(text)
+            && /\b(?:notes?|pages?|tasks?|to[ -]?dos?|homework|assignments?|courses?|classes|grades?|exams?|tests?|schedule|calendar|records?|workspace|materials?|documents?|projects?)\b/i.test(text);
+    }
+
+    // Search and every subsequent read share this deny-by-default policy. No
+    // tickets or editor unlock state enter an investigation.
+    function investigationArea(type) {
+        const areas = {
+            note: 'notes', task: 'planning', homework: 'planning', assignment_milestone: 'planning', timeline_block: 'planning',
+            course: 'courses', course_file: 'courses', grade_record: 'courses', review_deck: 'learning', review_card: 'learning',
+            academic_record: 'learning', study_record: 'learning', testing_exam: 'learning', testing_mistake: 'learning',
+            college_record: 'college', life_record: 'life', habit: 'life', business_record: 'business',
+            custom_tab: 'workspace', portfolio_entry: 'workspace', focus_template: 'workspace'
+        };
+        return areas[type] || '';
+    }
+
+    function investigationRecordAllowed(entity, options = {}) {
+        const privacy = window.SutraAssistantPrivacy;
+        if (!entity || !privacy || typeof privacy.canRead !== 'function' || typeof privacy.getPermissions !== 'function') return false;
+        const area = investigationArea(entity.type);
+        if (!area || !privacy.canRead(area) || !entity.privacy || entity.privacy.locked || entity.privacy.searchable === false) return false;
+        const permissions = privacy.getPermissions();
+        if (entity.privacy.private && !permissions.allowPrivateDocuments) return false;
+        const meta = entity.metadata || {};
+        const category = [meta.collection, meta.domain].join(' ');
+        if (/wellness|checkins|journalentries|fitness|calories|sleeptracker|journals/i.test(category)) return false;
+        if (!permissions.allowPrivateDocuments && /documents/i.test(category)) return false;
+        if (!permissions.allowFinancial && /cost|financial|invoice|finance|spend|expense|income|budget|scholarship|tuition/i.test(category)) return false;
+        const scope = options.scope || options.conversationScope || {};
+        const excluded = [].concat(scope.excludedSourceIds || [], scope.excludedNoteIds || []).map(String);
+        if (excluded.includes(String(entity.key)) || excluded.includes(String(entity.id))) return false;
+        if ((scope.type === 'note' || scope.type === 'page') && (entity.type !== 'note' || String(entity.id) !== String(scope.noteId || scope.pageId || scope.id))) return false;
+        if (scope.type === 'course' && String(entity.courseId || (entity.type === 'course' ? entity.id : '')) !== String(scope.courseId)) return false;
+        if (entity.type === 'note') {
+            const b = bridge({ diagnose: false });
+            const page = b && Array.isArray(b.pages) && b.pages.find(row => row && String(row.id) === String(entity.id));
+            if (!page || pageIsLocked(page) || page.isLocked === true) return false;
+            if (page.systemRole === 'help-docs' || page.builtInId === 'help-docs' || page.id === 'help_page' || page.isSystemPage) return false;
+            if (excluded.some(id => id.startsWith(String(entity.id) + ':') || id.startsWith('note:' + String(entity.id) + ':'))) return false;
+        }
+        return true;
+    }
+
+    function searchInvestigationRecords(query, options = {}) {
+        const registry = window.SutraWorkspaceEntityRegistry;
+        const privacy = window.SutraAssistantPrivacy;
+        if (!registry || !privacy || typeof registry.collectSearchable !== 'function' || typeof privacy.canRead !== 'function') return { matches: [], notice: 'Workspace search is unavailable.' };
+        const types = registry.listAdapters().map(row => row.id).filter(type => investigationArea(type) && privacy.canRead(investigationArea(type)));
+        if (!types.length) return { matches: [], notice: 'Workspace access does not permit this search. Ask the student to change access if wanted.' };
+        const terms = (String(query || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !/^(?:my|the|and|for|find|search|please|notes?|tasks?|workspace|compare)$/.test(term)).slice(0, 24);
+        if (!terms.length) return { matches: [], notice: 'Use specific topic or title terms to narrow the search.' };
+        const rows = registry.collectSearchable({}, { types, includePrivate: privacy.getPermissions().allowPrivateDocuments === true });
+        const ranked = rows.filter(row => investigationRecordAllowed(row, options)).map(row => {
+            const title = String(row.title || '').toLowerCase();
+            const text = String(row.text || '').toLowerCase();
+            const score = terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
+            return { row, score };
+        }).filter(row => row.score > 0).sort((a, b) => b.score - a.score || String(a.row.key).localeCompare(String(b.row.key)));
+        const safety = window.SutraAssistantSafety;
+        if (!safety || typeof safety.safeObject !== 'function') return { matches: [], notice: 'Workspace privacy filtering is unavailable.' };
+        const matches = ranked.slice(0, 4).map(({ row }) => ({ key: row.key, kind: row.type, title: String(row.title || '').slice(0, 300), courseId: row.courseId || '', updatedAt: row.dates && row.dates.updated || '', dueDate: row.dates && row.dates.due || '', status: row.status || '', citationUrl: row.type === 'note' ? 'sutra://page/' + encodeURIComponent(row.id) : 'sutra://entity/' + encodeURIComponent(row.key) })).map(row => { const safe = safety.safeObject(row); return safe && safe.key === row.key ? safe : null; }).filter(Boolean);
+        // A comparison intentionally asks for multiple distinct sources. Repeated
+        // names still require the student to identify the intended records.
+        const duplicateTitle = matches.some((row, index) => matches.some((other, next) => index !== next && row.title.toLowerCase() === other.title.toLowerCase()));
+        const compare = /\b(?:compare|versus|vs|differences?|contradict|across|both)\b/i.test(options.userText || '');
+        return { matches, ambiguous: duplicateTitle || (!compare && ranked.length > 1 && ranked[1].score >= ranked[0].score * 0.8),
+            notice: ranked.length > 4 ? 'Showing four matches; additional matches were omitted. Narrow the query for complete coverage.' : (matches.length ? 'Search returns metadata only. Read selected keys for content.' : 'No permitted matching records were found; this does not prove none exist.') };
+    }
+
+    function readInvestigationRecords(keys, options = {}) {
+        const registry = window.SutraWorkspaceEntityRegistry;
+        const privacy = window.SutraAssistantPrivacy;
+        const safety = window.SutraAssistantSafety, assistantCore = window.SutraAssistantCore;
+        if (!registry || typeof registry.find !== 'function' || !privacy || typeof privacy.canRead !== 'function' || !safety || typeof safety.safeObject !== 'function' || !assistantCore || typeof assistantCore.normalizeSource !== 'function') return [];
+        return (Array.isArray(keys) ? keys : []).slice(0, 4).map(key => {
+            const type = String(key).split(':')[0], area = investigationArea(type);
+            if (!area || !privacy.canRead(area)) return null;
+            const row = registry.find(String(key), {}, { includePrivate: privacy.getPermissions().allowPrivateDocuments === true });
+            if (!investigationRecordAllowed(row, options)) return null;
+            const text = String(row.text || '');
+            const citationUrl = row.type === 'note' ? 'sutra://page/' + encodeURIComponent(row.id) : 'sutra://entity/' + encodeURIComponent(row.key);
+            const evidence = { key: row.key, id: row.id, type: row.type, title: row.title, courseId: row.courseId || '',
+                dates: row.dates, status: row.status, excerpt: text.slice(0, 1200), truncated: text.length > 1200, citationUrl };
+            if (row.type === 'task' || row.type === 'homework') {
+                evidence.notes = String(row.metadata && row.metadata.taskNotes || '').slice(0, 1000);
+                evidence.notesTruncated = Number(row.metadata && row.metadata.taskNotesLength || 0) > 1000;
+                evidence.referenceUrl = safety.safeUrl(String(row.metadata && row.metadata.referenceUrl || '').slice(0, 1000));
+            }
+            const safeEvidence = safety.safeObject(evidence);
+            if (!safeEvidence || safeEvidence.key !== row.key || safeEvidence.id !== row.id) return null;
+            const source = assistantCore.normalizeSource(safety.safeObject(row.type === 'note'
+                ? { id: row.key, noteId: row.id, kind: 'note', title: row.title, quote: evidence.excerpt, href: citationUrl, updatedAt: row.dates && row.dates.updated, confidence: 'high', reasonCodes: ['investigation_read'] }
+                : { id: row.id, key: row.key, kind: row.type, title: row.title, href: citationUrl, confidence: 'high', reasonCodes: ['investigation_read'] }));
+            return source ? { evidence: safeEvidence, source, area } : null;
+        }).filter(Boolean);
+    }
+
+    let activeWorkspaceInvestigation = null;
+    function cancelWorkspaceInvestigation() {
+        if (activeWorkspaceInvestigation) activeWorkspaceInvestigation.abort();
+    }
+
+    function chooseInvestigationSources(matches, signal, options = {}) {
+        return new Promise(resolve => {
+            const host = options.messagesHost || document.getElementById(getActiveViewName() === 'assistantview' ? 'asstMessages' : 'chatbotMessages');
+            if (!host || signal.aborted) return resolve(null);
+            const previousFocus = document.activeElement;
+            const box = document.createElement('fieldset'); box.className = 'assistant-source-choice';
+            box.setAttribute('data-sutra-component', 'assistant-source-choice');
+            const legend = document.createElement('legend'); legend.textContent = 'Which matching sources should I read?'; box.appendChild(legend);
+            const hint = document.createElement('p'); hint.textContent = 'Choose one, or choose several to compare. Content is read only after your choice.'; box.appendChild(hint);
+            const controls = matches.map(row => {
+                const label = document.createElement('label'), input = document.createElement('input');
+                input.type = 'checkbox'; input.value = row.key;
+                label.appendChild(input); label.appendChild(document.createTextNode(' ' + row.title + ' · ' + row.kind + ' · ' + row.key + (row.dueDate ? ' · due ' + row.dueDate : ''))); box.appendChild(label); box.appendChild(document.createElement('br'));
+                return input;
+            });
+            const submit = document.createElement('button'); submit.type = 'button'; submit.textContent = 'Read selected sources'; submit.disabled = true;
+            const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel lookup';
+            box.appendChild(submit); box.appendChild(cancel); host.appendChild(box);
+            const privacy = window.SutraAssistantPrivacy;
+            const permissionSnapshot = JSON.stringify(privacy.getPermissions());
+            let done = false;
+            const finish = keys => { if (done) return; done = true; clearInterval(watch); signal.removeEventListener('abort', abort); const restoreFocus = box.contains(document.activeElement); box.remove(); if (restoreFocus && previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') previousFocus.focus(); resolve(keys); };
+            const abort = () => finish(null);
+            const watch = setInterval(() => { if (!box.isConnected || JSON.stringify(privacy.getPermissions()) !== permissionSnapshot || normalizeDepth() === 'minimal') finish(null); }, 300);
+            signal.addEventListener('abort', abort, { once: true });
+            controls.forEach(input => input.addEventListener('change', () => { submit.disabled = !controls.some(control => control.checked); }));
+            submit.addEventListener('click', () => {
+                if (signal.aborted || JSON.stringify(privacy.getPermissions()) !== permissionSnapshot) return finish(null);
+                finish(controls.filter(input => input.checked).map(input => input.value));
+            });
+            cancel.addEventListener('click', abort); controls[0].focus();
+        });
+    }
+
+    async function performWorkspaceInvestigation(requestOptions, options = {}) {
+        const enrichment = options.enrichment;
+        const runner = window.SutraAssistantCore;
+        const safety = window.SutraAssistantSafety;
+        if (!enrichment || !enrichment.workspaceInvestigation || !runner || typeof runner.runWorkspaceInvestigation !== 'function' || !safety || typeof safety.estimateTokens !== 'function') return options.request(requestOptions);
+        cancelWorkspaceInvestigation();
+        const controller = new AbortController(); activeWorkspaceInvestigation = controller;
+        const currentConversation = window.SutraAssistantConversationController && window.SutraAssistantConversationController.getCurrent();
+        const accessOptions = { scope: options.scope || {}, userText: options.userText || '' };
+        const refreshScope = () => {
+            const live = window.SutraAssistantConversationController && window.SutraAssistantConversationController.getCurrent();
+            if (currentConversation && (!live || live.id !== currentConversation.id)) { controller.abort(); return; }
+            accessOptions.scope = live && live.scope || options.scope || {};
+        };
+        let sentAreas = new Set(), sentHistory = [], omittedCount = 0;
+        const messagesHost = options.messagesHost || document.getElementById(getActiveViewName() === 'assistantview' ? 'asstMessages' : 'chatbotMessages');
+        let progressElement = null, progressText = null;
+        if (typeof options.onProgress !== 'function' && messagesHost && messagesHost.isConnected && !(options.isCancelled && options.isCancelled())) {
+            progressElement = document.createElement('p');
+            progressElement.className = 'assistant-investigation-progress';
+            progressElement.setAttribute('role', 'status');
+            progressElement.setAttribute('aria-live', 'polite');
+            progressElement.setAttribute('aria-atomic', 'true');
+            progressElement.setAttribute('data-sutra-component', 'assistant-investigation-progress');
+            progressElement.textContent = 'Workspace lookup: up to 3 provider calls; only selected permitted records are sent. ';
+            progressText = document.createElement('span'); progressElement.appendChild(progressText);
+            messagesHost.appendChild(progressElement);
+        }
+        const updateProgress = text => {
+            if (controller.signal.aborted || (options.isCancelled && options.isCancelled())) return;
+            if (typeof options.onProgress === 'function') options.onProgress(text);
+            else if (progressText && progressElement.isConnected) progressText.textContent = text;
+        };
+        try {
+            return await runner.runWorkspaceInvestigation({
+                signal: controller.signal, isCancelled: options.isCancelled, request: options.request, estimateTokens: safety.estimateTokens,
+                normalizeSource: source => runner.normalizeSource(safety.safeObject(source)),
+                onProgress: updateProgress,
+                search: query => { refreshScope(); return controller.signal.aborted ? { matches: [] } : searchInvestigationRecords(query, accessOptions); },
+                read: keys => { refreshScope(); return controller.signal.aborted ? [] : readInvestigationRecords(keys, accessOptions); },
+                choose: (matches, signal) => chooseInvestigationSources(matches, signal, options),
+                prepareTurn: state => {
+                    refreshScope();
+                    // Re-resolve canonical records and permission before every send,
+                    // including after the student has answered a clarification.
+                    const records = readInvestigationRecords(state.records.map(row => row.evidence.key), accessOptions);
+                    const matches = state.matches.map(row => {
+                        const area = investigationArea(row.kind), privacy = window.SutraAssistantPrivacy;
+                        if (!privacy || !privacy.canRead(area)) return null;
+                        const live = window.SutraWorkspaceEntityRegistry.find(row.key);
+                        return investigationRecordAllowed(live, accessOptions) ? Object.assign({}, row, { title: live.title, courseId: live.courseId || '', updatedAt: live.dates && live.dates.updated || '', dueDate: live.dates && live.dates.due || '', status: live.status || '' }) : null;
+                    }).filter(Boolean).map(row => { const safe = safety.safeObject(row); return safe && safe.key === row.key ? safe : null; }).filter(Boolean);
+                    const ctx = filterAssistantContext({ view: enrichment.context.view, depth: enrichment.context.depth, summary: 'Workspace evidence is available only through bounded lookup.', now: new Date().toISOString() });
+                    const parts = buildSystemPromptParts(ctx, options.userText);
+                    const categories = Array.from(new Set(['message'].concat(records.map(row => row.area), matches.map(row => investigationArea(row.kind)))));
+                    return { request: Object.assign({}, requestOptions, { systemPrompt: parts.static + '\n' + parts.dynamic,
+                        systemPromptParts: null, allowedCategories: categories, transmittedCategories: categories }), records, matches, sources: [], context: ctx };
+                },
+                onSent: (sources, prepared, records, reduced) => {
+                    records.forEach(row => sentAreas.add(row.area));
+                    (prepared.matches || []).forEach(row => sentAreas.add(investigationArea(row.kind)));
+                    enrichment.sources = sources;
+                    enrichment.context = Object.assign({}, prepared.context, { accessReport: Object.assign({}, prepared.context.accessReport, { areasRead: Array.from(sentAreas) }) });
+                    if ((prepared.requestMessages || []).length > sentHistory.length) sentHistory = prepared.requestMessages;
+                    enrichment.requestMessages = sentHistory;
+                    if (reduced) {
+                        omittedCount = Math.max(omittedCount, Math.max(0, Number(prepared.omittedCount) || 0));
+                        const omittedSourceCount = omittedCount;
+                        enrichment.context.contextBudget = { reduced: true, canNarrow: true, omittedSourceCount };
+                        enrichment.contextBudget = { reduced: true, canNarrow: true, omitted: Array.from({ length: omittedSourceCount }, () => ({ kind: 'context' })), reductionReasons: ['Whole records or older turns were omitted to fit the 6,000 estimated token request budget.'] };
+                    }
+                    enrichment.retrieval = { sources, query: options.userText, evidenceStatus: reduced ? 'limited' : (sources.length ? 'supported' : 'missing'), scope: options.scope };
+                }
+            });
+        } finally {
+            if (progressElement) progressElement.remove();
+            if (activeWorkspaceInvestigation === controller) activeWorkspaceInvestigation = null;
+        }
+    }
+
     function buildRequestEnrichment(userText, providerType, options = {}) {
         if (getPref('assistant.enabled', true) === false) return null;
         lastUserPrompt = String(userText || '');
+        if (shouldInvestigateWorkspace(userText, options)) {
+            const baseline = buildRequestEnrichment(userText, providerType, Object.assign({}, options, { depth: 'minimal', includeSelection: false, disableInvestigation: true }));
+            baseline.workspaceInvestigation = true;
+            baseline.context.depth = normalizeDepth(options.depth);
+            baseline.context.summary = 'Workspace evidence will be searched and read on demand; ambiguous matches require your choice.';
+            const parts = buildSystemPromptParts(baseline.context, userText);
+            baseline.systemPromptParts = parts; baseline.systemPrompt = parts.static + '\n' + parts.dynamic;
+            return baseline;
+        }
         const accessTicket = currentLockedPageAccessTicket(options);
         const accessOptions = Object.assign({}, options, {
             lockedPageAccessTicket: accessTicket,
@@ -8654,6 +8890,8 @@
         buildConversationMessages,
         buildRequestMessages,
         buildRequestEnrichment,
+        performWorkspaceInvestigation,
+        cancelWorkspaceInvestigation,
         retrieveNoteSources,
         requestLockedPageAccessForPrompt,
         prepareLockedPageAccessForPrompt,
