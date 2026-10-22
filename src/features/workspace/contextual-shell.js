@@ -353,88 +353,92 @@
     });
   }
 
-  function initNoteTabs() {
-    var toolbar = document.querySelector('#view-notes .toolbar-wrapper');
-    if (!toolbar || document.getElementById('notesPageTabs')) return;
-    var strip = document.createElement('nav');
-    strip.id = 'notesPageTabs';
-    strip.className = 'notes-page-tabs';
-    strip.setAttribute('aria-label', 'Open pages');
-    strip.hidden = true;
-    toolbar.parentNode.insertBefore(strip, toolbar);
-    var opened = [];
+  function initSidebarNotePair() {
+    var tree = document.getElementById('pagesList');
+    if (!tree) return;
+    var section = document.createElement('section');
+    section.id = 'notesSidebarPair';
+    section.className = 'notes-sidebar-pair';
+    section.setAttribute('aria-label', 'Paired notes');
+    var observer = new MutationObserver(render);
 
     function render() {
       var bridge = window.flowAtelier;
       if (!bridge || !Array.isArray(bridge.pages)) return;
-      var pages = bridge.pages;
-      var current = bridge.currentPageId;
       var pair = bridge.getNotesSplitPair?.();
-      opened = opened.filter(function (id) { return pages.some(function (p) { return p.id === id; }); });
-      [pair?.left, pair?.right, current].forEach(function (id) {
-        if (id && !opened.includes(id)) opened.push(id);
-      });
-      if (pair) {
-        opened = opened.filter(function (id) { return id !== pair.right; });
-        opened.splice(opened.indexOf(pair.left) + 1, 0, pair.right);
+      var members = pair ? [pair.left, pair.right].map(function (id) {
+        return bridge.pages.find(function (p) { return p.id === id; });
+      }) : [];
+      var space = bridge.getActiveSpaceId();
+      observer.disconnect();
+      try {
+        if (members.length !== 2 || members.some(function (p) { return !p || (p.spaceId || 'default') !== space; })) {
+          section.remove();
+          return;
+        }
+        var focusedId = section.contains(document.activeElement) ? document.activeElement.dataset.pageId : null;
+        section.replaceChildren();
+        var heading = document.createElement('div');
+        heading.className = 'notes-sidebar-pair-heading';
+        var label = document.createElement('span');
+        label.textContent = 'Paired notes';
+        heading.appendChild(label);
+        var unpair = document.createElement('button');
+        unpair.type = 'button';
+        unpair.className = 'notes-sidebar-unpair';
+        var unlinkIcon = document.createElement('i');
+        unlinkIcon.className = 'fas fa-unlink';
+        unlinkIcon.setAttribute('aria-hidden', 'true');
+        unpair.appendChild(unlinkIcon);
+        unpair.title = 'Unpair notes';
+        unpair.setAttribute('aria-label', 'Unpair notes');
+        unpair.addEventListener('click', function () {
+          bridge.unpairNotes();
+          (document.querySelector('#editorV2Host .ProseMirror') || document.getElementById('editor'))?.focus();
+        });
+        heading.appendChild(unpair);
+        section.appendChild(heading);
+        members.forEach(function (page) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'notes-pinned-row notes-sidebar-pair-row';
+          button.dataset.pageId = page.id;
+          var title = String(page.title || 'Untitled').split('::').pop();
+          button.setAttribute('aria-label', title);
+          button.title = String(page.title || 'Untitled').split('::').join(' / ');
+          if (bridge.currentPageId === pair.left) button.classList.add('active');
+          var icon = document.createElement('span');
+          icon.className = 'page-icon';
+          icon.setAttribute('aria-hidden', 'true');
+          icon.textContent = page.isLocked ? '🔒' : (page.icon || '📄');
+          var text = document.createElement('span');
+          text.className = 'page-title-text';
+          text.textContent = title;
+          button.append(icon, text);
+          button.addEventListener('click', function () { bridge.loadPage(page.id); });
+          section.appendChild(button);
+        });
+        tree.prepend(section);
+        if (focusedId) Array.from(section.querySelectorAll('[data-page-id]')).find(function (b) { return b.dataset.pageId === focusedId; })?.focus({ preventScroll: true });
+      } finally {
+        // Only observe canonical tree replacements, not our own group or the
+        // depth-guide decoration. Keep original folders and saved order intact.
+        observer.observe(tree, { childList: true });
       }
-      var focusedId = strip.contains(document.activeElement) ? document.activeElement.dataset.pageId : null;
-      strip.replaceChildren();
-      var pairGroup = null;
-      opened.forEach(function (id) {
-        var page = pages.find(function (p) { return p.id === id; });
-        if (!page) return;
-        var paired = pair && (id === pair.left || id === pair.right);
-        if (paired && !pairGroup) {
-          pairGroup = document.createElement('div');
-          pairGroup.className = 'notes-paired-tabs';
-          pairGroup.setAttribute('role', 'group');
-          pairGroup.setAttribute('aria-label', 'Paired notes');
-          strip.appendChild(pairGroup);
-        }
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'notes-page-tab';
-        button.dataset.pageId = id;
-        button.textContent = String(page.title || 'Untitled').split('::').pop();
-        button.title = button.textContent + (paired ? ' — paired note' : '');
-        if (id === current || (paired && current === pair.left)) button.setAttribute('aria-current', 'page');
-        button.addEventListener('click', function () { bridge.loadPage(id); });
-        (paired ? pairGroup : strip).appendChild(button);
-        if (pair && id === pair.right) {
-          var unpair = document.createElement('button');
-          unpair.type = 'button';
-          unpair.className = 'notes-unpair-button';
-          var unlinkIcon = document.createElement('i');
-          unlinkIcon.className = 'fas fa-unlink';
-          unlinkIcon.setAttribute('aria-hidden', 'true');
-          unpair.appendChild(unlinkIcon);
-          unpair.title = 'Unpair notes';
-          unpair.setAttribute('aria-label', 'Unpair notes');
-          unpair.addEventListener('click', function () {
-            bridge.unpairNotes();
-            (document.querySelector('#editorV2Host .ProseMirror') || document.getElementById('editor'))?.focus();
-          });
-          pairGroup.appendChild(unpair);
-        }
-      });
-      strip.hidden = !pair;
-      if (focusedId) Array.from(strip.querySelectorAll('[data-page-id]')).find(function (b) { return b.dataset.pageId === focusedId; })?.focus({ preventScroll: true });
     }
-    strip.addEventListener('keydown', function (event) {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      var buttons = Array.from(strip.querySelectorAll('button'));
+    section.addEventListener('keydown', function (event) {
+      if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+      var buttons = Array.from(section.querySelectorAll('button'));
       var index = buttons.indexOf(document.activeElement);
       if (index < 0) return;
       event.preventDefault();
       var next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-        : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
       buttons[next]?.focus();
     });
     window.addEventListener('sutra:note-page-loaded', render);
     window.addEventListener('sutra:notes-pair-changed', render);
-    var tree = document.getElementById('pagesList');
-    if (tree) new MutationObserver(render).observe(tree, { childList: true, subtree: true });
+    observer.observe(tree, { childList: true });
     render();
   }
 
@@ -446,7 +450,7 @@
       });
     }
     enhanceNotesToolbar();
-    initNoteTabs();
+    initSidebarNotePair();
     initPageTreeGuides();
     settleSync(document.body && document.body.dataset.view);
 
