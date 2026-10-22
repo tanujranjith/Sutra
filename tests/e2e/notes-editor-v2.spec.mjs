@@ -1244,6 +1244,7 @@ test('one keyboard-accessible note menu contains insert and page tools and prese
   await openApp(page);
   await enableEditorV2(page);
   await openNotesView(page);
+  await createBlankNote(page, 'Unified tools partner');
   await createBlankNote(page, 'Unified tools');
   const editor = page.locator('#editorV2Host .ProseMirror');
   await editor.fill('Before');
@@ -1266,6 +1267,11 @@ test('one keyboard-accessible note menu contains insert and page tools and prese
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(toggle).toBeFocused();
+  await toggle.click();
+  await expect(menu).toBeVisible();
+  await menu.locator('#splitNotesToggleBtn').click();
+  await expect(page.locator('#notesEditorContainer')).toHaveClass(/split-active/);
+  await expect(page.getByRole('button', { name: 'Unpair notes', exact: true })).toBeVisible();
 });
 
 test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {

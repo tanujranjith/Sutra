@@ -266,7 +266,7 @@
     "./src/features/workspace/canvas-workbench.js?v=20260807-canvas2",
     "./src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3",
     "./src/features/workspace/content-timeline-hosts.js?v=20261004-html-no-timeline1",
-    "./src/features/workspace/contextual-shell.js?v=20261021-paired-notes3",
+    "./src/features/workspace/contextual-shell.js?v=20261021-paired-notes4",
     "./src/features/workspace/create-page-templates.js?v=20261003-create-review7",
     "./src/features/workspace/custom-tabs.js?v=20261015-reliability2",
     "./src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1",

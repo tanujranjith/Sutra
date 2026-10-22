@@ -293,11 +293,12 @@
 
     summary.setAttribute('aria-expanded', 'false');
     function syncMenu() {
+      var wasHidden = menu.hidden;
       menu.hidden = !details.open;
       summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
       if (details.open) {
         positionMenu();
-        menu.scrollTop = 0;
+        if (wasHidden) menu.scrollTop = 0;
         var label = document.getElementById('suggestingModeLabel');
         if (label) label.textContent = document.body.classList.contains('suggesting-mode') ? 'Turn off suggesting' : 'Turn on suggesting';
       }

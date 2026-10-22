@@ -167,6 +167,12 @@ The normal/official workspace was not edited. No provider requests, dependency
 installs, push, merge, deployment, or cloud configuration changes were made.
 The requested local server was left running for user review.
 
+A final menu follow-up prevents the delayed native details-toggle event from
+resetting an already-open menu's scroll position. Selecting the lower Split View
+item through the merged menu then restored Beta + Alpha in Chrome. The prepared
+menu regression now exercises that mouse path as well. The preview was left in
+the ordinary single-page state, with the strip hidden after unpairing.
+
 ## User approval and alert opt-out — October 18, 2026
 
 The user approved items 34 and 12, with one follow-up: browser alerts could not
