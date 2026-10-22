@@ -262,5 +262,5 @@
   global.addEventListener('sutra:note-page-locked', refresh);
   global.addEventListener('sutra:workspace-lock-changed', refresh);
   global.addEventListener('sutra:workspace-remote-commit', refresh);
-  global.SutraSheets = { createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return activePage(); }, getWorkbook: function () { return workbookFor(activePage()); }, undo: undoChange, redo: redoChange, normalizeWorkbook: function (model) { return engine().normalizeWorkbook(model); }, importFile: importFile, exportCsv: exportCsv, exportXlsx: exportXlsx };
+  global.SutraSheets = { flushPendingEdit: function () { return editing && root ? commit(root.querySelector('[data-formula]').value) : false; }, createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return activePage(); }, getWorkbook: function () { return workbookFor(activePage()); }, undo: undoChange, redo: redoChange, normalizeWorkbook: function (model) { return engine().normalizeWorkbook(model); }, importFile: importFile, exportCsv: exportCsv, exportXlsx: exportXlsx };
 }(window));

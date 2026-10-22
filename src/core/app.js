@@ -1587,6 +1587,11 @@ function getPageActionsConfig(pageId) {
         },
         ...lockActions,
         {
+            className: 'fas fa-columns',
+            label: 'Split with another page',
+            onClick: () => window.flowAtelier.openPageInSplitView(page.id)
+        },
+        {
             className: 'fas fa-folder-open',
             label: 'Move to space',
             onClick: () => window.flowAtelier.openMovePageToSpace(page.id)
@@ -10051,7 +10056,6 @@ function populateProgressDashboard() {
         let activeView = 'today';
         let searchQuery = '';
         let searchForceExpanded = false;
-        let activeCanvasRuntime = null;
         let topNavLayoutObserver = null;
         let notesFlowRowObserver = null;
         let toolbarResizeObserver = null;
@@ -44546,7 +44550,7 @@ ${renderedSections}
 
         function syncNotesSecondaryEditorV2() {
             const mirror = getSecondaryEditor();
-            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && isNotesSplitViewVisible() && window.SutraNotesEditorV2?.isAvailable());
+            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && isNotesSplitViewVisible() && !isSpecialSplitPage(pages.find(p => p.id === secondaryPageId)) && window.SutraNotesEditorV2?.isAvailable());
             let host = document.getElementById('editorV2SecondaryHost');
             if (!enabled) {
                 flushSecondaryPageBeforeContextChange();
@@ -44808,6 +44812,8 @@ function getActiveEditor() {
             const toolbar = document.getElementById('toolbar');
             if (toolbar) {
                 toolbar.setAttribute('aria-label', `Formatting toolbar for the ${secondaryIsActive ? 'comparison' : 'main'} note: ${activeTitle}`);
+                toolbar.inert = isSpecialSplitPage(activePage);
+                toolbar.setAttribute('aria-disabled', toolbar.inert ? 'true' : 'false');
             }
             updateWordCount();
             if (changed) renderComments();
@@ -45433,8 +45439,12 @@ function getActiveEditor() {
             }
         }
 
+        function isSpecialSplitPage(page) {
+            return !!(page && (isFolderPage(page) || normalizePageType(page.type) === PAGE_TYPES.CANVAS || page.htmlDocument || page.slides || page.spreadsheet));
+        }
+
         function getAvailableSplitPages() {
-            return pages.filter(page => page && !isHelpDocsPage(page) && normalizePageType(page.type) !== PAGE_TYPES.CANVAS && !isFolderPage(page));
+            return pages.filter(page => page && !isHelpDocsPage(page) && (page.spaceId || 'default') === (activeSpaceId || 'default'));
         }
 
         function getNotesSplitPair() {
@@ -45461,6 +45471,7 @@ function getActiveEditor() {
             if (!allowDisabled && !(appSettings && appSettings.notesSplitViewEnabled)) return false;
             const page = pages.find(p => p.id === secondaryPageId);
             if (!page) return false;
+            if (isSpecialSplitPage(page)) { secondaryEditorDirty = false; return false; }
             if (page.isLocked && page.lockHash && !unlockedPageIds.has(secondaryPageId)) return false;
             // Section 17 — split-pane edits use the SAME checkpoint policy as the
             // primary editor: snapshot the pre-edit state before overwriting it.
@@ -45483,6 +45494,7 @@ function getActiveEditor() {
         }
 
         function flushSecondaryPageBeforeContextChange() {
+            window.SutraContextualShell?.getCreateSplitSurface?.()?.flush();
             if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.flushPendingEdit();
             if (splitSecondaryDebounceTimer) {
                 clearTimeout(splitSecondaryDebounceTimer);
@@ -45574,7 +45586,18 @@ function getActiveEditor() {
                 splitScrollPositions[secondaryPageId] = scrollSurface.scrollTop || 0;
             }
             secondaryPageId = page.id;
+            syncNotesSecondaryEditorV2();
             const _secondaryLocked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
+            const special = !_secondaryLocked && isSpecialSplitPage(page);
+            if (special) {
+                editor.hidden = true;
+                editor.contentEditable = 'false';
+                editor.replaceChildren();
+                secondaryEditorDirty = false;
+                window.SutraContextualShell?.getCreateSplitSurface?.()?.show(page.id);
+            } else {
+            window.SutraContextualShell?.getCreateSplitSurface?.()?.hide();
+            editor.hidden = false;
             if (_secondaryLocked) {
                 editor.contentEditable = 'false';
                 const v2Host = document.getElementById('editorV2SecondaryHost');
@@ -45590,6 +45613,7 @@ function getActiveEditor() {
                 const v2Host = document.getElementById('editorV2SecondaryHost');
                 if (v2Host) { v2Host.hidden = false; v2Host.inert = false; }
                 loadPageContentIntoEditor(editor, page);
+            }
             }
             const restoredScrollTop = typeof splitScrollPositions[page.id] === 'number'
                 ? splitScrollPositions[page.id]
@@ -45645,11 +45669,12 @@ function getActiveEditor() {
             renderNotesTabsSignal();
 
             if (!enabled) {
+                window.SutraContextualShell?.getCreateSplitSurface?.()?.hide();
                 syncNotesSecondaryEditorV2();
                 setActiveEditorPane('primary');
                 return;
             }
-            syncNotesSecondaryEditorV2();
+            if (secondaryPane) secondaryPane.hidden = false;
             setActiveEditorPane('primary');
             syncNotesSplitPaneStickyMetrics();
             renderSplitNoteSelect();
@@ -45666,7 +45691,7 @@ function getActiveEditor() {
             if (nextEnabled) {
                 const fallbackId = getFallbackSecondaryPageId();
                 if (!fallbackId) {
-                    showToast('Create another note to use split-screen.');
+                    showToast('Create another page in this space to use split-screen.');
                     appSettings.notesSplitViewEnabled = false;
                     applySplitViewState();
                     return;
@@ -45689,6 +45714,13 @@ function getActiveEditor() {
             }
             applySplitViewState();
             if (shouldPersist) persistAppData();
+        }
+
+        function openPageInSplitView(pageId) {
+            flushVisibleNotesEditorsBeforeLeaving();
+            setSplitViewEnabled(false);
+            loadPage(pageId);
+            setSplitViewEnabled(true);
         }
 
         function swapSplitSecondaryIntoPrimary() {
@@ -47019,6 +47051,15 @@ function getActiveEditor() {
             return createImportedPage(title, sourceLink + markup, PAGE_ICONS.NOTE, { open: false });
         }
 
+        // One implementation, independent DOM and session state for each Canvas pane.
+        const createCanvasEditorInstance = function (canvasDocument, canvasWindow, canvasPageResolver) {
+            const document = canvasDocument;
+            const window = canvasWindow;
+            const getComputedStyle = canvasWindow.getComputedStyle.bind(canvasWindow);
+            let activeCanvasRuntime = null;
+            function getPrimaryCanvasPage() { return canvasPageResolver(); }
+            function getPrimaryEditor() { return document.getElementById('editor'); }
+            function getNotesEditorV2Host() { return document.getElementById('editorV2Host'); }
         function ensureCanvasRuntime(page) {
             if (!page || normalizePageType(page.type) !== PAGE_TYPES.CANVAS) return null;
             if (!activeCanvasRuntime || activeCanvasRuntime.pageId !== page.id) {
@@ -47347,7 +47388,7 @@ function getActiveEditor() {
             var v2Host = getNotesEditorV2Host();
             if (v2Host) v2Host.hidden = true;
             var secPane = document.getElementById('notesSecondaryPane');
-            if (secPane) secPane.hidden = true;
+            if (secPane) secPane.hidden = !isNotesSplitViewVisible();
             // Immersive, Freeform-style full-page canvas: the body class lets CSS
             // strip the note chrome (rich-text toolbar, flow row, breadcrumbs) so
             // the canvas is its own page rather than a window inside a note.
@@ -48120,7 +48161,7 @@ function getActiveEditor() {
                 category: 'none',
                 createdAt: new Date().toISOString(),
                 origin: 'canvas',
-                noteId: currentPageId
+                noteId: canvasPageResolver()?.id
             };
             tasks.unshift(task);
             taskOrder.unshift(task.id);
@@ -48957,10 +48998,10 @@ function getActiveEditor() {
             if (!page || !isPageContentAuthorized(page)) return { ok: false, error: 'Unlock the Canvas page before undoing this edit.' };
             const restored = engine.undoCanvas(page.canvas, payload);
             if (!restored.ok) return restored;
-            if (page.id === currentPageId) pushCanvasUndo(page);
+            if (page.id === canvasPageResolver()?.id) pushCanvasUndo(page);
             page.canvas = normalizeCanvasModel(restored.model);
             saveCanvasPage(page, { persist: true });
-            if (page.id === currentPageId) renderCanvasPage(page);
+            if (page.id === canvasPageResolver()?.id) renderCanvasPage(page);
             else renderPagesList();
             return { ok: true, pageId: page.id };
         }
@@ -49094,6 +49135,101 @@ function getActiveEditor() {
             } catch (err) { /* non-critical */ }
         }
         installSutraCanvasApi();
+
+            return { dispose: () => { if (activeCanvasRuntime?.viewportSaveTimer) clearTimeout(activeCanvasRuntime.viewportSaveTimer); activeCanvasRuntime = null; }, ensureCanvasRuntime, getCanvasEls, canvasWorkbench, pushCanvasUndo, saveCanvasPage, applyCanvasTransform, canvasObjectPath, bindCanvasTextEditor, renderCanvasObject, getCanvasLinkedNoteExcerpt, renderCanvasConnections, renderCanvasPage, showCanvasEditorForPage, hideCanvasEditor, canvasSetTool, syncCanvasToolbarState, addCanvasObject, canvasAddText, canvasAddSticky, canvasAddShape, toggleCanvasShapeMenu, canvasAddShapeFromMenu, buildCanvasShapeSvg, canvasAddFrame, canvasAddTable, canvasAddFreehand, handleCanvasObjectPointerDown, handleCanvasPointerMove, handleCanvasPointerUp, canvasDeleteSelected, canvasDuplicateSelected, canvasGroupSelected, canvasUngroupSelected, canvasAddConnector, canvasUndo, canvasRedo, canvasSetViewport, canvasScheduleViewportSave, canvasZoomAt, canvasZoomBy, canvasResetZoom, canvasSetBackground, canvasSelectAll, canvasFitView, canvasToggleSnap, canvasCycleBackground, canvasToggleMinimap, canvasApplyObjectResult, canvasArrangeSelection, canvasChangeLayer, canvasToggleSelectionLock, canvasCopySelected, canvasPasteSelected, canvasNudgeSelection, renderCanvasWorkbenchChrome, renderCanvasMinimap, canvasInsertExistingNote, canvasOpenInsertNoteModal, getSelectedCanvasText, canvasConvertSelectionToNote, canvasCreateTaskFromSelection, getCanvasAssistantContext, bindCanvasSurfaceOnce, setCanvasSelection, canvasMoveObject, canvasResizeObject, getCanvasExportFilename, getCanvasExportColor, getCanvasExportBounds, drawCanvasExportText, canvasExportRoundRectPath, drawCanvasExportObject, drawCanvasExportConnection, renderCanvasPageToBitmap, downloadCanvasBlob, canvasExportJson, canvasExportImage, binaryStringToUint8Array, createPdfBlobFromJpegDataUrl, canvasExportPdf, canvasAssistantEngine, validateCanvasAssistantOperations, canvasCreateAssistantBoard, canvasApplyAssistantOperations, canvasUndoAssistantMutation, captureCanvasContentTimelineInsertion, isCanvasContentTimelineTokenCurrent, insertCanvasContentTimeline, getCanvasContentTimelineSelection, updateCanvasContentTimeline, installSutraCanvasApi };
+        };
+        const primaryCanvasEditor = createCanvasEditorInstance(document, window, getPrimaryCanvasPage);
+        function ensureCanvasRuntime(...args) { return primaryCanvasEditor.ensureCanvasRuntime(...args); }
+        function getCanvasEls(...args) { return primaryCanvasEditor.getCanvasEls(...args); }
+        function canvasWorkbench(...args) { return primaryCanvasEditor.canvasWorkbench(...args); }
+        function pushCanvasUndo(...args) { return primaryCanvasEditor.pushCanvasUndo(...args); }
+        function saveCanvasPage(...args) { return primaryCanvasEditor.saveCanvasPage(...args); }
+        function applyCanvasTransform(...args) { return primaryCanvasEditor.applyCanvasTransform(...args); }
+        function canvasObjectPath(...args) { return primaryCanvasEditor.canvasObjectPath(...args); }
+        function bindCanvasTextEditor(...args) { return primaryCanvasEditor.bindCanvasTextEditor(...args); }
+        function renderCanvasObject(...args) { return primaryCanvasEditor.renderCanvasObject(...args); }
+        function getCanvasLinkedNoteExcerpt(...args) { return primaryCanvasEditor.getCanvasLinkedNoteExcerpt(...args); }
+        function renderCanvasConnections(...args) { return primaryCanvasEditor.renderCanvasConnections(...args); }
+        function renderCanvasPage(...args) { return primaryCanvasEditor.renderCanvasPage(...args); }
+        function showCanvasEditorForPage(...args) { return primaryCanvasEditor.showCanvasEditorForPage(...args); }
+        function hideCanvasEditor(...args) { return primaryCanvasEditor.hideCanvasEditor(...args); }
+        function canvasSetTool(...args) { return primaryCanvasEditor.canvasSetTool(...args); }
+        function syncCanvasToolbarState(...args) { return primaryCanvasEditor.syncCanvasToolbarState(...args); }
+        function addCanvasObject(...args) { return primaryCanvasEditor.addCanvasObject(...args); }
+        function canvasAddText(...args) { return primaryCanvasEditor.canvasAddText(...args); }
+        function canvasAddSticky(...args) { return primaryCanvasEditor.canvasAddSticky(...args); }
+        function canvasAddShape(...args) { return primaryCanvasEditor.canvasAddShape(...args); }
+        function toggleCanvasShapeMenu(...args) { return primaryCanvasEditor.toggleCanvasShapeMenu(...args); }
+        function canvasAddShapeFromMenu(...args) { return primaryCanvasEditor.canvasAddShapeFromMenu(...args); }
+        function buildCanvasShapeSvg(...args) { return primaryCanvasEditor.buildCanvasShapeSvg(...args); }
+        function canvasAddFrame(...args) { return primaryCanvasEditor.canvasAddFrame(...args); }
+        function canvasAddTable(...args) { return primaryCanvasEditor.canvasAddTable(...args); }
+        function canvasAddFreehand(...args) { return primaryCanvasEditor.canvasAddFreehand(...args); }
+        function handleCanvasObjectPointerDown(...args) { return primaryCanvasEditor.handleCanvasObjectPointerDown(...args); }
+        function handleCanvasPointerMove(...args) { return primaryCanvasEditor.handleCanvasPointerMove(...args); }
+        function handleCanvasPointerUp(...args) { return primaryCanvasEditor.handleCanvasPointerUp(...args); }
+        function canvasDeleteSelected(...args) { return primaryCanvasEditor.canvasDeleteSelected(...args); }
+        function canvasDuplicateSelected(...args) { return primaryCanvasEditor.canvasDuplicateSelected(...args); }
+        function canvasGroupSelected(...args) { return primaryCanvasEditor.canvasGroupSelected(...args); }
+        function canvasUngroupSelected(...args) { return primaryCanvasEditor.canvasUngroupSelected(...args); }
+        function canvasAddConnector(...args) { return primaryCanvasEditor.canvasAddConnector(...args); }
+        function canvasUndo(...args) { return primaryCanvasEditor.canvasUndo(...args); }
+        function canvasRedo(...args) { return primaryCanvasEditor.canvasRedo(...args); }
+        function canvasSetViewport(...args) { return primaryCanvasEditor.canvasSetViewport(...args); }
+        function canvasScheduleViewportSave(...args) { return primaryCanvasEditor.canvasScheduleViewportSave(...args); }
+        function canvasZoomAt(...args) { return primaryCanvasEditor.canvasZoomAt(...args); }
+        function canvasZoomBy(...args) { return primaryCanvasEditor.canvasZoomBy(...args); }
+        function canvasResetZoom(...args) { return primaryCanvasEditor.canvasResetZoom(...args); }
+        function canvasSetBackground(...args) { return primaryCanvasEditor.canvasSetBackground(...args); }
+        function canvasSelectAll(...args) { return primaryCanvasEditor.canvasSelectAll(...args); }
+        function canvasFitView(...args) { return primaryCanvasEditor.canvasFitView(...args); }
+        function canvasToggleSnap(...args) { return primaryCanvasEditor.canvasToggleSnap(...args); }
+        function canvasCycleBackground(...args) { return primaryCanvasEditor.canvasCycleBackground(...args); }
+        function canvasToggleMinimap(...args) { return primaryCanvasEditor.canvasToggleMinimap(...args); }
+        function canvasApplyObjectResult(...args) { return primaryCanvasEditor.canvasApplyObjectResult(...args); }
+        function canvasArrangeSelection(...args) { return primaryCanvasEditor.canvasArrangeSelection(...args); }
+        function canvasChangeLayer(...args) { return primaryCanvasEditor.canvasChangeLayer(...args); }
+        function canvasToggleSelectionLock(...args) { return primaryCanvasEditor.canvasToggleSelectionLock(...args); }
+        function canvasCopySelected(...args) { return primaryCanvasEditor.canvasCopySelected(...args); }
+        function canvasPasteSelected(...args) { return primaryCanvasEditor.canvasPasteSelected(...args); }
+        function canvasNudgeSelection(...args) { return primaryCanvasEditor.canvasNudgeSelection(...args); }
+        function renderCanvasWorkbenchChrome(...args) { return primaryCanvasEditor.renderCanvasWorkbenchChrome(...args); }
+        function renderCanvasMinimap(...args) { return primaryCanvasEditor.renderCanvasMinimap(...args); }
+        function canvasInsertExistingNote(...args) { return primaryCanvasEditor.canvasInsertExistingNote(...args); }
+        function canvasOpenInsertNoteModal(...args) { return primaryCanvasEditor.canvasOpenInsertNoteModal(...args); }
+        function getSelectedCanvasText(...args) { return primaryCanvasEditor.getSelectedCanvasText(...args); }
+        function canvasConvertSelectionToNote(...args) { return primaryCanvasEditor.canvasConvertSelectionToNote(...args); }
+        function canvasCreateTaskFromSelection(...args) { return primaryCanvasEditor.canvasCreateTaskFromSelection(...args); }
+        function getCanvasAssistantContext(...args) { return primaryCanvasEditor.getCanvasAssistantContext(...args); }
+        function bindCanvasSurfaceOnce(...args) { return primaryCanvasEditor.bindCanvasSurfaceOnce(...args); }
+        function setCanvasSelection(...args) { return primaryCanvasEditor.setCanvasSelection(...args); }
+        function canvasMoveObject(...args) { return primaryCanvasEditor.canvasMoveObject(...args); }
+        function canvasResizeObject(...args) { return primaryCanvasEditor.canvasResizeObject(...args); }
+        function getCanvasExportFilename(...args) { return primaryCanvasEditor.getCanvasExportFilename(...args); }
+        function getCanvasExportColor(...args) { return primaryCanvasEditor.getCanvasExportColor(...args); }
+        function getCanvasExportBounds(...args) { return primaryCanvasEditor.getCanvasExportBounds(...args); }
+        function drawCanvasExportText(...args) { return primaryCanvasEditor.drawCanvasExportText(...args); }
+        function canvasExportRoundRectPath(...args) { return primaryCanvasEditor.canvasExportRoundRectPath(...args); }
+        function drawCanvasExportObject(...args) { return primaryCanvasEditor.drawCanvasExportObject(...args); }
+        function drawCanvasExportConnection(...args) { return primaryCanvasEditor.drawCanvasExportConnection(...args); }
+        function renderCanvasPageToBitmap(...args) { return primaryCanvasEditor.renderCanvasPageToBitmap(...args); }
+        function downloadCanvasBlob(...args) { return primaryCanvasEditor.downloadCanvasBlob(...args); }
+        function canvasExportJson(...args) { return primaryCanvasEditor.canvasExportJson(...args); }
+        function canvasExportImage(...args) { return primaryCanvasEditor.canvasExportImage(...args); }
+        function binaryStringToUint8Array(...args) { return primaryCanvasEditor.binaryStringToUint8Array(...args); }
+        function createPdfBlobFromJpegDataUrl(...args) { return primaryCanvasEditor.createPdfBlobFromJpegDataUrl(...args); }
+        function canvasExportPdf(...args) { return primaryCanvasEditor.canvasExportPdf(...args); }
+        function canvasAssistantEngine(...args) { return primaryCanvasEditor.canvasAssistantEngine(...args); }
+        function validateCanvasAssistantOperations(...args) { return primaryCanvasEditor.validateCanvasAssistantOperations(...args); }
+        function canvasCreateAssistantBoard(...args) { return primaryCanvasEditor.canvasCreateAssistantBoard(...args); }
+        function canvasApplyAssistantOperations(...args) { return primaryCanvasEditor.canvasApplyAssistantOperations(...args); }
+        function canvasUndoAssistantMutation(...args) { return primaryCanvasEditor.canvasUndoAssistantMutation(...args); }
+        function captureCanvasContentTimelineInsertion(...args) { return primaryCanvasEditor.captureCanvasContentTimelineInsertion(...args); }
+        function isCanvasContentTimelineTokenCurrent(...args) { return primaryCanvasEditor.isCanvasContentTimelineTokenCurrent(...args); }
+        function insertCanvasContentTimeline(...args) { return primaryCanvasEditor.insertCanvasContentTimeline(...args); }
+        function getCanvasContentTimelineSelection(...args) { return primaryCanvasEditor.getCanvasContentTimelineSelection(...args); }
+        function updateCanvasContentTimeline(...args) { return primaryCanvasEditor.updateCanvasContentTimeline(...args); }
+        function installSutraCanvasApi(...args) { return primaryCanvasEditor.installSutraCanvasApi(...args); }
 
         function linkedPdfIdForNotePage(page) {
             if (!page || !window.SutraAttachments || typeof window.SutraAttachments.listForEntity !== 'function') return '';
@@ -52613,6 +52749,11 @@ function getActiveEditor() {
                     }
                     ])
                 ];
+                if (!isSystemPage) actionItems.splice(actionItems.length - 1, 0, {
+                    className: 'fas fa-columns',
+                    title: 'Split with another page',
+                    onClick: () => openPageInSplitView(page.id)
+                });
                 if (!isSystemPage) actionItems.splice(actionItems.length - 1, 0, {
                     className: 'fas fa-folder-open',
                     title: 'Move to space',
@@ -78535,6 +78676,10 @@ ${cspMeta}
                 getNotesSplitPair: () => getNotesSplitPair(),
                 unpairNotes: () => setSplitViewEnabled(false),
                 openMovePageToSpace: (pageId) => openMovePageToSpace(pageId),
+                openPageInSplitView: (pageId) => openPageInSplitView(pageId),
+                activateSecondaryPane: () => setActiveEditorPane('secondary'),
+                getSecondaryPage: () => isNotesSplitViewVisible() ? pages.find(p => p.id === secondaryPageId) || null : null,
+                createCanvasPane: (paneDocument, paneWindow, resolver) => createCanvasEditorInstance(paneDocument, paneWindow, resolver),
                 get activeSpaceId() { return activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default'; },
                 get activeView() { return activeView; },
                 get unlockedPageIds() { return unlockedPageIds; },

@@ -484,7 +484,11 @@
 
   }
 
-  window.SutraContextualShell = Object.freeze({ sidebarFor: sidebarFor, usesSidebar: usesSidebar, sync: sync });
+  var createSplitSurface = null;
+  window.SutraContextualShell = Object.freeze({ sidebarFor: sidebarFor, usesSidebar: usesSidebar, sync: sync,
+    registerCreateSplitSurface: function (controller) { createSplitSurface = controller; },
+    getCreateSplitSurface: function () { return createSplitSurface; }
+  });
 
   window.addEventListener('noteflow:view-changed', function (event) {
     settleSync(event && event.detail && event.detail.view);

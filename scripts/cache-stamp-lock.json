@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261021-space-move3",
-    "hash": "98e01adb7ba9d691"
+    "stamp": "20261022-create-split2",
+    "hash": "05c0b50d850cdc83"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -340,12 +340,16 @@
     "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20261022-sidebar-pair3",
-    "hash": "d02ce9f52a33a1c3"
+    "stamp": "20261022-create-split2",
+    "hash": "e9b8b63a21a009a7"
   },
   "src/features/workspace/create-page-templates.js": {
     "stamp": "20261003-create-review7",
     "hash": "56818cb5d03e08eb"
+  },
+  "src/features/workspace/create-split-surface.js": {
+    "stamp": "20261022-create-split2",
+    "hash": "63f853b4fceccf3a"
   },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20261015-reliability2",
@@ -376,8 +380,8 @@
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20261004-html-no-timeline1",
-    "hash": "6a3cc9031dbff1ca"
+    "stamp": "20261022-create-split2",
+    "hash": "e725dcf05eea3f91"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
@@ -424,8 +428,8 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20261004-merge-review-fixes1",
-    "hash": "95b7ea2d6ec18f71"
+    "stamp": "20261022-create-split2",
+    "hash": "0c0ee2570d3c790e"
   },
   "src/features/workspace/slides.js": {
     "stamp": "20261004-slides-lines-menus1",
@@ -586,6 +590,10 @@
   "styles/features/content-timeline.css": {
     "stamp": "20261001-content-timeline4",
     "hash": "d50cc5dc21e5560b"
+  },
+  "styles/features/create-split-surface.css": {
+    "stamp": "20261022-create-split2",
+    "hash": "0915a43b606e8647"
   },
   "styles/features/customization.css": {
     "stamp": "20260601-handwriting-mods",

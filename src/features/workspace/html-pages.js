@@ -1275,6 +1275,7 @@ global.addEventListener('sutra:workspace-lock-changed', refresh);
 global.addEventListener('sutra:workspace-remote-commit', refresh);
   global.addEventListener('resize', onTimelineAuthoringResize);
   global.SutraHTMLPages = {
+    flushPendingEdit: function () { if (saveTimer) persistCurrentPage(); },
     createPage: createPage,
     createFromNewPageDialog: createFromNewPageDialog,
     getCurrentPage: pageForCurrentRoute,

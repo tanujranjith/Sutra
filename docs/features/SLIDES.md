@@ -10,6 +10,11 @@ only prepares the dialog; it does not create a page.
 The deck lives at `page.slides`, which deliberately keeps ordinary note content
 and unknown page fields intact.
 
+Slides also supports Create Split View, including two Slides decks. Each pane
+owns its editor session and tools while writing the same canonical owning page
+record. The secondary editor runs without a separate app or persistence owner;
+see [Split View](MODERN_NOTES_EDITOR.md#split-view) for ownership and lock rules.
+
 ## Durable model
 
 `page.slides` normalizes to version 2 while retaining V1 and unknown-field compatibility. It contains the deck-wide `theme`,

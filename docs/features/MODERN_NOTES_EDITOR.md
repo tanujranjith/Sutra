@@ -25,7 +25,13 @@ overwrite the canonical note with an empty body.
 
 ## Split View
 
-Split View presents two equal note panes in one workspace. Each header identifies
+Split View supports every user-created Create page: Notes/documents, HTML,
+Slides, Sheets, Canvas, and folders, including two pages of the same type.
+Use **Split with another page** in a sidebar page's actions, then choose its
+partner with the comparison selector. Candidates belong to the active space;
+the protected generated Help page is excluded. Folder panes list their children.
+
+Split View presents two equal page panes in one workspace. Each header identifies
 its note, and the active pane stays outlined with an **Active** marker while the
 shared formatting toolbar names that note as its target. The two editor bodies
 scroll independently. Split View fills the available Notes workspace width and
@@ -60,6 +66,23 @@ it owns children, preserving its expand/collapse controls. This is presentation
 only: original pages keep their folders and saved ordering.
 Only the active space's pair is shown; no new workspace fields are added.
 Pending edits in both panes save through their existing paths before navigation.
+
+Non-note comparison editors run the existing first-party editor scripts in a
+same-origin blank iframe with independent DOM, selection, history, and controls.
+It does not boot another Sutra app, open a database, or own a workspace snapshot.
+Its bridge resolves the exact live secondary page and delegates saves to the
+host's canonical persistence path. Pending HTML source, spreadsheet input, and
+inline edits flush before a normal switch. A lock, remote apply, or changed page
+reference invalidates the old frame without committing stale DOM. Locked pages
+do not mount a frame; use the normal main-pane PIN flow first. Authored HTML
+continues to run only in its nested offline sandbox, without parent access.
+
+Canvas uses one implementation instantiated with pane-specific DOM, page
+resolution, and runtime state. Its primary aliases remain compatible. The
+primary native editor hides only its own inactive note surface; it must not
+hide the sibling split pane. The shared rich-text toolbar is disabled while a
+native page owns focus; that editor supplies its own tools. Theme tokens and
+local styles apply inside the comparison frame. No new durable fields are added.
 
 The toolbar's **Insert and note tools** menu combines the former plus dropdown
 and three-dot menu. Its Insert and Page and view sections retain all actions,

@@ -19,6 +19,12 @@ globals have legacy aliases that point at the same object (e.g. `sutraAssistant`
 
 ## When adding a feature
 
+`workspace/create-split-surface.js` loads after the native Create editors. It
+registers a controller with the existing contextual-shell API and mounts a
+secondary native editor against the host's canonical page bridge. It never
+starts another core runtime or persistence store. Canvas instances reuse the
+core factory; other native surfaces reuse their shipped editor scripts.
+
 `workspace/settings-presentation.js` loads after the core and enhances the
 canonical Settings DOM only: preset palette labels and searchable Appearance
 disclosures. It adds no globals, stored preferences, or alternative save path.
