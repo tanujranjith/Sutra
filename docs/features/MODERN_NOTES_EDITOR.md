@@ -40,20 +40,24 @@ the next page is loaded. Modern Editor V2 restores the comparison note's scroll
 position when switching between notes. A locked note stays read-only in the
 comparison pane until it is opened and unlocked in the main pane.
 
-Split View pairs specific pages. A **Paired notes** section in the Create sidebar
-keeps shortcuts to both pages together, with an **Unpair notes** icon. Opening or
+Split View pairs specific pages. The Create sidebar shows one compact split-tab
+row with both notes side by side, like a browser's paired tabs. Each half opens
+its note; its × control unpairs the notes without deleting either page. Opening or
 creating another page shows that page normally without replacing either member.
 Select either sidebar shortcut to return to the same two panes; choosing the right page
 activates its editor. A protected right-hand page opens in the primary pane for
 the normal PIN flow. The comparison selector explicitly changes the partner.
-Unpair or Close Split View ends the pairing and removes the sidebar group; deleting or expiring a member also
+Unpair or Close Split View ends the pairing and restores the separate sidebar rows; deleting or expiring a member also
 ends it instead of silently substituting another page. Focus mode temporarily
 hides the split without unpairing it.
 
 The pair uses the existing split-pane contexts, secondary-page setting, and
 split-view preference, so it survives reload and the existing backup paths.
-There is no top tab strip. The paired shortcuts follow the existing Pinned pages
-pattern: original pages keep their folders, tree entries, and saved ordering.
+There is no top tab strip or separate Paired notes list. The shared row occupies
+the first member's existing sidebar position. Leaf members' ordinary rows are
+hidden while paired and restored on unpair; a parent entry stays available if
+it owns children, preserving its expand/collapse controls. This is presentation
+only: original pages keep their folders and saved ordering.
 Only the active space's pair is shown; no new workspace fields are added.
 Pending edits in both panes save through their existing paths before navigation.
 

@@ -1161,6 +1161,12 @@ test('paired sidebar notes survive unrelated navigation, reload, and explicit un
   await expect(pairSection).toBeVisible();
   await expect(page.locator('#notesPageTabs')).toHaveCount(0);
   await expect(pairSection.locator('.page-title-text')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  const pairCells = await pairSection.locator('.notes-sidebar-pair-cell').evaluateAll(cells =>
+    cells.map(cell => { const r = cell.getBoundingClientRect(); return { top: r.top, left: r.left, right: r.right }; }));
+  expect(Math.abs(pairCells[0].top - pairCells[1].top)).toBeLessThan(1);
+  expect(pairCells[0].right).toBeLessThanOrEqual(pairCells[1].left);
+  await expect(page.locator('#pagesList .page-item').filter({ hasText: 'Pair Alpha' })).toBeHidden();
+  await expect(page.locator('#pagesList .page-item').filter({ hasText: 'Pair Beta' })).toBeHidden();
   await page.locator('#editorV2SecondaryHost .ProseMirror').fill('Alpha pending edit');
   // Creating a page while the secondary pane is active must not replace either member.
   await createBlankNote(page, 'Separate Gamma');
@@ -1183,7 +1189,7 @@ test('paired sidebar notes survive unrelated navigation, reload, and explicit un
   await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
   await pairSection.getByRole('button', { name: 'Pair Beta', exact: true }).click();
   await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toHaveText('Alpha pending edit');
-  await page.getByRole('button', { name: 'Unpair notes', exact: true }).click();
+  await pairSection.getByRole('button', { name: 'Unpair Pair Beta', exact: true }).click();
   await expect(pairSection).toHaveCount(0);
   await expect(page.locator('#notesPageTabs')).toHaveCount(0);
   await expect(page.locator('#editorV2SecondaryHost')).toHaveCount(0);
@@ -1272,7 +1278,7 @@ test('one keyboard-accessible note menu contains insert and page tools and prese
   await expect(menu).toBeVisible();
   await menu.locator('#splitNotesToggleBtn').click();
   await expect(page.locator('#notesEditorContainer')).toHaveClass(/split-active/);
-  await expect(page.getByRole('button', { name: 'Unpair notes', exact: true })).toBeVisible();
+  await expect(page.locator('#notesSidebarPair .notes-sidebar-unpair')).toHaveCount(2);
 });
 
 test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {

@@ -360,7 +360,12 @@
     section.id = 'notesSidebarPair';
     section.className = 'notes-sidebar-pair';
     section.setAttribute('aria-label', 'Paired notes');
-    var observer = new MutationObserver(render);
+    var hiddenRows = [];
+    var observer = new MutationObserver(function (records) {
+      if (records.some(function (record) {
+        return record.target === tree || record.target.classList?.contains('page-title-text');
+      })) render();
+    });
 
     function render() {
       var bridge = window.flowAtelier;
@@ -372,41 +377,29 @@
       var space = bridge.getActiveSpaceId();
       observer.disconnect();
       try {
+        hiddenRows.forEach(function (entry) { entry.row.hidden = entry.hidden; });
+        hiddenRows = [];
         if (members.length !== 2 || members.some(function (p) { return !p || (p.spaceId || 'default') !== space; })) {
           section.remove();
           return;
         }
         var focusedId = section.contains(document.activeElement) ? document.activeElement.dataset.pageId : null;
         section.replaceChildren();
-        var heading = document.createElement('div');
-        heading.className = 'notes-sidebar-pair-heading';
-        var label = document.createElement('span');
-        label.textContent = 'Paired notes';
-        heading.appendChild(label);
-        var unpair = document.createElement('button');
-        unpair.type = 'button';
-        unpair.className = 'notes-sidebar-unpair';
-        var unlinkIcon = document.createElement('i');
-        unlinkIcon.className = 'fas fa-unlink';
-        unlinkIcon.setAttribute('aria-hidden', 'true');
-        unpair.appendChild(unlinkIcon);
-        unpair.title = 'Unpair notes';
-        unpair.setAttribute('aria-label', 'Unpair notes');
-        unpair.addEventListener('click', function () {
-          bridge.unpairNotes();
-          (document.querySelector('#editorV2Host .ProseMirror') || document.getElementById('editor'))?.focus();
+        var rows = Array.from(tree.querySelectorAll('.page-item')).filter(function (row) {
+          return members.some(function (p) { return p.id === row.dataset.pageId; });
         });
-        heading.appendChild(unpair);
-        section.appendChild(heading);
         members.forEach(function (page) {
+          var cell = document.createElement('div');
+          cell.className = 'notes-sidebar-pair-cell';
           var button = document.createElement('button');
           button.type = 'button';
-          button.className = 'notes-pinned-row notes-sidebar-pair-row';
+          button.className = 'notes-sidebar-pair-row';
           button.dataset.pageId = page.id;
           var title = String(page.title || 'Untitled').split('::').pop();
           button.setAttribute('aria-label', title);
           button.title = String(page.title || 'Untitled').split('::').join(' / ');
-          if (bridge.currentPageId === pair.left) button.classList.add('active');
+          var activeId = document.getElementById('notesSecondaryPane')?.classList.contains('is-active-pane') ? pair.right : pair.left;
+          if (bridge.currentPageId === pair.left && page.id === activeId) cell.classList.add('active');
           var icon = document.createElement('span');
           icon.className = 'page-icon';
           icon.setAttribute('aria-hidden', 'true');
@@ -415,30 +408,51 @@
           text.className = 'page-title-text';
           text.textContent = title;
           button.append(icon, text);
-          button.addEventListener('click', function () { bridge.loadPage(page.id); });
-          section.appendChild(button);
+          button.addEventListener('click', function () { bridge.loadPage(page.id); render(); });
+          var close = document.createElement('button');
+          close.type = 'button';
+          close.className = 'notes-sidebar-unpair';
+          close.textContent = '×';
+          close.setAttribute('aria-label', 'Unpair ' + title);
+          close.title = 'Unpair notes — keep both pages';
+          close.addEventListener('click', function () {
+            bridge.unpairNotes();
+            (document.querySelector('#editorV2Host .ProseMirror') || document.getElementById('editor'))?.focus();
+          });
+          cell.append(button, close);
+          section.appendChild(cell);
         });
-        tree.prepend(section);
+        tree.insertBefore(section, rows.find(function (row) { return row.parentNode === tree; }) || tree.firstChild);
+        rows.forEach(function (row) {
+          var member = members.find(function (p) { return p.id === row.dataset.pageId; });
+          // Keep a parent entry when it owns children so its expand/collapse
+          // control and original hierarchy remain available.
+          if (bridge.pages.some(function (p) { return p.title && p.title.startsWith(member.title + '::'); })) return;
+          hiddenRows.push({ row: row, hidden: row.hidden });
+          row.hidden = true;
+        });
         if (focusedId) Array.from(section.querySelectorAll('[data-page-id]')).find(function (b) { return b.dataset.pageId === focusedId; })?.focus({ preventScroll: true });
       } finally {
-        // Only observe canonical tree replacements, not our own group or the
-        // depth-guide decoration. Keep original folders and saved order intact.
-        observer.observe(tree, { childList: true });
+        // The observer ignores our group and the depth-guide decoration.
+        observer.observe(tree, { childList: true, subtree: true });
       }
     }
     section.addEventListener('keydown', function (event) {
-      if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       var buttons = Array.from(section.querySelectorAll('button'));
       var index = buttons.indexOf(document.activeElement);
       if (index < 0) return;
       event.preventDefault();
       var next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-        : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+        : (index + (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
       buttons[next]?.focus();
     });
     window.addEventListener('sutra:note-page-loaded', render);
     window.addEventListener('sutra:notes-pair-changed', render);
-    observer.observe(tree, { childList: true });
+    document.addEventListener('focusin', function (event) {
+      if (event.target.closest?.('#notesPrimaryPane, #notesSecondaryPane')) render();
+    });
+    observer.observe(tree, { childList: true, subtree: true });
     render();
   }
 

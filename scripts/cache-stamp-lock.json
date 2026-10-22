@@ -340,8 +340,8 @@
     "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20261021-sidebar-pair1",
-    "hash": "41e1827c207d2721"
+    "stamp": "20261021-sidebar-pair2",
+    "hash": "97f9d56f17a5dd9f"
   },
   "src/features/workspace/create-page-templates.js": {
     "stamp": "20261003-create-review7",
@@ -368,8 +368,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261021-sidebar-pair1",
-    "hash": "5d8b7651ea5bcbff"
+    "stamp": "20261021-sidebar-pair2",
+    "hash": "f63369d969e51b19"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -744,8 +744,8 @@
     "hash": "f01c288d9abf0b74"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261021-sidebar-pair1",
-    "hash": "a905fcec415ebcc9"
+    "stamp": "20261021-sidebar-pair2",
+    "hash": "ad8ef462bda087b3"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",
