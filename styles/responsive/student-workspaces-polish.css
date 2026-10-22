@@ -63,14 +63,14 @@ body.settings-anchored-mode #view-settings .cc-page {
     #view-settings .cc-theme-swatch { width: 19px; height: 19px; }
     #view-settings #settingsChooseThemeBtn { padding-inline: 12px; }
     #view-settings .cc-segmented { max-width: 100%; }
-    #view-settings .cc-page .cc-segment { min-height: 44px; padding-inline: 2px; font-size: 0.7rem; }
+    #view-settings .cc-page .cc-segment { min-height: 44px; padding-inline: 2px; font-size: 0.75rem; }
     #view-settings .cc-appearance-details > summary { flex-wrap: wrap; gap: 5px 12px; min-height: 62px; font-size: 0.9rem; }
-    #view-settings .cc-details-copy { order: 2; flex-basis: 100%; font-size: 0.72rem; }
+    #view-settings .cc-details-copy { order: 2; flex-basis: 100%; font-size: 0.75rem; line-height: 1.4; }
     #view-settings .cc-page .cc-action-bar { position: sticky; flex-direction: column; align-items: stretch; min-height: 0; gap: 8px; padding: 10px 16px; border-left: 0; }
     #view-settings .cc-page .cc-action-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
     #view-settings .cc-page .cc-action-buttons .cc-btn,
     #view-settings .cc-page .cc-action-buttons .cc-btn:last-child { grid-column: auto; min-width: 0; width: 100%; }
-    #view-settings .cc-action-status { font-size: 0.73rem; }
+    #view-settings .cc-action-status { font-size: 0.75rem; }
 }
 
 @media (max-width: 768px) {

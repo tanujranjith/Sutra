@@ -2099,7 +2099,7 @@ body.pref-high-contrast #view-settings .cc-page .cc-sidebar-disclosure-copy {
 }
 #view-settings .cc-page .cc-sidebar-nav { display: grid; flex: none; gap: 16px; overflow: visible; scrollbar-gutter: auto; }
 #view-settings .cc-page .cc-sidebar-group { gap: 0; padding: 0 0 14px; border-bottom: 1px solid var(--cc-divider); }
-#view-settings .cc-page .cc-sidebar-group-label { padding: 6px 8px 8px; font-size: 0.65rem; letter-spacing: 0.08em; font-weight: 500; color: var(--cc-text-secondary); }
+#view-settings .cc-page .cc-sidebar-group-label { padding: 6px 8px 8px; font-size: 0.75rem; letter-spacing: 0.08em; font-weight: 500; color: var(--cc-text-secondary); }
 #view-settings .cc-page .cc-sidebar-item {
     grid-template-columns: 22px minmax(0, 1fr);
     min-height: 44px;
@@ -2182,13 +2182,13 @@ body.pref-high-contrast #view-settings .cc-page .cc-sidebar-disclosure-copy {
 #view-settings .cc-theme-palette { display: flex; align-items: center; gap: 10px; }
 #view-settings .cc-theme-swatch { width: 23px; height: 23px; border-radius: 50%; border: 1px solid var(--cc-border-soft); }
 #view-settings .cc-theme-swatch.is-selected { outline: 2px solid var(--accent); outline-offset: 3px; }
-#view-settings .cc-theme-current { grid-row: 2; color: var(--cc-text-secondary); font-size: 0.7rem; }
+#view-settings .cc-theme-current { grid-row: 2; color: var(--cc-text-secondary); font-size: 0.75rem; }
 #view-settings #settingsChooseThemeBtn { grid-column: 2; grid-row: 1 / 3; white-space: nowrap; }
 #view-settings .cc-appearance-details { border-bottom: 1px solid var(--cc-divider); }
 #view-settings .cc-appearance-details > summary { display: flex; gap: 20px; align-items: center; min-height: 62px; padding: 12px 0; cursor: pointer; list-style: none; font-size: 1rem; font-weight: 650; }
 #view-settings .cc-appearance-details > summary::-webkit-details-marker,
 #view-settings .cc-workspace-preview > summary::-webkit-details-marker { display: none; }
-#view-settings .cc-details-copy { color: var(--cc-text-secondary); font-size: 0.7rem; font-weight: 400; }
+#view-settings .cc-details-copy { color: var(--cc-text-secondary); font-size: 0.75rem; line-height: 1.4; font-weight: 400; }
 #view-settings .cc-appearance-details > summary > i { margin-left: auto; font-size: 0.8rem; }
 #view-settings .cc-appearance-details[open] > summary > i { transform: rotate(90deg); }
 #view-settings .cc-appearance-details > summary:focus-visible,
