@@ -45696,8 +45696,10 @@ function getActiveEditor() {
                     applySplitViewState();
                     return;
                 }
-                if (!secondaryPageId || secondaryPageId === currentPageId) {
-                    secondaryPageId = appSettings.notesSplitSecondaryPageId || fallbackId;
+                const available = getAvailableSplitPages();
+                if (!available.some(page => page.id === secondaryPageId) || secondaryPageId === currentPageId) {
+                    const savedId = appSettings.notesSplitSecondaryPageId;
+                    secondaryPageId = savedId !== currentPageId && available.some(page => page.id === savedId) ? savedId : fallbackId;
                 }
                 if (secondaryPageId === currentPageId) secondaryPageId = fallbackId;
                 updateSplitPaneContext('left', { selectedNoteId: currentPageId });
@@ -49059,7 +49061,9 @@ function getActiveEditor() {
                     insertContentTimeline: insertCanvasContentTimeline,
                     getContentTimelineSelection: getCanvasContentTimelineSelection,
                     updateContentTimeline: updateCanvasContentTimeline,
-                    getContext: getCanvasAssistantContext,
+                    getContext: () => canvasWindow === globalThis && activeEditorPane === 'secondary'
+                        ? window.SutraContextualShell?.getCreateSplitSurface?.()?.getCanvasContext() || null
+                        : getCanvasAssistantContext(),
                     addText: (text, fields = {}) => addCanvasObject('text', { text: String(text || 'Text'), ...fields }),
                     addSticky: (text, fields = {}) => addCanvasObject('sticky', { text: String(text || 'Sticky note'), fill: '#f6d56f', ...fields }),
                     addShape: (shape = 'rectangle', fields = {}) => addCanvasObject('shape', { label: shape, text: shape, fill: 'var(--surface-bg)', stroke: 'var(--accent)', shape, ...fields }),
@@ -49128,7 +49132,7 @@ function getActiveEditor() {
                     applyAssistantOperations: canvasApplyAssistantOperations,
                     undoAssistantMutation: canvasUndoAssistantMutation
                 };
-                window.getCanvasAssistantContext = getCanvasAssistantContext;
+                window.getCanvasAssistantContext = window.SutraCanvas.getContext;
                 window.canvasExportJson = canvasExportJson;
                 window.canvasExportImage = canvasExportImage;
                 window.canvasExportPdf = canvasExportPdf;
@@ -50688,6 +50692,7 @@ function getActiveEditor() {
         function manualLockPage(pageId) {
             // Flush any unsaved editor content before hiding it behind the lock screen
             if (pageId === currentPageId) savePage();
+            if (pageId === secondaryPageId && isNotesSplitViewVisible()) flushSecondaryPageBeforeContextChange();
             unlockedPageIds.delete(pageId);
             window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(pageId) } }));
             // If this is the currently open page, show the lock screen

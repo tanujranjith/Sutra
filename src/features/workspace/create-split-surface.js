@@ -11,6 +11,10 @@
   pane.appendChild(host);
 
   function bridge() { return global.flowAtelier; }
+  function supports(page) {
+    return !!(page && (page.type === 'canvas' || page.type === 'folder'
+      || page.htmlDocument || page.slides || page.spreadsheet));
+  }
   function owner(record) {
     if (!record || current !== record || !record.frame.isConnected
       || document.body.dataset.view !== 'notes'
@@ -98,10 +102,12 @@
     });
     var root = doc.createElement('main');
     root.id = 'notesPrimaryPane';
+    var view = doc.createElement('section');
+    view.id = 'view-notes';
     var title = doc.createElement('input');
     title.id = 'pageTitle'; title.value = record.page.title.split('::').pop(); title.hidden = true;
     var mirror = doc.createElement('div'); mirror.id = 'editor'; mirror.hidden = true;
-    root.append(title, mirror); doc.body.appendChild(root);
+    root.append(title, mirror); view.appendChild(root); doc.body.appendChild(view);
     var value = Object.create(bridge());
     Object.defineProperties(value, {
       currentPageId: { get: function () { return record.page.id; } },
@@ -163,7 +169,9 @@
   }
   function show(pageId) {
     var page = bridge().getSecondaryPage();
-    if (!page || page.id !== pageId) { hide(); return; }
+    if (!supports(page) || page.id !== pageId || !bridge().isPageContentAuthorized(page)
+      || !bridge().canWritePageContent(page)
+      || document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') { hide(); return; }
     if (current && current.page === page && owner(current)) return;
     hide();
     var frame = document.createElement('iframe');
@@ -177,14 +185,22 @@
   }
   // Invalidate without committing old DOM after a lock or imported/remote apply.
   ['sutra:note-page-locked', 'sutra:workspace-lock-changed', 'sutra:workspace-remote-commit'].forEach(function (name) {
-    global.addEventListener(name, function () {
+    global.addEventListener(name, function (event) {
+      if (name === 'sutra:note-page-locked' && current && event.detail && event.detail.pageId !== current.page.id) return;
       hide({ flush: false });
       var page = bridge() && bridge().getSecondaryPage();
-      if (page && bridge().isPageContentAuthorized(page)) show(page.id);
+      if (supports(page) && bridge().isPageContentAuthorized(page)) show(page.id);
     });
+  });
+  global.addEventListener('noteflow:view-changed', function () {
+    if (document.body.dataset.view !== 'notes') { hide({ flush: false }); return; }
+    var page = bridge() && bridge().getSecondaryPage();
+    if (supports(page)) show(page.id);
   });
   var themeObserver = new MutationObserver(syncTheme);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
-  global.SutraContextualShell.registerCreateSplitSurface({ show: show, hide: hide, flush: flush });
+  global.SutraContextualShell.registerCreateSplitSurface({ show: show, hide: hide, flush: flush,
+    getCanvasContext: function () { return owner(current) && current.canvasAPI ? current.canvasAPI.getCanvasAssistantContext() : null; }
+  });
 }(window));

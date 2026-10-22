@@ -1378,6 +1378,171 @@ test('Move to space cancels cleanly, refuses duplicate titles, and rebases a nes
   expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.nested)).toBe('Unique child::Grandchild');
 });
 
+test('all Create comparison surfaces save through the host without replacing the main note', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  const ids = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const left = hooks.createNoteInActiveSpace('All types main', '<p>Main note stays intact</p>');
+    const html = window.SutraHTMLPages.createPage('All types HTML');
+    const slides = window.SutraSlides.createPage('All types Slides');
+    const sheets = window.SutraSheets.createPage('All types Sheets');
+    const canvas = hooks.createCanvasInActiveSpace('All types Canvas');
+    const folder = hooks.createNoteInActiveSpace('All types folder', '');
+    folder.type = 'folder';
+    hooks.createNoteInActiveSpace('All types folder::Child', '<p>Child content</p>');
+    window.loadPage(left.id);
+    window.flowAtelier.renderPagesList();
+    return { left: left.id, html: html.id, slides: slides.id, sheets: sheets.id, canvas: canvas.id, folder: folder.id };
+  });
+  await page.getByRole('button', { name: 'More actions for All types main', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Split with another page', exact: true }).click();
+  const choice = page.locator('#splitNoteSelect');
+  const frame = page.frameLocator('.create-split-frame');
+  await choice.selectOption(ids.html);
+  await frame.getByRole('tab', { name: 'Code', exact: true }).click();
+  await frame.getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true }).fill('<h1>Split HTML saved</h1>');
+  await choice.selectOption(ids.sheets);
+  await frame.getByRole('gridcell', { name: 'A1', exact: true }).click();
+  await frame.getByRole('textbox', { name: 'Formula or value', exact: true }).fill('=6*7');
+  // Switching away must commit a still-open cell draft.
+  await choice.selectOption(ids.canvas);
+  await frame.getByRole('button', { name: 'Add text', exact: true }).click();
+  await frame.getByRole('textbox', { name: 'Canvas object text', exact: true }).fill('Split Canvas saved');
+  await choice.selectOption(ids.slides);
+  await frame.getByRole('button', { name: 'New slide', exact: true }).click();
+  await expect(frame.getByRole('complementary', { name: 'Slide order', exact: true })).toContainText('2 of 2');
+  await choice.selectOption(ids.folder);
+  await expect(frame.getByRole('button', { name: '📄 Child', exact: true })).toBeVisible();
+  expect(await page.locator('.create-split-frame').evaluate(el =>
+    el.contentWindow.flowAtelier.pages === window.flowAtelier.pages)).toBe(true);
+  expect(await page.locator('.create-split-frame').evaluate(el =>
+    Array.from(el.contentDocument.scripts).some(script => /src\/core\/app\.js/.test(script.src)))).toBe(false);
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Main note stays intact');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-all-create-splits'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  await openNotesView(page);
+  await expect(frame.getByRole('heading', { name: 'Pages in this folder', exact: true })).toBeVisible();
+  await choice.selectOption(ids.sheets);
+  await expect(frame.getByRole('gridcell', { name: 'A1', exact: true })).toHaveText('42');
+  const saved = await page.evaluate(ids => ({
+    html: window.flowAtelier.getPageById(ids.html).htmlDocument.source,
+    canvas: window.flowAtelier.getPageById(ids.canvas).canvas.objects[0].text,
+    slides: window.flowAtelier.getPageById(ids.slides).slides.slides.length
+  }), ids);
+  expect(saved).toEqual({ html: '<h1>Split HTML saved</h1>', canvas: 'Split Canvas saved', slides: 2 });
+});
+
+for (const kind of ['html', 'slides', 'sheets', 'canvas']) {
+  test(`two ${kind} pages keep independent split editor state`, async ({ page }) => {
+    await openApp(page);
+    await openNotesView(page);
+    const ids = await page.evaluate(kind => {
+      const create = title => kind === 'html' ? window.SutraHTMLPages.createPage(title)
+        : kind === 'slides' ? window.SutraSlides.createPage(title)
+          : kind === 'sheets' ? window.SutraSheets.createPage(title)
+            : window.__sutraPublicBetaTestHooks.createCanvasInActiveSpace(title);
+      const left = create('Same type left');
+      const right = create('Same type right');
+      window.flowAtelier.openPageInSplitView(left.id);
+      return { left: left.id, right: right.id };
+    }, kind);
+    await page.locator('#splitNoteSelect').selectOption(ids.right);
+    const frame = page.frameLocator('.create-split-frame');
+    await expect(page.locator('.create-split-frame')).toBeVisible();
+    if (kind === 'canvas') {
+      await page.locator('#canvasEditor').getByRole('button', { name: 'Add text', exact: true }).click();
+      await page.locator('#canvasEditor').getByRole('textbox', { name: 'Canvas object text', exact: true }).fill('Left canvas');
+      await frame.getByRole('button', { name: 'Add text', exact: true }).click();
+      await frame.getByRole('textbox', { name: 'Canvas object text', exact: true }).fill('Right canvas');
+      expect(await page.evaluate(() => window.SutraCanvas.getContext().pageId)).toBe(ids.right);
+      await expect(page.locator('#canvasEditor').getByRole('textbox', { name: 'Canvas object text', exact: true })).toHaveValue('Left canvas');
+      await frame.getByRole('button', { name: 'Undo', exact: true }).click();
+      await frame.getByRole('button', { name: 'Undo', exact: true }).click();
+      expect(await page.evaluate(id => window.flowAtelier.getPageById(id).canvas.objects.length, ids.left)).toBe(1);
+      expect(await page.evaluate(id => window.flowAtelier.getPageById(id).canvas.objects.length, ids.right)).toBe(0);
+    } else if (kind === 'sheets') {
+      await page.locator('#sheetsEditor').getByRole('gridcell', { name: 'A1', exact: true }).click();
+      await page.locator('#sheetsEditor').getByRole('textbox', { name: 'Formula or value', exact: true }).fill('=2*3');
+      await page.locator('#sheetsEditor').getByRole('button', { name: 'Apply formula', exact: true }).click();
+      await frame.getByRole('gridcell', { name: 'A1', exact: true }).click();
+      await frame.getByRole('textbox', { name: 'Formula or value', exact: true }).fill('=3*3');
+      await frame.getByRole('button', { name: 'Apply formula', exact: true }).click();
+      await expect(page.locator('#sheetsEditor').getByRole('gridcell', { name: 'A1', exact: true })).toHaveText('6');
+      await expect(frame.getByRole('gridcell', { name: 'A1', exact: true })).toHaveText('9');
+    } else if (kind === 'slides') {
+      await page.locator('#slidesEditor').getByRole('button', { name: 'New slide', exact: true }).click();
+      await expect(frame.getByRole('complementary', { name: 'Slide order', exact: true })).toContainText('1 of 1');
+      await frame.getByRole('button', { name: 'New slide', exact: true }).click();
+      expect(await page.evaluate(ids => [ids.left, ids.right].map(id => window.flowAtelier.getPageById(id).slides.slides.length), ids)).toEqual([2, 2]);
+    } else {
+      await page.locator('.html-page-editor').getByRole('button', { name: 'Edit source', exact: true }).click();
+      await page.locator('.html-page-editor').getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true }).fill('<p>Left HTML</p>');
+      await frame.getByRole('tab', { name: 'Code', exact: true }).click();
+      await frame.getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true }).fill('<p>Right HTML</p>');
+      expect(await page.evaluate(ids => [ids.left, ids.right].map(id => window.flowAtelier.getPageById(id).htmlDocument.source), ids)).toEqual(['<p>Left HTML</p>', '<p>Right HTML</p>']);
+    }
+    expect(await page.locator('#notesPrimaryPane').evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(200);
+    expect(await page.locator('#notesSecondaryPane').evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(200);
+    await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-same-type-split'));
+    await page.reload();
+    await waitForAppHydrated(page);
+    await openNotesView(page);
+    await expect(page.locator('.create-split-frame')).toBeVisible();
+    expect(await page.evaluate(() => window.flowAtelier.getNotesSplitPair())).toEqual(ids);
+  });
+}
+
+test('a new space split chooses an available partner instead of a stale other-space page', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  const ids = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const oldLeft = hooks.createNoteInActiveSpace('Old space left', '<p>Old left</p>');
+    hooks.createNoteInActiveSpace('Old space right', '<p>Old right</p>');
+    window.flowAtelier.openPageInSplitView(oldLeft.id);
+    const space = hooks.createSpace('Split destination');
+    const left = hooks.createCanvasInActiveSpace('Destination Canvas');
+    const right = window.SutraSheets.createPage('Destination Sheets');
+    window.flowAtelier.openPageInSplitView(left.id);
+    return { left: left.id, right: right.id, space: space.id };
+  });
+  expect(await page.evaluate(() => window.flowAtelier.getNotesSplitPair())).toEqual({ left: ids.left, right: ids.right });
+  await expect(page.frameLocator('.create-split-frame').getByRole('region', { name: 'Sutra Sheets editor', exact: true })).toBeVisible();
+  await expect(page.locator('#splitNoteSelect')).not.toContainText('Old space');
+});
+
+test('locked native split pages never mount until unlocked and relocking disposes the frame', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  const ids = await page.evaluate(async () => {
+    const note = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace('Native lock main', '<p>Public body</p>');
+    const html = window.SutraHTMLPages.createPage('Native lock HTML', { source: '<h1>Private split sentinel</h1>' });
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(html.id, '4826');
+    html.lockAutoLock = 'session';
+    window.flowAtelier.openPageInSplitView(note.id);
+    return { left: note.id, right: html.id };
+  });
+  await page.locator('#splitNoteSelect').selectOption(ids.right);
+  await expect(page.locator('.create-split-frame')).toHaveCount(0);
+  await expect(page.locator('#editorSecondary')).toContainText('PIN-protected');
+  await expect(page.locator('#notesEditorContainer')).not.toContainText('Private split sentinel');
+  await page.locator('#notesSidebarPair').getByRole('button', { name: 'Native lock HTML', exact: true }).click();
+  await page.locator('#lockScreenPinInput').fill('4826');
+  await page.locator('#lockScreenForm button[type="submit"]').click();
+  await page.evaluate(id => window.flowAtelier.openPageInSplitView(id), ids.left);
+  await page.locator('#splitNoteSelect').selectOption(ids.right);
+  const frame = page.frameLocator('.create-split-frame');
+  await frame.getByRole('tab', { name: 'Code', exact: true }).click();
+  await expect(frame.getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true })).toHaveValue('<h1>Private split sentinel</h1>');
+  await page.evaluate(id => window.__sutraPublicBetaTestHooks.lockPageNow(id), ids.right);
+  await expect(page.locator('.create-split-frame')).toHaveCount(0);
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).htmlDocument.source, ids.right)).toBe('<h1>Private split sentinel</h1>');
+});
+
 test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);

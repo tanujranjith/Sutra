@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-create-split2",
-    "hash": "05c0b50d850cdc83"
+    "stamp": "20261022-create-split4",
+    "hash": "e4746d5259fbf427"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -340,7 +340,7 @@
     "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20261022-create-split2",
+    "stamp": "20261022-create-split3",
     "hash": "e9b8b63a21a009a7"
   },
   "src/features/workspace/create-page-templates.js": {
@@ -348,8 +348,8 @@
     "hash": "56818cb5d03e08eb"
   },
   "src/features/workspace/create-split-surface.js": {
-    "stamp": "20261022-create-split2",
-    "hash": "63f853b4fceccf3a"
+    "stamp": "20261022-create-split5",
+    "hash": "5a050390ce970a43"
   },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20261015-reliability2",
@@ -372,15 +372,15 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261021-space-move1",
-    "hash": "439da3133576f72c"
+    "stamp": "20261022-create-split3",
+    "hash": "d7f663e03cf0ac42"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20261022-create-split2",
+    "stamp": "20261022-create-split3",
     "hash": "e725dcf05eea3f91"
   },
   "src/features/workspace/ios-install-guide.js": {
@@ -428,7 +428,7 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20261022-create-split2",
+    "stamp": "20261022-create-split3",
     "hash": "0c0ee2570d3c790e"
   },
   "src/features/workspace/slides.js": {
@@ -592,8 +592,8 @@
     "hash": "d50cc5dc21e5560b"
   },
   "styles/features/create-split-surface.css": {
-    "stamp": "20261022-create-split2",
-    "hash": "0915a43b606e8647"
+    "stamp": "20261022-create-split4",
+    "hash": "5388cf30f2b3257f"
   },
   "styles/features/customization.css": {
     "stamp": "20260601-handwriting-mods",
