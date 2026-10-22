@@ -39,14 +39,25 @@ those headers cannot be configured there.
 
 Sutra deliberately retains GitHub Pages as its production host. A read-only
 HTTPS `HEAD` check of `https://tanujranjith.github.io/Sutra/Sutra.html` on
-2026-09-13 returned `200` and:
+2026-10-22 returned `200` and:
 
 - present: `Strict-Transport-Security: max-age=31556952`;
 - absent: response-header `Content-Security-Policy`,
-  `X-Content-Type-Options`, `Referrer-Policy`, and framing protection.
+  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, and framing protection.
 
 This is an accepted hosting limitation, not evidence that `vercel.json` applies
 to GitHub Pages. The HTML entry points therefore retain the canonical meta CSP
 for directives supported in markup, while `frame-ancestors` and the other
 HTTP-only protections remain unavailable on this host. Moving production to a
 header-capable host requires a separate hosting/deployment decision.
+
+### October 22 read-only deployment finding
+
+The normal GitHub Pages site returned HTTP 200 for `AGENTS.md`, `package.json`,
+`tests/unit/assistant-core.test.mjs`, and `noteflow-classic/noteflow.html`.
+`.git/HEAD` and `.env` returned 404. The branch's Pages workflow already builds
+and checks the allowlisted `.deploy` artifact, but that source configuration is
+not proof that the currently published site uses it. Keep the published-file
+exposure item open until an authorized deployment is verified. No deployment or
+remote configuration was changed during this review.
