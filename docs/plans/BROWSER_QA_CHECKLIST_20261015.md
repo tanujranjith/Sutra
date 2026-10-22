@@ -73,7 +73,6 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 52. ~~Repository documentation audit, applicable consolidation, and obsolete-guide removal; parent reviewed the changes.~~
 53. ~~Workspace PIN setup and timeout forms hide irrelevant credential fields; local manual verification passed.~~
 54. ~~Homework storage policy reconciled with the existing current-UI IndexedDB store; migration/recovery record explicitly preserves and documents separate legacy v1 mutation paths. No runtime or task data changed.~~
-55. License/brand decision: a concrete policy is prepared locally in TRADEMARK.md and README. It retains Apache 2.0 (including commercial reuse and private downstream modifications), permits accurate references/optional attribution, and distinguishes separately marketed forks from official Sutra branding. LICENSE and NOTICE are unchanged. Open: owner's adoption of this direction; no publication or registration performed.
 
 ## Remaining-item review and user validation — October 17, 2026
 
@@ -126,10 +125,47 @@ the user's October 18 approval and the local off-switch retest):
   a separate disposable workspace and check notes, tasks, images, and attachments.
 - [ ] **45: CI approval.** Authorize a later branch push/full browser matrix;
   confirm the WebKit fixture and new PIN/notification regressions pass.
-- [ ] **55: Owner decision.** Choose whether to adopt the prepared Apache 2.0
-  plus updated Sutra brand policy. TRADEMARK.md and README are drafted locally;
-  LICENSE and NOTICE remain unchanged. Commercial/private downstream reuse is
-  explicitly disclosed before adoption.
+
+## Paired pages and unified note tools — October 21, 2026
+
+Local implementation commit: `668ad2a`, on `codex/student-workflow-batch`.
+The license decision was removed from the active checklist at the user's request;
+the effective software license was not changed.
+
+Split View now retains a specific pair rather than replacing its primary member
+when another page opens. Paired tabs are adjacent and flat, and an unlink icon
+explicitly ends the pairing. Unpairing or closing Split View hides the entire
+strip, including ordinary session shortcuts. The pair reuses the existing pane
+contexts, secondary-page setting, and canonical split preference; ordinary
+visited tabs stay in memory. No new workspace fields or note-format changes.
+
+Manual Chrome checks on the isolated `http://127.0.0.1:5297/Sutra.html` origin:
+
+- Created three harmless QA notes. Pair Beta + Alpha stayed together while Gamma
+  opened normally. Returning through Alpha restored Beta on the left and Alpha
+  on the right, with its pending secondary edit intact.
+- Reload preserved both the exact pairing and each note's distinct body.
+- Unpair removed the group and the whole strip (zero rendered height), returning
+  to a single editor.
+- The unified Insert and note tools menu opened by mouse. Inserting a page break
+  while the secondary editor was active changed only that editor; Undo removed
+  it. The old plus trigger is hidden; all 22 insert/document actions and zoom
+  remain in the shared menu.
+- At 390px, document width remained 390px and the menu was contained horizontally,
+  scrolled internally, and stayed within the viewport. Escape closed it and
+  restored focus to the trigger. The viewport override was reset afterward.
+
+Required core runtime integrity and its integrity/server-guard self-tests passed,
+as did the staged runtime hook (27 assertions), targeted JavaScript syntax checks,
+cache/asset generation, and diff whitespace checks. Four focused browser
+regressions are prepared for CI: pair navigation/reload/unpair, protected member
+navigation, Classic editor pending edits, and unified-menu keyboard/insertion.
+They were not run locally. Protected-member and Classic-specific behavior still
+need those CI runs; the manual pass used Modern Editor without creating PINs.
+
+The normal/official workspace was not edited. No provider requests, dependency
+installs, push, merge, deployment, or cloud configuration changes were made.
+The requested local server was left running for user review.
 
 ## User approval and alert opt-out — October 18, 2026
 
