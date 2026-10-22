@@ -31586,9 +31586,18 @@ function buildOnboardingPlanPreview() {
         }
 
         function collectSettingsSearchCandidates(sections) {
+            const previous = collectSettingsSearchCandidates.cache;
+            const sameSections = previous && previous.sections.length === sections.length
+                && sections.every((section, index) => section === previous.sections[index]);
+            // Drain synchronous label/control edits as well as observer callbacks.
+            // Search-owned style/class/result changes deliberately do not dirty
+            // this index, so typing does not rescan every Settings control.
+            if (sameSections && previous.observer && previous.observer.takeRecords().length) previous.dirty = true;
+            if (sameSections && !previous.dirty) return previous.candidates;
+            if (previous && previous.observer) previous.observer.disconnect();
             const rowSelector = '[data-setting-item], .atelier-setting-row, .settings-row, .settings-card';
             const interactiveSelector = 'a[href]:not([aria-disabled="true"]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [role="radio"]';
-            const text = element => String(element && (element.innerText || element.textContent) || '').replace(/\s+/g, ' ').trim().slice(0, 320);
+            const text = element => String(element && element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 320);
             const controlText = control => control && !control.matches('input, textarea, select, .nf-select-trigger') ? text(control) : '';
             const visibleControl = control => {
                 if (!control || control.hidden || control.closest('[hidden]')) return false;
@@ -31661,6 +31670,15 @@ function buildOnboardingPlanPreview() {
                     addCandidate(item, visibleTarget(control), true);
                 });
             });
+            if (typeof MutationObserver === 'function') {
+                const cache = { sections: sections.slice(), candidates: results, dirty: false, observer: null };
+                cache.observer = new MutationObserver(() => { cache.dirty = true; });
+                sections.forEach(section => cache.observer.observe(section, {
+                    subtree: true, childList: true, characterData: true, attributes: true,
+                    attributeFilter: ['aria-label', 'aria-hidden', 'aria-checked', 'checked', 'title', 'placeholder', 'id', 'data-pref-path', 'name', 'disabled', 'hidden', 'type']
+                }));
+                collectSettingsSearchCandidates.cache = cache;
+            } else collectSettingsSearchCandidates.cache = null;
             return results;
         }
 
@@ -31789,6 +31807,12 @@ function buildOnboardingPlanPreview() {
             const candidates = collectSettingsSearchCandidates(sections);
             const ranked = query ? rankSettingsSearchCandidates(query, candidates) : [];
             const matchingItems = new Set(ranked.map(result => result.candidate.item));
+            const matchingGroups = new Set();
+            const categoryMatches = new Map();
+            ranked.forEach(({ candidate }) => {
+                categoryMatches.set(candidate.category, (categoryMatches.get(candidate.category) || 0) + 1);
+                for (let group = candidate.item.closest('.cc-group'); group; group = group.parentElement?.closest('.cc-group')) matchingGroups.add(group);
+            });
             let visibleCount = 0;
             const matchingCategories = new Set();
             candidates.forEach(candidate => {
@@ -31804,7 +31828,7 @@ function buildOnboardingPlanPreview() {
                 const category = String(section.getAttribute('data-settings-section') || '').toLowerCase();
                 const isActive = category === activeSettingsCategory;
                 const navButton = document.querySelector(`#view-settings [data-settings-nav="${category}"]`);
-                const sectionMatches = candidates.filter(candidate => candidate.category === category && matchingItems.has(candidate.item)).length;
+                const sectionMatches = categoryMatches.get(category) || 0;
                 // With a query, Settings behaves like a global search: every
                 // category containing a match is shown, so results retain their
                 // labels and controls instead of forcing the student to search
@@ -31817,7 +31841,7 @@ function buildOnboardingPlanPreview() {
                     navButton.setAttribute('aria-hidden', navButton.hidden ? 'true' : 'false');
                 }
                 section.querySelectorAll('.cc-group').forEach(group => {
-                    const hasMatch = Array.from(matchingItems).some(item => group.contains(item));
+                    const hasMatch = matchingGroups.has(group);
                     if (query && !hasMatch) {
                         if (!group.hasAttribute('data-settings-search-display')) {
                             group.setAttribute('data-settings-search-display', group.style.display);
@@ -63423,8 +63447,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const list = document.createElement('ul');
             list.className = 'sync-guarantees';
             const rows = [
-                ['Synced to cloud', status.enabled ? formatSutraSyncTime(status.lastSyncAt) : 'Sync is off']
+                ['Synced to cloud (this session)', !status.enabled ? 'Sync is off'
+                    : status.lastSyncAt ? formatSutraSyncTime(status.lastSyncAt) : 'No successful cycle recorded this session']
             ];
+            if (status.lastErrorStage) rows.push(['Verification stopped at', status.lastErrorStage]);
+            if (status.lastErrorReference) rows.push(['Diagnostic reference', status.lastErrorReference]);
             if (status.enabled && status.outboxDepth > 0) rows.push(['Waiting to upload', String(status.outboxDepth) + ' change(s)']);
             if (status.enabled && status.conflictsPending > 0) rows.push(['Conflicts to review', String(status.conflictsPending)]);
             if (status.enabled && status.assetsPending > 0) rows.push(['Attachments still transferring', String(status.assetsPending)]);
@@ -63452,7 +63479,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (locked) locked.hidden = !(status.enabled && status.state === 'locked');
             if (running) running.hidden = !isRunning;
             const pauseBtn = sutraSyncEl('sutraSyncPauseBtn');
-            if (pauseBtn) pauseBtn.textContent = status.state === 'paused' ? 'Resume' : 'Pause';
+            if (pauseBtn) pauseBtn.textContent = status.state === 'encryption-error' ? 'Retry verification'
+                : status.state === 'paused' ? 'Resume' : 'Pause';
+            const syncNowBtn = sutraSyncEl('sutraSyncNowBtn');
+            if (syncNowBtn) syncNowBtn.disabled = status.state === 'encryption-error' || status.state === 'paused' || status.state === 'syncing';
             const signInHint = sutraSyncEl('sutraSyncSignInHint');
             if (signInHint) {
                 const cfg = getSutraCloudConfig();
@@ -63834,14 +63864,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 sutraSyncSetError('sutraSyncRunningError', '');
                 try {
                     const outcome = await window.SutraSync.syncNow();
-                    if (outcome && outcome.error) sutraSyncSetError('sutraSyncRunningError', String(outcome.error.message || outcome.error));
+                    if (outcome && outcome.error) sutraSyncSetError('sutraSyncRunningError', getSutraSyncStatus().lastError || 'Sync could not finish.');
+                    else if (outcome && outcome.skipped) showToast(outcome.reason === 'stale-tab'
+                        ? 'Reload this tab before syncing its newer saved workspace.' : 'Sync did not run. Check the Sync status and resume when ready.');
                     else showToast('Synced.');
                 } catch (error) { sutraSyncSetError('sutraSyncRunningError', error && error.message ? error.message : String(error)); }
                 updateSutraSyncUi();
             });
             on('sutraSyncPauseBtn', () => {
                 const status = getSutraSyncStatus();
-                if (status.state === 'paused') window.SutraSync.resume();
+                if (status.state === 'paused' || status.state === 'encryption-error') window.SutraSync.resume();
                 else window.SutraSync.pause();
                 updateSutraSyncUi();
             });

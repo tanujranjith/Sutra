@@ -53,6 +53,8 @@
     var status = {
       state: vaultKey ? 'idle' : 'locked',
       lastError: null,
+      lastErrorStage: null,
+      lastErrorReference: null,
       lastSyncAt: null,
       lastCursor: 0,
       outboxDepth: 0,
@@ -71,6 +73,23 @@
     function setState(state, error) {
       status.state = state;
       status.lastError = error ? String(error && error.message ? error.message : error) : null;
+      status.lastErrorStage = null;
+      status.lastErrorReference = null;
+      if (error && error.name === 'SyncVaultUnlockError') {
+        var stage = ['operation', 'snapshot', 'attachment'].indexOf(error.stage) >= 0 ? error.stage : null;
+        status.lastErrorStage = stage;
+        // Failed-envelope metadata is unverified. Expose only an opaque,
+        // bounded reference rather than imported user-chosen record IDs.
+        if (stage && typeof error.identifier === 'string' && error.identifier.length <= 160) {
+          var referenceHash = 2166136261;
+          for (var ri = 0; ri < error.identifier.length; ri += 1) {
+            referenceHash = Math.imul(referenceHash ^ error.identifier.charCodeAt(ri), 16777619);
+          }
+          status.lastErrorReference = stage + '-' + (referenceHash >>> 0).toString(16).padStart(8, '0');
+        }
+        status.lastError = 'Encrypted ' + (stage ? stage + ' ' : '')
+          + 'data could not be verified. Sync is paused; local saving continues.';
+      }
       if (typeof bridge.onStatusChange === 'function') {
         try { bridge.onStatusChange(getStatus()); } catch (callbackError) { /* status is advisory */ }
       }
@@ -80,6 +99,8 @@
       return {
         state: status.state,
         lastError: status.lastError,
+        lastErrorStage: status.lastErrorStage,
+        lastErrorReference: status.lastErrorReference,
         lastSyncAt: status.lastSyncAt,
         lastCursor: status.lastCursor,
         outboxDepth: status.outboxDepth,
@@ -633,7 +654,7 @@
     async function runCycle() {
       if (stopped || paused || running) {
         if (running) dirty = true;
-        return { skipped: true };
+        return { skipped: true, reason: stopped ? 'stopped' : paused ? 'paused' : 'busy' };
       }
       if (!vaultKey) {
         setState('locked');

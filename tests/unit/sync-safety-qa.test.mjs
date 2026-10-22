@@ -137,6 +137,16 @@ test('auth-rejected pulls and corrupt remote ciphertext preserve the local durab
 
       assert.ok(outcome.error);
       assert.equal(engine.getStatus().state, failure === 'unauthorized' ? 'auth-expired' : 'encryption-error');
+      const status = engine.getStatus();
+      if (failure === 'corrupt-ciphertext') {
+        assert.equal(status.lastErrorStage, 'operation');
+        assert.match(status.lastErrorReference, /^operation-[0-9a-f]{8}$/);
+        assert.ok(!status.lastError.includes(remoteOp.recordKey), 'unverified remote IDs stay out of status messages');
+      } else {
+        assert.equal(status.lastErrorStage, null);
+        assert.equal(status.lastErrorReference, null);
+      }
+      assert.deepEqual(await engine.syncNow(), { skipped: true, reason: 'paused' }, 'a paused cycle is not reported as a successful sync');
       assert.equal(snapshotCalls, 0, 'an established baseline skips bootstrap snapshot discovery');
       assert.deepEqual(pullCursors, failure === 'unauthorized' ? [12] : [12, 13]);
       assert.deepEqual(bridge.holder.workspace, beforeWorkspace, 'remote failures never replace the saved local workspace');
@@ -150,6 +160,9 @@ test('auth-rejected pulls and corrupt remote ciphertext preserve the local durab
       assert.equal(pushCalls, 0);
       assert.equal(touchCalls, 0);
       assert.equal(engine.getStatus().lastSyncAt, null);
+      engine.pause();
+      assert.equal(engine.getStatus().lastErrorStage, null, 'leaving the integrity state clears session-only diagnostic details');
+      assert.equal(engine.getStatus().lastErrorReference, null);
     });
   }
 });

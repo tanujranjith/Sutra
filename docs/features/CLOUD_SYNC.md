@@ -205,6 +205,19 @@ and the app shows its usual reload prompt. Keep one active tab per device.
 
 ## Troubleshooting
 
+The Sync card labels its success time **Synced to cloud (this session)**.
+**No successful cycle recorded this session** describes only this engine session,
+not the device's entire Sync history. Local saving and recoverable backups have
+separate status and timestamps.
+
+Verification failures include a bounded stage (snapshot, operation, or
+attachment) and, when available, an opaque diagnostic reference. Unverified
+remote record identifiers are not displayed as source names. **Retry
+verification** explicitly resumes one attempt with the existing key; another
+integrity failure pauses again without a retry storm. It does not replace a key
+or delete remote content. A skipped/paused cycle never produces a success toast.
+Recovery guidance disappears after leaving the verification-error state.
+
 - **"Locked"** — enter your sync passphrase (per session, by design).
 - **"Offline — changes queued"** — edits are safe in the local outbox; they
   upload on reconnect.
