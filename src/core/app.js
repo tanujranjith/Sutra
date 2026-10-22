@@ -4485,6 +4485,8 @@ function populateProgressDashboard() {
         function applyWorkspacePreferences(options = {}) {
             if (!appSettings) return;
             const prefs = ensureWorkspacePreferences();
+            const assistantPack = window.SutraFeatureRegistry?.getState?.('assistant');
+            if (assistantPack && assistantPack.enabled !== (prefs.assistant.enabled === true)) syncLazyFeaturePacks();
             const rootStyle = document.documentElement ? document.documentElement.style : null;
             const body = document.body;
 
@@ -85306,23 +85308,7 @@ function closeClassDashboardDrawer() {
 
 // ---------- "Schedule this" for Deadline Radar items ----------
 function scheduleDeadlineItemAsBlock(item) {
-    if (!item || typeof timeBlocks === 'undefined') return;
-    try {
-        const d = item.due instanceof Date ? item.due : new Date(item.due);
-        if (isNaN(d)) return;
-        const iso = d.toISOString().slice(0, 10);
-        const defaultStart = (item.source === 'apexam') ? '09:00' : '18:00';
-        timeBlocks.push({
-            id: (typeof generateId === 'function' ? generateId() : `b${Date.now()}`),
-            date: iso,
-            start: defaultStart,
-            end: (function(){ const [h,m] = defaultStart.split(':').map(Number); const nh=(h+1)%24; return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`; })(),
-            name: `Prep: ${item.title || ''}`,
-            category: item.source === 'apexam' ? 'study' : 'general'
-        });
-        saveTimeBlocks && saveTimeBlocks();
-        if (typeof showToast === 'function') showToast('Prep block scheduled.');
-    } catch (err) { console.warn(err); }
+    return scheduleGenericItemAsBlock(item && { ...item, category: item.category || (item.source === 'apexam' ? 'study' : 'general'), dueTime: item.dueTime || (item.source === 'apexam' ? '09:00' : '18:00') });
 }
 
 // ---------- Generic "Schedule this" for any item w/ due date + title ----------
@@ -85330,11 +85316,31 @@ function scheduleGenericItemAsBlock(item) {
     if (!item || typeof timeBlocks === 'undefined') return false;
     try {
         const raw = item.dueDate || item.due || item.date || '';
-        const d = raw ? new Date(`${String(raw).slice(0,10)}T00:00:00`) : new Date();
+        const now = new Date();
+        const d = raw instanceof Date ? new Date(raw) : raw ? new Date(String(raw).slice(0,10) + 'T00:00:00') : new Date(now);
         if (isNaN(d)) return false;
-        const iso = d.toISOString().slice(0, 10);
-        const start = item.dueTime || '18:00';
-        const end = (function(t){ const [h,m] = String(t).split(':').map(Number); const nh=(Number(h||0)+1)%24; return `${String(nh).padStart(2,'0')}:${String(Number(m||0)).padStart(2,'0')}`; })(start);
+        let iso = quickCaptureLocalISO(d), start = item.dueTime || '18:00';
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start)) return false;
+        let minutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3));
+        const today = quickCaptureLocalISO(now);
+        let shifted = false;
+        if (iso <= today) {
+            const earliest = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 15) * 15;
+            shifted = iso < today || minutes < earliest;
+            iso = today;
+            minutes = Math.max(minutes, earliest);
+            if (minutes > 1379) {
+                d.setFullYear(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                iso = quickCaptureLocalISO(d); minutes = 18 * 60;
+            }
+        }
+        if (minutes + 60 >= 1440) {
+            if (typeof showToast === 'function') showToast('Choose an earlier prep time so the block fits within one day.');
+            return false;
+        }
+        const formatTime = value => String(Math.floor(value / 60)).padStart(2, '0') + ':' + String(value % 60).padStart(2, '0');
+        start = formatTime(minutes);
+        const end = formatTime(minutes + 60);
         const source = String(item.source || '');
         const sourceId = String(item.sourceId || item.id || '').replace(/^(?:task|hw):/, '');
         const linkage = source === 'task' && sourceId
@@ -85351,7 +85357,7 @@ function scheduleGenericItemAsBlock(item) {
         });
         saveTimeBlocks && saveTimeBlocks();
         if (activeView === 'timeline' && typeof renderTimeline === 'function') { try { renderTimeline(); } catch (err) {} }
-        if (typeof showToast === 'function') showToast('Prep block scheduled.');
+        if (typeof showToast === 'function') showToast(shifted ? 'Prep block scheduled for ' + iso + ' at ' + start + '; the earlier time has passed.' : 'Prep block scheduled.');
         return true;
     } catch (err) { console.warn(err); return false; }
 }

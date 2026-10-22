@@ -115,3 +115,47 @@ for (const cancellation of ['Stop', 'permission change']) {
     expect(JSON.stringify(requests)).not.toContain('PRIVATE_B');
   });
 }
+
+
+test('saving Assistant enablement loads and reinitializes workspace-access controls without registry calls', async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem('sutra_intro_played', '1'));
+  await page.goto('/Sutra.html');
+  await waitForAppReady(page);
+  await page.evaluate(() => {
+    window.markStudentOnboardingCompleted?.(true);
+    document.getElementById('sutraStartupIntro')?.remove();
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) { overlay.hidden = true; overlay.classList.remove('active'); overlay.style.display = 'none'; }
+    document.body.classList.remove('onboarding-open');
+    window.setActiveView('settings');
+  });
+  await page.locator('[data-settings-nav="assistant"]').click();
+  const toggle = page.locator('[data-pref-path="assistant.enabled"]');
+  const mode = page.locator('#assistantWorkspaceAccess');
+  const status = page.locator('#assistantWorkspaceAccessStatus');
+  if (await toggle.isChecked()) {
+    await toggle.uncheck({ force: true });
+    await page.locator('#settingsApplyBtnTop').click();
+  }
+  await expect(mode).toBeDisabled();
+  await toggle.check({ force: true });
+  await page.locator('#settingsApplyBtnTop').click();
+  await expect(mode).toBeEnabled();
+  await expect(status).not.toContainText('Enable Sutra Assistant');
+  await mode.selectOption('read_only');
+  await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('read_only');
+  // Exercise the loaded -> teardown -> reinit path as well as first enable.
+  await toggle.uncheck({ force: true });
+  await page.locator('#settingsApplyBtnTop').click();
+  await expect(mode).toBeDisabled();
+  await expect(status).toContainText('Enable Sutra Assistant');
+  await toggle.check({ force: true });
+  await page.locator('#settingsApplyBtnTop').click();
+  await expect(mode).toBeEnabled();
+  await expect(mode).toHaveValue('read_only');
+  await mode.selectOption('ask_per_area');
+  await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('ask_per_area');
+  await page.getByText('Access by area', { exact: true }).click();
+  await page.getByLabel('Tasks & schedule access', { exact: true }).selectOption('approved');
+  await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().areas.planning)).toBe('approved');
+});

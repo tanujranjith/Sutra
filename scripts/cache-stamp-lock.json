@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-investigation1",
-    "hash": "5c9690d6e7e12184"
+    "stamp": "20261022-investigation4",
+    "hash": "a6c6961ed8d8a56d"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -248,8 +248,8 @@
     "hash": "16d76c3e5d3d41a8"
   },
   "src/features/feature-registry.js": {
-    "stamp": "20260917-features-style-reuse1",
-    "hash": "b6d35b5d814e4343"
+    "stamp": "20261022-lifecycle1",
+    "hash": "4619be4ddf2e90f2"
   },
   "src/features/notes/authoring-tools.js": {
     "stamp": "20261015-writing1",

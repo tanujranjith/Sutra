@@ -92,6 +92,8 @@
     var state = Object.create(null);
     var metrics = Object.create(null);
     var loading = Object.create(null);
+    var initializing = Object.create(null);
+    var disabling = Object.create(null);
     Object.keys(definitions).forEach(function (id) { state[id] = { enabled: false, loaded: false, initialized: false, error: null }; });
 
     async function enable(id, options) {
@@ -106,7 +108,10 @@
       }
       current.enabled = true;
       var start = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+      if (disabling[id]) await disabling[id];
+      if (!current.enabled) return clone(current);
       for (var d = 0; d < (definition.dependencies || []).length; d += 1) await enable(definition.dependencies[d], options);
+      if (!current.enabled) return clone(current);
       if (!current.loaded) {
         if (!loading[id]) {
           loading[id] = (async function () {
@@ -117,12 +122,23 @@
         }
         await loading[id];
       }
+      // A disable can arrive while scripts (including self-initializing legacy
+      // scripts) load. Let its cleanup settle before considering a new init.
+      if (disabling[id]) await disabling[id];
+      if (!current.enabled) return clone(current);
       if (!current.initialized) {
-        if (typeof assetLoader.enableStyle === 'function') (definition.styles || []).forEach(function (href) { assetLoader.enableStyle(href); });
-        var initializer = resolvePath(definition.initialization);
-        if (typeof initializer === 'function') await initializer(options || {});
-        current.initialized = true;
+        if (!initializing[id]) {
+          initializing[id] = Promise.resolve().then(async function () {
+            if (!current.enabled) return;
+            if (typeof assetLoader.enableStyle === 'function') (definition.styles || []).forEach(function (href) { assetLoader.enableStyle(href); });
+            var initializer = resolvePath(definition.initialization);
+            if (typeof initializer === 'function') await initializer(options || {});
+            current.initialized = true;
+          }).finally(function () { delete initializing[id]; });
+        }
+        await initializing[id];
       }
+      if (!current.enabled && disabling[id]) await disabling[id];
       metrics[id] = { loadedAt: new Date().toISOString(), durationMs: Math.max(0, (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - start) };
       return clone(current);
     }
@@ -132,12 +148,25 @@
       if (!definition) throw new Error('Unknown feature: ' + id);
       var current = state[id];
       current.enabled = false;
-      if (current.initialized) {
-        var teardown = resolvePath(definition.teardown);
-        if (typeof teardown === 'function') await teardown();
-        current.initialized = false;
-      }
       if (typeof assetLoader.disableStyle === 'function') (definition.styles || []).forEach(function (href) { assetLoader.disableStyle(href); });
+      if (!disabling[id]) {
+        disabling[id] = (async function () {
+          var pendingLoad = loading[id], pendingInit = initializing[id];
+          // Loading/initialization cannot be cancelled safely, but neither may
+          // outlive the disable cleanup. Failed partial loads need cleanup too.
+          if (pendingLoad) await pendingLoad.catch(function () {});
+          if (pendingInit) await pendingInit.catch(function () {});
+          if (current.initialized || current.loaded || pendingLoad || pendingInit) {
+            var teardown = resolvePath(definition.teardown);
+            try { if (typeof teardown === 'function') await teardown(); }
+            finally {
+              current.initialized = false;
+              if (typeof assetLoader.disableStyle === 'function') (definition.styles || []).forEach(function (href) { assetLoader.disableStyle(href); });
+            }
+          }
+        }()).finally(function () { delete disabling[id]; });
+      }
+      await disabling[id];
       return clone(current);
     }
 
