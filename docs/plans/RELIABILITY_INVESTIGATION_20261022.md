@@ -14,8 +14,9 @@ No push, merge, deployment, database or production configuration changes.
    at most three calls, four records per fetch, a 6,000-estimated-token request
    budget including answer reserve, no automatic retries, progress, ambiguity
    selection, Stop, live privacy/scope rechecks and honest aggregate usage.
-   No workspace bodies are dumped into its initial request. New live provider
-   verification is pending; CI unit/browser regressions are prepared, unrun.
+   No workspace bodies are dumped into its initial request. The later user-sent
+   synthetic investigation returned the expected notes and URL; broader provider
+   coverage and CI unit/browser regressions remain pending.
 3. **Assistant ownership:** Extracted the shared pure receipt builder into the
    existing Assistant folder. Both chat surfaces keep their canonical harness,
    persistence, approval and Undo integration. This is a targeted consolidation,
@@ -72,8 +73,35 @@ No push, merge, deployment, database or production configuration changes.
 
 ## Live provider checkpoint
 
-The user entered a Gemini key privately in the disposable app. The live catalog
-listed Gemini 3.8 Flash; it is selected with Low thinking. No generation request
-has been sent. Automatic approval review required specific approval for the
-synthetic task text and URL; that question remains pending. The prepared prompt
-is unsent, and no personal workspace data is part of the proposed test.
+The user entered a Gemini key privately in the disposable app and sent the
+prepared investigation using Gemini 3.8 Flash with Low thinking. The response
+returned the staged task instructions and reference URL. This is one synthetic
+case, not certification of every provider or retrieval path. The subsequent
+Assistant UI and local-setup QA used no provider calls.
+
+## Assistant UI and local setup follow-up
+
+- Source choices now use readable titles, types, dates and scheduled times with
+  a selection count. Manual selection enabled Read selected sources; submitting
+  and cancelling worked in the isolated component preview. Dark/light surfaces
+  and the 390px layout were checked without provider requests.
+- A single Details button opens Sources / Privacy / Usage tabs. Manual arrow-key
+  navigation, Escape/focus return, dark/light contrast and phone containment
+  passed. Displayed usage in the component fixture was synthetic, not billed
+  provider usage. Runtime callbacks and persisted source/receipt contracts stay
+  canonical; usage remains session-only.
+- In the separate `http://127.0.0.1:5298/Sutra.html` disposable workspace, local
+  memory Save and Undo passed with workspace access Off and no provider key.
+  Fake credential text was refused as a memory. No broad workspace access was
+  granted by the save.
+- Get to know me asked seven local questions one at a time. Browser QA caught
+  and repaired a typed draft-schema mismatch and automatic restaging on chat
+  rendering. Final Review in Settings required a click. Revert restored the
+  original preferences; Save Changes plus reload retained supplied school hours
+  and hardest classes, kept skipped block length unchanged, and left access Off.
+  Existing user drafts in the original localhost tab were not reloaded.
+- Required runtime/integrity self-tests and staged hook passed; the Intelligence
+  contract check passed 1,181 assertions. Syntax validated 476 files; architecture,
+  shell, cache stamps, CSP, links, responsive and modal static checks passed.
+  New and updated unit/E2E tests await CI; no suites were run on the user's PC.
+- Local code commit: `449afb6`. No push, merge, deployment or account changes.

@@ -244,7 +244,7 @@ persist and travel in backups exactly like the rest of your workspace.
 
 When a question may depend on your notes, Sutra builds a local, chunked index of
 unlocked notes and retrieves ranked quoted spans using text, fuzzy, metadata,
-backlink, and recency signals. Grounded replies show a **Sources used** panel
+backlink, and recency signals. Grounded replies show **Details → Sources**
 with note title, heading path, exact excerpt, update date, confidence, and why
 the source matched. Source links open the note directly. Locked-note bodies are
 excluded by default; if you explicitly ask about an identified locked page,
@@ -274,8 +274,10 @@ Notes Knowledge Core, not a second hidden profile store.
 
 ### How this was answered
 
-Pre-send disclosures and every local or provider response include a compact,
-keyboard-accessible **How this was answered** receipt. Local receipts say that no
+Pre-send disclosures retain the **How this was answered** receipt. Responses use
+one **Details** button opening a compact, theme-aware panel with **Sources,
+Privacy, and Usage** tabs. Arrow keys switch tabs; Escape or outside click closes
+the panel. Local receipts under Privacy say that no
 provider was contacted and name the local engine, inspected workspace areas,
 referenced object types, and whether saved memory influenced the result. Provider
 receipts identify provider/model, Workspace Access, selected text and conversation
@@ -377,12 +379,35 @@ action APIs also obey the workspace permission mode; callers must opt into
 approved actions, and destructive/plugin actions require their separate explicit
 approval metadata. The action-card Apply control supplies reviewed metadata only
 after its existing approval and high-risk confirmation flow. Local "remember
-that" commands propose a memory card and wait for Apply. Smart Import checks
+that" commands propose a memory card and wait for **Save to memory**. Reviewed
+local memory changes have their own narrow permission: they work with workspace
+access Off or Read-only without granting workspace reads, workspace writes, or
+permission to send saved memories to a provider. Sensitive-memory filtering and
+destructive confirmation remain required; unavailable policy services deny the
+change. Smart Import checks
 the selected destinations' permissions when Apply is clicked, and reports
 partial failures instead of implying that every destination was saved. Reply
 buttons such as Save as note and Create task count as explicit reviewed actions
 and still obey the selected permission mode. Generated study flashcards are
 proposed in a review card before a deck is saved.
+
+### Get to know me
+
+Choose **Get to know me with Assistant** in Settings → Assistant → Student
+preferences, or ask **Help me set up my study preferences** in chat. The optional
+on-device conversation asks seven questions, one at a time: school hours, study
+window, block/break lengths, evening cutoff, weekends, review style, and harder
+classes. No provider or API key is needed. Times currently use whole hours,
+matching the existing planner settings. Ambiguous or invalid answers ask again.
+
+Reply **skip** to keep a current value or **cancel setup** to stop. The interview
+is scoped to its conversation and lasts for the current page session. At the end,
+**Review in Settings** stages only supplied answers; **Save Changes** applies them
+through canonical Settings persistence, and **Revert** discards the draft. An
+existing draft for a supplied field must be saved or reverted first. No second
+profile store or new durable preference fields are created. Normal saved chat
+history follows the existing history/export controls; interview replies are not
+sent to a provider by the setup flow.
 
 Thinking effort is integrated into the full Assistant's message composer beside
 Send as a **Thinking · Auto** control. Its menu opens above the composer, marks
@@ -1017,9 +1042,11 @@ or transmitted**. `window.SutraIntelligence.getDiagnosticsSummary()` aggregates
 that buffer (average latency over measured requests, session token totals with
 unavailable usage excluded, retry / stalled / partial / cache-hit counts).
 
-Per-response stats surface as a **progressive-disclosure "Response details"
-chip** (a native `<details>`, keyboard-operable, announcing expand/collapse)
-beneath the provenance receipt, rendered via `SutraDOMSafety` (no `innerHTML`).
+Per-response stats appear in **Details → Usage**, beside the Sources and Privacy
+tabs, rendered through DOM nodes (no `innerHTML`). The dialog uses the native
+popover surface with a modal fallback, viewport bounds, keyboard tabs, and
+Escape dismissal. Reopened replies show an unavailable-usage explanation when
+session measurements no longer exist.
 The stats live in a session-scoped `Map` keyed by an ephemeral message id and
 are dropped on reload — they are **not** added to `chatStore`/`appData` or the
 persistence inventory.
