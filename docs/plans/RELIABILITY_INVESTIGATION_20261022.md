@@ -144,3 +144,29 @@ times in Settings review. The QA draft was reverted and the user's conversation
 was left at its next unanswered question. No provider calls or Settings saves
 were made in this pass. Syntax, Intelligence, guardrails, cache and link checks
 passed; updated unit/E2E reload and dock regressions await CI.
+
+## Everyday Assistant configuration
+
+Local implementation commit `b879f65` adds Everyday defaults for new workspaces,
+Private and Advanced controls, and a confirmed setup shortcut beside blocked
+action proposals. Presets reuse existing permission/preference fields; explicit
+area Blocks survive Everyday, missing legacy permissions stay Off, and existing
+saved settings are not upgraded. Stateful context uses five recent messages plus
+up to four short, role-preserving older excerpts, under the existing request
+budget, without an extra provider call or durable summary.
+
+Chrome QA in the disposable `localhost:5298` workspace verified Private/Everyday,
+retention of a temporary Notes Block, refusal to overwrite an unsaved Settings
+draft, Revert, persistence after reload, and a local task proposal through Apply
+and Undo. Enabling Everyday beside a blocked proposal left that proposal
+unapplied until its separate Apply click. The temporary Notes Block was restored
+to its earlier value. At 390px the new preset was 44px tall, inside the viewport,
+with document width 390px; desktop width was restored. No provider calls were
+made. The other local tab's unsaved draft was left untouched.
+
+Required runtime checks/self-tests and the staged hook passed, as did the
+Intelligence integrity harness (1,181 assertions), syntax, shell, architecture,
+persistence, cache/asset and link checks. New unit/E2E coverage includes fresh
+defaults, legacy import fallbacks, role-preserving context bounds, restricted
+areas, preset/draft behavior and Apply/Undo. These automated tests await CI;
+no unit or browser suite ran on the user's PC. No push, merge or deployment.

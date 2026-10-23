@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
 These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
 
+- Default new Assistant workspaces to Everyday: bounded workspace retrieval,
+  recent conversation context, and reviewed changes with Apply and Undo.
+  Add Private and Advanced controls without upgrading existing restrictions;
+  missing older permission fields stay Off on load/import.
+- Offer Everyday setup alongside blocked proposals, without applying the
+  proposal when configuration is enabled or overwriting unsaved Settings drafts.
 - Pause Sync on unauthenticated or inconsistent records while preserving local
   data, pending changes, and the existing vault key.
 - Add bounded automatic-backup retry delays and report incomplete attachment
