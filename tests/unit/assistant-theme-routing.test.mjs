@@ -16,7 +16,7 @@ function createCommandRouter(themeCalls, { productRoute = () => null, validTicke
     }
   };
   return new Function(
-    'routeMemoryCommand', 'getPref', 'tryReadTodoList', 'routeProductKnowledge', 'truncate', 'window', 'currentLockedPageAccessTicket',
+    'routeMemoryCommand', 'getPref', 'tryReadTodoList', 'routeProductKnowledge', 'truncate', 'window', 'currentLockedPageAccessTicket', 'routeStudyInterview',
     `${declaration.body}; return tryHandleCommand;`
   )(
     () => null,
@@ -25,7 +25,8 @@ function createCommandRouter(themeCalls, { productRoute = () => null, validTicke
     productRoute,
     text => String(text || ''),
     window,
-    options => validTicket && options.lockedPageAccessTicket === validTicket ? validTicket : null
+    options => validTicket && options.lockedPageAccessTicket === validTicket ? validTicket : null,
+    () => null
   );
 }
 

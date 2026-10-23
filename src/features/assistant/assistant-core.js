@@ -91,6 +91,63 @@
     });
     return details;
   }
+  // One transient disclosure surface; existing source/receipt/stat nodes retain
+  // their callbacks and saved-data contracts. Native popover handles light dismiss.
+  function buildResponseDetailsCard(sections, options) {
+    var doc = options && options.document, parts = (sections || []).filter(Boolean);
+    if (!doc || !parts.length) return null;
+    var wrap = doc.createElement('div'); wrap.className = 'assistant-response-details';
+    var trigger = doc.createElement('button'); trigger.type = 'button'; trigger.className = 'assistant-response-details-trigger'; trigger.textContent = 'Details';
+    trigger.setAttribute('aria-label', 'Response details'); trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-expanded', 'false');
+    var card = doc.createElement('dialog'); card.id = id('response-details'); card.className = 'assistant-response-card'; card.setAttribute('popover', 'auto'); card.setAttribute('aria-label', 'Response details');
+    trigger.setAttribute('aria-controls', card.id);
+    var header = doc.createElement('div'); header.className = 'assistant-response-card-header';
+    var heading = doc.createElement('strong'); heading.textContent = 'Response details';
+    var close = doc.createElement('button'); close.type = 'button'; close.className = 'assistant-response-card-close'; close.textContent = '×'; close.setAttribute('aria-label', 'Close response details');
+    header.append(heading, close);
+    var tabs = doc.createElement('div'); tabs.className = 'assistant-response-card-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Response detail sections');
+    var body = doc.createElement('div'); body.className = 'assistant-response-card-body';
+    var sourcePart = parts.find(function (part) { return part.classList.contains('assistant-sources'); });
+    var receiptPart = parts.find(function (part) { return part.classList.contains('assistant-response-receipt'); });
+    var statsPart = parts.find(function (part) { return part.classList.contains('asst-response-stats'); });
+    var extra = parts.filter(function (part) { return part !== sourcePart && part !== receiptPart && part !== statsPart; });
+    var names = ['Sources', 'Privacy', 'Usage'], content = [sourcePart, receiptPart, statsPart], buttons = [], panels = [];
+    function activate(index, focus) {
+      buttons.forEach(function (button, n) { button.setAttribute('aria-selected', String(index === n)); button.tabIndex = index === n ? 0 : -1; panels[n].hidden = index !== n; });
+      if (focus) buttons[index].focus();
+    }
+    names.forEach(function (name, index) {
+      var tab = doc.createElement('button'); tab.type = 'button'; tab.id = card.id + '-tab-' + index; tab.className = 'assistant-response-card-tab'; tab.setAttribute('role', 'tab'); tab.setAttribute('aria-label', name);
+      tab.textContent = name + (index === 0 && sourcePart ? ' (' + sourcePart.querySelectorAll('.assistant-source-card').length + ')' : '');
+      var panel = doc.createElement('section'); panel.id = card.id + '-panel-' + index; panel.className = 'assistant-response-card-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', tab.id); tab.setAttribute('aria-controls', panel.id);
+      if (index === 1) extra.forEach(function (part) { panel.appendChild(part); });
+      if (content[index]) { content[index].open = true; panel.appendChild(content[index]); }
+      else { var empty = doc.createElement('p'); empty.className = 'assistant-response-card-empty'; empty.textContent = ['No workspace sources were used for this reply.', 'No additional response receipt is available.', 'Usage is available only for replies generated in this session.'][index]; panel.appendChild(empty); }
+      tab.addEventListener('click', function () { activate(index, false); });
+      tab.addEventListener('keydown', function (event) { var next = event.key === 'ArrowRight' ? (index + 1) % 3 : event.key === 'ArrowLeft' ? (index + 2) % 3 : event.key === 'Home' ? 0 : event.key === 'End' ? 2 : -1; if (next >= 0) { event.preventDefault(); activate(next, true); } });
+      buttons.push(tab); panels.push(panel); tabs.appendChild(tab); body.appendChild(panel);
+    });
+    activate(sourcePart ? 0 : 1, false);
+    card.append(header, tabs, body); wrap.append(trigger, card);
+    function dismiss() { if (typeof card.hidePopover === 'function') card.hidePopover(); else card.close(); trigger.setAttribute('aria-expanded', 'false'); trigger.focus(); }
+    close.addEventListener('click', dismiss);
+    card.addEventListener('toggle', function (event) { trigger.setAttribute('aria-expanded', String(event.newState === 'open')); });
+    card.addEventListener('close', function () { trigger.setAttribute('aria-expanded', 'false'); trigger.focus(); });
+    trigger.addEventListener('click', function () {
+      if (trigger.getAttribute('aria-expanded') === 'true') return dismiss();
+      card.style.maxHeight = '';
+      if (typeof card.showPopover === 'function') card.showPopover(); else card.showModal();
+      trigger.setAttribute('aria-expanded', 'true');
+      var rect = trigger.getBoundingClientRect(), bounds = card.getBoundingClientRect(), view = doc.defaultView;
+      var width = view.innerWidth, height = view.innerHeight;
+      var top = rect.bottom + 8;
+      if (top + bounds.height > height - 16) top = Math.max(16, rect.top - bounds.height - 8);
+      card.style.left = Math.max(16, Math.min(rect.left, width - bounds.width - 16)) + 'px'; card.style.top = top + 'px';
+      card.style.maxHeight = Math.max(0, Math.min(420, height * 0.65, height - top - 16)) + 'px';
+      buttons.find(function (button) { return button.tabIndex === 0; }).focus();
+    });
+    return wrap;
+  }
   function message(raw) {
     var row = raw && typeof raw === 'object' ? raw : {}, role = value(row.role).toLowerCase();
     if (['user', 'assistant', 'notice', 'error'].indexOf(role) < 0) role = 'user';
@@ -309,7 +366,7 @@
     }
     return partial('The lookup limit was reached.');
   }
-  var api = { buildResponseReceipt: buildResponseReceipt, runWorkspaceInvestigation: runWorkspaceInvestigation, VERSION: VERSION, normalizeSource: source, buildSourcesPanel: buildSourcesPanel, normalizeMessage: message, normalizeContext: context, normalizeRequest: request, normalizeConversation: conversation, prepareMessageView: prepareMessageView, createController: createController };
+  var api = { buildResponseDetailsCard: buildResponseDetailsCard, buildResponseReceipt: buildResponseReceipt, runWorkspaceInvestigation: runWorkspaceInvestigation, VERSION: VERSION, normalizeSource: source, buildSourcesPanel: buildSourcesPanel, normalizeMessage: message, normalizeContext: context, normalizeRequest: request, normalizeConversation: conversation, prepareMessageView: prepareMessageView, createController: createController };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraAssistantCore = api;
 }(typeof window !== 'undefined' ? window : globalThis));

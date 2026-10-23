@@ -497,7 +497,8 @@
                 '- **Context depth** — where to search for relevant context. Workspace-aware does not grant access when Workspace access is off.',
                 '- **Confirmation & action previews** — whether proposed actions need explicit approval.',
                 '- **Conversation memory** — how many recent messages it remembers within a session.',
-                '- **Assistant Memory** — manage the long-term facts it remembers across sessions.'
+                '- **Assistant Memory** — manage the long-term facts it remembers across sessions.',
+                '- **Get to know me with Assistant** — answer seven optional study-routine questions locally, one at a time. Skip or cancel anytime, then review the draft in Settings and choose Save Changes. No API key is needed.'
             ],
             keywords: ['assistant settings', 'assistant behavior', 'confirmation', 'context depth', 'workspace access', 'conversation memory', 'action previews'],
             nav: { view: 'settings', section: 'assistant' },
@@ -511,7 +512,7 @@
             availability: 'available',
             summary: 'Each Assistant answer has a keyboard-accessible disclosure showing local/provider handling, workspace scope, sources, memory influence, attachments, actions, and transmission categories.',
             body: [
-                'Open **How this was answered** under an Assistant response to inspect its provenance.',
+                'Open **Details** under an Assistant response. The compact panel has **Sources**, **Privacy**, and **Usage** tabs. Use arrow keys to switch tabs and Escape to close. Usage measurements are available only for replies generated in the current session.',
                 'Local answers say **Answered locally** and **No provider contacted**. Provider answers name the provider/model, Workspace Access, selected text or conversation use, live-validated sources, attachment processing paths, deterministic engines, proposed actions, and information categories transmitted.',
                 'Deleted sources become **Source no longer available** with no deep link. Receipts never reveal API keys, tokens, locked-note bodies, sensitive memory text, raw prompts/context, or provider reasoning.'
             ],
@@ -597,8 +598,8 @@
             body: [
                 '**Assistant Memory** is long-term, on-device memory the assistant uses to personalize help across sessions. It is separate from short-term conversation memory.',
                 'It remembers **only stable, useful facts you ask it to keep** — for example preferred study hours, planning style, recurring commitments, course preferences, goals, upcoming exams, or how you like explanations.',
-                'It is consent-first: the assistant saves a memory only when you ask, or suggests one with **Save / Edit / Decline**. It never silently stores passwords, API keys, financial or medical data, precise location, locked-note content, or full chat transcripts.',
-                'You stay in control: **view, edit, enable/disable, delete, or forget** any memory from the Memory manager. "Forget X" and "delete that memory" take effect immediately, and allowed memories travel inside encrypted `.sutra` exports.'
+                'It is consent-first: the assistant proposes a memory when you ask and waits for **Save to memory**. This reviewed local action works without workspace access and grants no workspace access or provider reads. It never silently stores passwords, API keys, financial or medical data, precise location, locked-note content, or full chat transcripts.',
+                'You stay in control: **view, edit, enable/disable, delete, or forget** any memory from the Memory manager. Forgetting through chat requires its review and destructive confirmation; allowed memories travel inside encrypted `.sutra` exports.'
             ],
             keywords: ['memory', 'assistant memory', 'remember', 'forget', 'what do you remember', 'long-term memory', 'remember me', 'manage memory', 'preferences memory'],
             nav: { view: 'settings', section: 'assistant' },

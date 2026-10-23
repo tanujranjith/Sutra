@@ -145,6 +145,8 @@
         create_quick_capture_item: { domain: 'focus', scope: 'none' },
         change_context_depth: { domain: 'assistant', scope: 'none' },
 
+        review_study_preferences: { domain: 'assistant', scope: 'none', readOnly: true },
+
         // Assistant Memory
         create_memory: { domain: 'memory', scope: 'none', reversible: true },
         update_memory: { domain: 'memory', scope: 'none', reversible: true },

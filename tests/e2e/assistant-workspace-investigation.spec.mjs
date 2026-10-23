@@ -80,11 +80,16 @@ test('same-title ambiguity requires a keyboard-accessible explicit choice before
   await send(page, 'Investigate my Orchid assignment notes.');
   const choices = page.locator('[data-sutra-component="assistant-source-choice"]');
   await expect(choices).toBeVisible(); expect(requests).toHaveLength(1);
+  await expect(choices.locator('.assistant-source-option')).toHaveCount(2);
+  await expect(choices).not.toContainText('task:orchid-');
+  await expect(choices.getByRole('status')).toHaveText('No sources selected');
+  await expect(choices.getByRole('button', { name: 'Read selected sources' })).toBeDisabled();
   const status = page.locator('[data-sutra-component="assistant-investigation-progress"]');
   await expect(status).toHaveAttribute('role', 'status');
   await expect(status).toContainText('up to 3 provider calls');
   await expect(choices.locator('input[type="checkbox"]').first()).toBeFocused();
   await choices.locator('input[value="task:orchid-b"]').check();
+  await expect(choices.getByRole('status')).toHaveText('1 source selected');
   await choices.getByRole('button', { name: 'Read selected sources' }).click();
   await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('blue binder');
   expect(requests).toHaveLength(2);

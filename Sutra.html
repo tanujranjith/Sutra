@@ -73,10 +73,10 @@
     <script src="src/domain/student-life.js?v=20261015-reliability2"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260913-content-limits-import1"></script>
-    <script src="src/features/assistant/assistant-permissions.js?v=20261015-reliability2"></script>
+    <script src="src/features/assistant/assistant-permissions.js?v=20261022-assistant-polish3"></script>
     <!-- Durable chat normalization must be ready before workspace hydration,
          even when the optional Assistant feature pack is disabled. -->
-    <script src="src/features/assistant/assistant-core.js?v=20261022-investigation2"></script>
+    <script src="src/features/assistant/assistant-core.js?v=20261022-assistant-polish3"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20261015-boot-cas2"></script>
     <script src="src/boot/legacy-workspace-migration.js?v=20261015-life-recovery3"></script>
@@ -92,7 +92,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20261022-investigation1"></script>
-    <script src="src/config/feature-manifest.js?v=20261022-investigation1"></script>
+    <script src="src/config/feature-manifest.js?v=20261022-assistant-polish5"></script>
     <script src="src/features/feature-registry.js?v=20261022-lifecycle1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -125,7 +125,7 @@
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
          this link when the optional Assistant pack initializes. -->
-    <link rel="stylesheet" href="styles/views/assistant-view.css?v=20261022-investigation1">
+    <link rel="stylesheet" href="styles/views/assistant-view.css?v=20261022-assistant-polish3">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20261016-password-hidden1">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -4051,6 +4051,8 @@
                     </div>
                     <div class="cc-group" data-settings-section-group="student-preferences">
                         <span class="cc-group-title">Student preferences</span>
+                        <button type="button" class="cc-btn cc-btn-ghost" id="assistantStudySetupBtn">Get to know me with Assistant</button>
+                        <p class="cc-foot-help">Answer one question at a time, then review your study settings before saving. No API key needed.</p>
                         <p class="cc-foot-help">Sutra Assistant uses these when it plans your day/week, builds study/exam plans, and breaks down assignments. They travel with your backups.</p>
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text"><span class="cc-row-name">School hours</span><span class="cc-row-help">Start / end of your school day (24h). Sutra Assistant avoids scheduling study during these.</span></div>
@@ -7594,7 +7596,7 @@
     <script src="src/features/search/global-search-engine.js?v=20261015-search-typos4"></script>
     <script src="src/features/search/global-search-modal.js?v=20261015-search-keyboard3"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261022-investigation4"></script>
+    <script src="src/core/app.js?v=20261022-assistant-polish3"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7608,7 +7610,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261022-create-split3"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261022-assistant-polish3"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20261022-investigation1"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -8065,7 +8067,7 @@
     <link rel="stylesheet" href="styles/features/content-timeline-hosts.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/canvas-workbench-polish.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/folder-workspace.css?v=20261001-folders7">
-    <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261022-investigation1">
+    <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261022-assistant-polish3">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

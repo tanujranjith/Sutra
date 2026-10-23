@@ -31981,6 +31981,16 @@ function buildOnboardingPlanPreview() {
         function bindWorkspacePreferenceControls() {
             if (settingsControlCenterBound) return;
             settingsControlCenterBound = true;
+            document.getElementById('assistantStudySetupBtn')?.addEventListener('click', async () => {
+                setWorkspacePreference('assistant.enabled', true);
+                await syncLazyFeaturePacks();
+                const controller = window.SutraAssistantConversationController;
+                if (!window.flowAssistant || !controller) { showToast('Assistant setup is unavailable. Reload and try again.'); return; }
+                controller.create({ title: 'Get to know me' }); setActiveView('assistantview'); controller.render('full');
+                const input = document.getElementById('asstInput');
+                input.value = 'Help me set up my study preferences'; input.dispatchEvent(new Event('input', { bubbles: true })); controller.send('full');
+            });
+
 
             document.querySelectorAll('#view-settings [data-pref-path]').forEach(control => {
                 const path = String(control.getAttribute('data-pref-path') || '').trim();
@@ -74263,6 +74273,12 @@ ${cspMeta}
             });
         } catch (e) { /* no document */ }
 
+        function appendAssistantResponseDetails(host, sections) {
+            const card = window.SutraAssistantCore?.buildResponseDetailsCard?.(sections, { document });
+            if (card) host.appendChild(card);
+            else sections.filter(Boolean).forEach(section => host.appendChild(section));
+        }
+
         function buildAssistantSourcesPanel(rawSources, grounding) {
             const core = window.SutraAssistantCore;
             if (!core || typeof core.buildSourcesPanel !== 'function') return null;
@@ -74489,20 +74505,11 @@ ${cspMeta}
                 const answerHost = document.createElement('div');
                 bubble.appendChild(answerHost);
                 const renderedClaimType = flowResult && flowResult.actions && flowResult.actions.length ? 'proposed_action' : (buildOpts && buildOpts.claimType);
-                const claimBadge = buildAssistantClaimBadge(renderedClaimType);
-                if (claimBadge) bubble.appendChild(claimBadge);
-                const memoryBadge = buildAssistantMemoryBadge(buildOpts && buildOpts.memoryUsedIds);
-                if (memoryBadge) bubble.appendChild(memoryBadge);
-                const sourcePanel = buildAssistantSourcesPanel(buildOpts && buildOpts.sources, buildOpts && buildOpts.grounding);
-                if (sourcePanel) bubble.appendChild(sourcePanel);
                 const receipt = buildOpts && buildOpts.receipt;
-                if (receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
-                    bubble.appendChild(window.SutraAssistantSafety.renderReceipt(receipt));
-                }
-                // Progressive-disclosure per-response stats (this session only).
                 const statsChipId = (buildOpts && buildOpts.responseStatsId) || (index != null && Array.isArray(convo) && convo[index] ? convo[index].id : null);
-                const dockedStatsChip = buildIntelligenceStatsChipForId(statsChipId);
-                if (dockedStatsChip) bubble.appendChild(dockedStatsChip);
+                appendAssistantResponseDetails(bubble, [buildAssistantClaimBadge(renderedClaimType), buildAssistantMemoryBadge(buildOpts && buildOpts.memoryUsedIds),
+                    buildAssistantSourcesPanel(buildOpts && buildOpts.sources, buildOpts && buildOpts.grounding),
+                    receipt && window.SutraAssistantSafety?.renderReceipt?.(receipt, { document, resolveSource: resolveAssistantReceiptSource }), buildIntelligenceStatsChipForId(statsChipId)]);
 
                 // actions: insert/copy/save/schedule — context-aware buttons.
                 // Hidden until streaming completes so they don't flash in mid-stream.
@@ -78807,6 +78814,18 @@ ${cspMeta}
                 getFreeWindowsForDateKey: (dateKey, supplemental, options) => (_origFreeWindows ? _origFreeWindows(dateKey, supplemental, options) : []),
                 addCalendarBlockForTemplate: (payload) => (_origAddCalendarBlock ? _origAddCalendarBlock(payload) : null),
                 importSharedFiles: (files, context) => importSharedFiles(files, context),
+                reviewStudentPreferences: (values) => {
+                    const allowed = Object.keys(getDefaultWorkspacePreferences().studentPreferences);
+                    const entries = Object.entries(values || {});
+                    if (entries.some(([key]) => !allowed.includes(key))) return { ok: false, message: 'Unknown study setting.' };
+                    if (entries.some(([key]) => settingsDraftValues.has('studentPreferences.' + key))) return { ok: false, message: 'Save or Revert your existing study-settings draft before reviewing these answers.' };
+                    setActiveView('settings');
+                    entries.forEach(([key, value]) => setDraftWorkspacePreference('studentPreferences.' + key, value));
+                    setActiveSettingsCategory('assistant', { clearSearch: true, openDetail: true });
+                    syncWorkspacePreferenceControls(); updateSettingsDraftUi();
+                    document.querySelector('[data-settings-section-group="student-preferences"]')?.scrollIntoView({ block: 'start' });
+                    return { ok: true, message: 'Study settings staged for review. Choose Save Changes to apply, or Revert to discard.' };
+                },
                 getStudentPreferences: () => ((appSettings && appSettings.studentPreferences) ? appSettings.studentPreferences : null),
                 openDeadlineRadar: () => (_origOpenDeadlineRadar ? (_origOpenDeadlineRadar(), true) : undefined),
                 openClassDashboardDrawer: (id) => (_origOpenClassDashboard ? (_origOpenClassDashboard(id), true) : undefined),
@@ -78983,6 +79002,7 @@ ${cspMeta}
             { icon: 'fa-list-check',     label: 'Summarize my notes', prompt: 'Summarize the key points from my current note.', send: true },
             { icon: 'fa-calculator',     label: 'Solve a problem',    prompt: 'Help me solve this step by step: ' },
             { icon: 'fa-feather',        label: 'Improve my writing', prompt: 'Improve the writing in my current note while keeping my voice.', send: true },
+            { icon: 'fa-user', label: 'Get to know me', prompt: 'Help me set up my study preferences', send: true },
             { icon: 'fa-graduation-cap', label: 'Make a study plan',  prompt: 'Build me a study plan for my upcoming assignments and deadlines.', send: true },
             { icon: 'fa-circle-question',label: 'Quiz me',            prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true }
         ];
@@ -79213,19 +79233,9 @@ ${cspMeta}
                 }
                 bubble.appendChild(answer);
                 const renderedClaimType = flowResult && flowResult.actions && flowResult.actions.length ? 'proposed_action' : msgObj.claimType;
-                const claimBadge = buildAssistantClaimBadge(renderedClaimType);
-                if (claimBadge) bubble.appendChild(claimBadge);
-                const memoryBadge = buildAssistantMemoryBadge(msgObj.memoryUsedIds);
-                if (memoryBadge) bubble.appendChild(memoryBadge);
-                const sourcePanel = buildAssistantSourcesPanel(msgObj.sources, msgObj.grounding);
-                if (sourcePanel) bubble.appendChild(sourcePanel);
-                if (msgObj.receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
-                    const receiptEl = window.SutraAssistantSafety.renderReceipt(msgObj.receipt, { document, resolveSource: resolveAssistantReceiptSource });
-                    if (receiptEl) bubble.appendChild(receiptEl);
-                }
-                // Progressive-disclosure per-response stats (this session only).
-                const statsChip = buildIntelligenceStatsChipForId(msgObj.id);
-                if (statsChip) bubble.appendChild(statsChip);
+                appendAssistantResponseDetails(bubble, [buildAssistantClaimBadge(renderedClaimType), buildAssistantMemoryBadge(msgObj.memoryUsedIds),
+                    buildAssistantSourcesPanel(msgObj.sources, msgObj.grounding),
+                    msgObj.receipt && window.SutraAssistantSafety?.renderReceipt?.(msgObj.receipt, { document, resolveSource: resolveAssistantReceiptSource }), buildIntelligenceStatsChipForId(msgObj.id)]);
             }
 
             col.appendChild(bubble);

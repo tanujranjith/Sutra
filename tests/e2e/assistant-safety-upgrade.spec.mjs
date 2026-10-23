@@ -1,3 +1,4 @@
+import { openResponseDetails } from './helpers/assistant-details.mjs';
 import { expect, test } from '@playwright/test';
 
 // Network stubs must own requests in every engine, including WebKit. Service
@@ -116,7 +117,7 @@ test('provider response persists a complete receipt while secrets and raw reason
   const response = page.locator('#chatbotMessages .chatbot-msg.assistant:not(.chatbot-notice)').last();
   const disclosure = response.locator('.assistant-response-receipt');
   await expect(disclosure).toHaveCount(1);
-  await disclosure.locator('summary').click();
+  await openResponseDetails(response, 'Privacy');
   await expect(disclosure).toContainText('Gemini · gemini-2.5-flash');
   await expect(disclosure).toContainText('Data transmitted');
   const state = await page.evaluate(() => ({
@@ -256,7 +257,7 @@ test('a local OpenAI-compatible endpoint sends only to the configured device end
   expect(requests[0].body.stream).toBe(true);
 
   const receipt = page.locator('.chatbot-msg.assistant').last().locator('.assistant-response-receipt');
-  await receipt.locator('summary').click();
+  await openResponseDetails(page.locator('.chatbot-msg.assistant').last(), 'Privacy');
   await expect(receipt).toContainText('Local endpoint');
   await expect(receipt).toContainText('student-local-model');
   await expect(receipt).toContainText('Data transmitted');

@@ -739,3 +739,14 @@ body.settings-anchored-mode #view-settings .cc-page {
         max-height: calc(100dvh - var(--sutra-global-nav-height, 66px) - max(64px, var(--sutra-focus-player-height, 0px)) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px);
     }
 }
+
+/* Assistant disclosure cards and source choices on narrow screens. */
+@media (max-width: 560px) {
+    body .assistant-source-choice { padding: 12px; border-radius: 13px; }
+    body .assistant-source-choice-footer { align-items: stretch; }
+    body .assistant-source-choice-count { flex-basis: 100%; }
+    body .assistant-source-choice-buttons { width: 100%; margin-left: 0; }
+    body .assistant-source-choice-buttons button { flex: 1; padding-inline: 10px; }
+    body .assistant-response-details-trigger { min-height: 44px; }
+    body .assistant-response-card .assistant-receipt-row { grid-template-columns: 1fr; }
+}

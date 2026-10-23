@@ -154,7 +154,13 @@
     return out;
   }
   function getActionPermissions(options) {
-    var permissions = getPermissions(), opts = options || {}, granted = [];
+    var opts = options || {}, granted = [], raw;
+    try { raw = adapter && typeof adapter.getPermissions === 'function' && adapter.getPermissions(); } catch (_) { return granted; }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || MODES.indexOf(String(raw.mode)) < 0) return granted;
+    var permissions = normalize(raw);
+    // Reviewing a local memory change grants only memory management, never workspace access.
+    if (opts.approved === true) granted.push('assistant.memory.write');
+    if (opts.approved === true && opts.destructiveApproved === true) granted.push('assistant.memory.delete');
     if (permissions.mode !== 'off') granted.push('workspace.read');
     if (permissions.mode === 'approved_actions' && opts.approved === true) granted.push('workspace.write');
     if (permissions.mode === 'approved_actions' && opts.approved === true && opts.destructiveApproved === true) granted.push('workspace.delete');

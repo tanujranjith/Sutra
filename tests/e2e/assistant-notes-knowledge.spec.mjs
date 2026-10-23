@@ -1,3 +1,4 @@
+import { openResponseDetails } from './helpers/assistant-details.mjs';
 import { expect, test } from '@playwright/test';
 
 // Network stubs must own requests in every engine, including WebKit. Service
@@ -40,12 +41,14 @@ test('grounded local note search shares sources across dock and full view and su
   await page.locator('#chatInput').fill('search my notes for heliotrope protocol');
   await page.locator('#chatSendBtn').click();
   const dockSources = page.locator('#chatbotPanel .assistant-sources');
+  await openResponseDetails(page.locator('#chatbotPanel'), 'Sources');
   await expect(dockSources).toBeVisible();
   await expect(dockSources).toContainText('Heliotrope research');
 
   await page.evaluate(() => window.setActiveView('assistantview'));
   await expect(page.locator('#view-assistantview')).toBeVisible();
   const fullSources = page.locator('#asstMessages .assistant-sources');
+  await openResponseDetails(page.locator('#asstMessages'), 'Sources');
   await expect(fullSources).toBeVisible();
   await expect(fullSources).toContainText('Heliotrope research');
 
@@ -53,7 +56,7 @@ test('grounded local note search shares sources across dock and full view and su
     const panel = document.getElementById('chatbotPanel');
     if (panel && panel.getAttribute('aria-hidden') === 'false') window.toggleChat();
   });
-  await fullSources.locator('summary').click();
+  await openResponseDetails(page.locator('#asstMessages'), 'Sources');
   await fullSources.locator('.assistant-source-exclude').click();
   const exclusion = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent().scope.excludedSourceIds || []);
   expect(exclusion.length).toBe(1);

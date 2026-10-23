@@ -1,3 +1,4 @@
+import { openResponseDetails } from './helpers/assistant-details.mjs';
 import { expect, test } from '@playwright/test';
 import { waitForAppReady } from './helpers/app-ready.mjs';
 
@@ -116,7 +117,7 @@ test('full Assistant retains task evidence across Stateful URL follow-ups and di
   await expect(sources).not.toContainText('UNRELATED_SOURCE_SENTINEL');
 
   const receipt = comparison.locator('.assistant-response-receipt');
-  await receipt.locator('summary').click();
+  await openResponseDetails(comparison, 'Privacy');
   await expect(receipt).toContainText('Orchid protocol worksheet (task)');
   await expect(receipt).toContainText('Biology Midterm (testing_exam)');
   await expect(receipt).not.toContainText('Source no longer available');
@@ -131,7 +132,7 @@ test('full Assistant retains task evidence across Stateful URL follow-ups and di
       return originalOpen(ref, context);
     };
   });
-  await sources.locator('summary').click();
+  await openResponseDetails(comparison, 'Sources');
   await sources.getByRole('button', { name: 'Open source Orchid protocol worksheet' }).click();
   await expect.poll(() => page.evaluate(() => window.__assistantOpenedSources)).toContain('task:orchid-task');
   await page.locator('#taskModal').getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -139,7 +140,7 @@ test('full Assistant retains task evidence across Stateful URL follow-ups and di
   await page.evaluate(() => window.setActiveView('assistantview'));
   await expect(page.locator('#asstInput')).toBeVisible();
   const reopenedComparison = page.locator('#asstMessages .asst-msg.assistant').last().locator('.assistant-sources');
-  await reopenedComparison.locator('summary').click();
+  await openResponseDetails(page.locator('#asstMessages .asst-msg.assistant').last(), 'Sources');
   await reopenedComparison.getByRole('button', { name: 'Open source Biology Midterm' }).click();
   await expect.poll(() => page.evaluate(() => window.__assistantOpenedSources)).toContain('testing_exam:custom:biology-midterm');
 

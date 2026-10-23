@@ -1,3 +1,4 @@
+import { openResponseDetails } from './helpers/assistant-details.mjs';
 // End-to-end coverage for the Sutra Intelligence hardening batch, driven
 // through the REAL sendChat() runtime with a network-stubbed provider:
 //   - a successful response with usage renders a progressive-disclosure
@@ -117,13 +118,14 @@ test('a reported-usage response renders an accessible Response details chip with
   await waitForStreamComplete(page);
 
   const chip = page.locator('#chatbotMessages .asst-response-stats').last();
+  await openResponseDetails(page.locator('#chatbotMessages'), 'Usage');
   await expect(chip).toBeVisible();
-  // Native <details> → keyboard-operable, announces expanded/collapsed.
+  // Existing measurement nodes are inside the keyboard-operable Usage panel.
   await expect(chip).toHaveJSProperty('tagName', 'DETAILS');
-  const summary = chip.locator('summary.asst-response-stats-summary');
-  await expect(summary).toContainText('Response details');
+  const summary = page.locator('#chatbotMessages').getByRole('tab', { name: 'Usage', exact: true }).last();
+  await expect(summary).toHaveAttribute('aria-selected', 'true');
 
-  // Expand and read the rows.
+  // Read the selected Usage panel.
   await summary.click();
   await expect(chip).toHaveJSProperty('open', true);
   const body = chip.locator('.asst-response-stats-body');
@@ -150,9 +152,9 @@ test('a reported-usage response renders an accessible Response details chip with
   const focusStyle = await summary.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(focusStyle).toBe('solid');
 
-  // Collapse again — the disclosure toggles.
-  await summary.click();
-  await expect(chip).toHaveJSProperty('open', false);
+  // Escape dismisses the containing popover.
+  await summary.press('Escape');
+  await expect(page.locator('#chatbotMessages').getByRole('dialog', { name: 'Response details', exact: true })).toBeHidden();
 
   // Ephemeral: the per-response stats never reach persisted chat history.
   const persisted = await page.evaluate(() => sessionStorage.getItem('chat_history') || '[]');
@@ -168,8 +170,8 @@ test('a response with no usage shows latency alone — never a misleading zero-t
   await waitForStreamComplete(page);
 
   const chip = page.locator('#chatbotMessages .asst-response-stats').last();
+  await openResponseDetails(page.locator('#chatbotMessages'), 'Usage');
   await expect(chip).toBeVisible();
-  await chip.locator('summary').click();
   const body = chip.locator('.asst-response-stats-body');
   await expect(body).toContainText('Latency');
   // No usage was reported — no token rows at all, and certainly no "0 tok".
@@ -217,6 +219,7 @@ test('after a reload, an old message never inherits a new turn\'s stats (no ephe
   await send(page, 'First detailed request that comfortably exceeds the eighty-character action threshold now.');
   await waitForStreamComplete(page);
   // Baseline: the first reply shows a stats chip this session.
+  await openResponseDetails(page.locator(assistantReplies).first(), 'Usage');
   await expect(page.locator(`${assistantReplies} .asst-response-stats`).first()).toBeVisible();
 
   // Reload (fresh session): the in-memory stats Map is cleared. The persisted
@@ -270,6 +273,6 @@ test('a retryable pre-output 503 is automatically retried and then succeeds', as
 
   // The response-details chip discloses the retry.
   const chip = page.locator('#chatbotMessages .asst-response-stats').last();
-  await chip.locator('summary').click();
+  await openResponseDetails(page.locator('#chatbotMessages'), 'Usage');
   await expect(chip.locator('.asst-response-stats-body')).toContainText('Retries');
 });

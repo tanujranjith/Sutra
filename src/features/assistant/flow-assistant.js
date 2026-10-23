@@ -1126,6 +1126,7 @@
         { type: 'delete_memory', desc: 'Forget (permanently delete) an Assistant Memory. Destructive — requires confirmation.', risk: 'high', fields: { id: 'string?', ids: 'string[]?' } },
         { type: 'clear_expired_memories', desc: 'Forget all expired Assistant Memories.', risk: 'medium', fields: {} },
         { type: 'clear_temporary_memories', desc: 'Forget all temporary (auto-expiring) Assistant Memories.', risk: 'medium', fields: {} },
+        { type: 'review_study_preferences', desc: 'Open a reviewable Settings draft for study preferences; does not save changes.', risk: 'read_only', fields: { preferences: 'object' } },
         { type: 'open_memory_manager', desc: 'Open the Assistant Memory manager UI.', risk: 'read_only', fields: {} }
     ];
 
@@ -2068,6 +2069,9 @@
         if (!known) return { ok: false, error: `Unknown action type: ${action.type}` };
 
         switch (action.type) {
+            case 'review_study_preferences':
+                if (!validateStudySetupPreferences(action.preferences)) return { ok: false, error: 'Invalid study preference draft' };
+                break;
             case 'insert_text':
             case 'replace_selection':
                 if (!action.text || typeof action.text !== 'string') return { ok: false, error: 'Missing text' };
@@ -3556,6 +3560,11 @@
             case 'delete_memory': return applyDeleteMemory(action);
             case 'clear_expired_memories': return applyClearMemories(action, 'expired');
             case 'clear_temporary_memories': return applyClearMemories(action, 'temporary');
+            case 'review_study_preferences': {
+                const b = bridge();
+                if (!validateStudySetupPreferences(action.preferences) || !b || typeof b.reviewStudentPreferences !== 'function') return { ok: false, message: 'Study settings review is unavailable.' };
+                return b.reviewStudentPreferences(action.preferences);
+            }
             case 'open_memory_manager': return applyOpenMemoryManager(action);
             // import_assignments has no atomic applier — it is applied row-by-row
             // through the dedicated review table (see renderImportReview).
@@ -3661,6 +3670,7 @@
             case 'delete_memory': return `Forget ${Array.isArray(action.ids) && action.ids.length > 1 ? action.ids.length + ' memories' : 'a memory'}`;
             case 'clear_expired_memories': return 'Forget all expired memories';
             case 'clear_temporary_memories': return 'Forget all temporary memories';
+            case 'review_study_preferences': return 'Review study preferences in Settings';
             case 'open_memory_manager': return 'Open the Memory manager';
             default: return `Unknown: ${action.type}`;
         }
@@ -3696,6 +3706,7 @@
             case 'delete_memory': return 'Forget';
             case 'disable_memory': return 'Disable';
             case 'enable_memory': return 'Enable';
+            case 'review_study_preferences': return 'Review in Settings';
             case 'open_memory_manager': return 'Open manager';
             default: return 'Apply';
         }
@@ -4300,7 +4311,7 @@
             // READ-ONLY actions (local grade math etc.) run immediately and
             // render their deterministic result — no approval needed, no
             // mutation occurs.
-            if (risk === 'read_only' && !planStructure.explicit) {
+            if (risk === 'read_only' && action.type !== 'review_study_preferences' && !planStructure.explicit) {
                 const header = document.createElement('div');
                 header.className = 'flow-action-card-head';
                 header.innerHTML = `<span class="flow-action-risk flow-risk-read_only" title="Read-only — computed locally">local</span>`
@@ -4462,10 +4473,9 @@
                     noteBatchProgress(1);
                 } else {
                     if (planStructure.explicit) planStates.set(planStep.id, 'failed');
-                    const status = document.createElement('div');
-                    status.className = 'flow-action-error';
-                    status.textContent = `✗ ${result.message}`;
-                    card.appendChild(status);
+                    let status = card.querySelector('.flow-action-apply-error');
+                    if (!status) { status = document.createElement('div'); status.className = 'flow-action-error flow-action-apply-error'; card.appendChild(status); }
+                    status.textContent = result.message;
                     applyBtn.disabled = false;
                     const conflict = result.payload && result.payload.conflict;
                     if (isAnchoredNoteAction(action) && conflict && conflict.code === 'rebase_required' && conflict.proposal) {
@@ -5145,7 +5155,7 @@
         }).filter(row => row.score > 0).sort((a, b) => b.score - a.score || String(a.row.key).localeCompare(String(b.row.key)));
         const safety = window.SutraAssistantSafety;
         if (!safety || typeof safety.safeObject !== 'function') return { matches: [], notice: 'Workspace privacy filtering is unavailable.' };
-        const matches = ranked.slice(0, 4).map(({ row }) => ({ key: row.key, kind: row.type, title: String(row.title || '').slice(0, 300), courseId: row.courseId || '', updatedAt: row.dates && row.dates.updated || '', dueDate: row.dates && row.dates.due || '', status: row.status || '', citationUrl: row.type === 'note' ? 'sutra://page/' + encodeURIComponent(row.id) : 'sutra://entity/' + encodeURIComponent(row.key) })).map(row => { const safe = safety.safeObject(row); return safe && safe.key === row.key ? safe : null; }).filter(Boolean);
+        const matches = ranked.slice(0, 4).map(({ row }) => ({ key: row.key, kind: row.type, title: String(row.title || '').slice(0, 300), courseId: row.courseId || '', updatedAt: row.dates && row.dates.updated || '', dueDate: row.dates && row.dates.due || '', startAt: row.type === 'timeline_block' && row.dates && row.dates.start || '', endAt: row.type === 'timeline_block' && row.dates && row.dates.end || '', status: row.status || '', citationUrl: row.type === 'note' ? 'sutra://page/' + encodeURIComponent(row.id) : 'sutra://entity/' + encodeURIComponent(row.key) })).map(row => { const safe = safety.safeObject(row); return safe && safe.key === row.key ? safe : null; }).filter(Boolean);
         // A comparison intentionally asks for multiple distinct sources. Repeated
         // names still require the student to identify the intended records.
         const duplicateTitle = matches.some((row, index) => matches.some((other, next) => index !== next && row.title.toLowerCase() === other.title.toLowerCase()));
@@ -5196,15 +5206,30 @@
             box.setAttribute('data-sutra-component', 'assistant-source-choice');
             const legend = document.createElement('legend'); legend.textContent = 'Which matching sources should I read?'; box.appendChild(legend);
             const hint = document.createElement('p'); hint.textContent = 'Choose one, or choose several to compare. Content is read only after your choice.'; box.appendChild(hint);
+            const list = document.createElement('div'); list.className = 'assistant-source-options'; box.appendChild(list);
+            const kinds = { homework: 'Assignment', task: 'Task', timeline_block: 'Scheduled block', note: 'Note', course: 'Course', course_file: 'Course file', testing_exam: 'Exam', grade_record: 'Grade record' };
             const controls = matches.map(row => {
                 const label = document.createElement('label'), input = document.createElement('input');
-                input.type = 'checkbox'; input.value = row.key;
-                label.appendChild(input); label.appendChild(document.createTextNode(' ' + row.title + ' · ' + row.kind + ' · ' + row.key + (row.dueDate ? ' · due ' + row.dueDate : ''))); box.appendChild(label); box.appendChild(document.createElement('br'));
+                label.className = 'assistant-source-option'; input.type = 'checkbox'; input.value = row.key;
+                const copy = document.createElement('span'); copy.className = 'assistant-source-option-copy';
+                const title = document.createElement('span'); title.className = 'assistant-source-option-title'; title.textContent = row.title || 'Untitled source';
+                const meta = document.createElement('span'); meta.className = 'assistant-source-option-meta';
+                const bits = [kinds[row.kind] || String(row.kind || 'Workspace record').replace(/_/g, ' ')];
+                if (/^\d{4}-\d{2}-\d{2}$/.test(row.dueDate || '')) {
+                    const date = new Date(row.dueDate + 'T12:00:00');
+                    if (!Number.isNaN(date.getTime())) bits.push(date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+                }
+                const start = String(row.startAt || '').match(/\d{2}:\d{2}/), end = String(row.endAt || '').match(/\d{2}:\d{2}/);
+                if (start) bits.push(start[0] + (end ? '–' + end[0] : ''));
+                meta.textContent = bits.join(' · '); copy.append(title, meta); label.append(input, copy); list.appendChild(label);
                 return input;
             });
-            const submit = document.createElement('button'); submit.type = 'button'; submit.textContent = 'Read selected sources'; submit.disabled = true;
-            const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel lookup';
-            box.appendChild(submit); box.appendChild(cancel); host.appendChild(box);
+            const footer = document.createElement('div'); footer.className = 'assistant-source-choice-footer';
+            const count = document.createElement('span'); count.className = 'assistant-source-choice-count'; count.setAttribute('role', 'status'); count.textContent = 'No sources selected';
+            const buttons = document.createElement('div'); buttons.className = 'assistant-source-choice-buttons';
+            const submit = document.createElement('button'); submit.className = 'assistant-source-choice-submit'; submit.type = 'button'; submit.textContent = 'Read selected sources'; submit.disabled = true;
+            const cancel = document.createElement('button'); cancel.className = 'assistant-source-choice-cancel'; cancel.type = 'button'; cancel.textContent = 'Cancel lookup';
+            buttons.append(cancel, submit); footer.append(count, buttons); box.appendChild(footer); host.appendChild(box);
             const privacy = window.SutraAssistantPrivacy;
             const permissionSnapshot = JSON.stringify(privacy.getPermissions());
             let done = false;
@@ -5212,7 +5237,7 @@
             const abort = () => finish(null);
             const watch = setInterval(() => { if (!box.isConnected || JSON.stringify(privacy.getPermissions()) !== permissionSnapshot || normalizeDepth() === 'minimal') finish(null); }, 300);
             signal.addEventListener('abort', abort, { once: true });
-            controls.forEach(input => input.addEventListener('change', () => { submit.disabled = !controls.some(control => control.checked); }));
+            controls.forEach(input => input.addEventListener('change', () => { const selected = controls.filter(control => control.checked).length; submit.disabled = selected === 0; count.textContent = selected ? selected + (selected === 1 ? ' source selected' : ' sources selected') : 'No sources selected'; }));
             submit.addEventListener('click', () => {
                 if (signal.aborted || JSON.stringify(privacy.getPermissions()) !== permissionSnapshot) return finish(null);
                 finish(controls.filter(input => input.checked).map(input => input.value));
@@ -7062,10 +7087,77 @@
         return { handled: true, message: lines.join('\n'), source: 'local', localEngine: 'Workspace task list', claimType: 'workspace_fact', areasRead: ['planning'] };
     }
 
+    let studyInterview = null;
+    const STUDY_SETUP_QUESTIONS = [
+        'What time does school usually start and finish? For example: 8 AM to 3 PM.',
+        'When would you like to study? For example: 4 PM to 9 PM.',
+        'How long should a focus block and its break be, in minutes? For example: 45, 10.',
+        'When should evening planning stop? For example: 10 PM.',
+        'Would you like study blocks on weekends? Reply yes or no.',
+        'How do you prefer to review: flashcards, learn, write, test, or match?',
+        'Which classes need extra study time? Separate their names with commas, or skip.'
+    ];
+    function parseStudyInterviewAnswer(step, text) {
+        const value = String(text || '').trim();
+        if (/^skip$/i.test(value)) return {};
+        const hours = [...value.toLowerCase().matchAll(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/g)];
+        const hour = (match, end) => {
+            if (!match || Number(match[2] || 0) !== 0) return NaN;
+            let n = Number(match[1]); const meridiem = match[3];
+            if (meridiem) { if (n < 1 || n > 12) return NaN; n = n % 12 + (meridiem === 'pm' ? 12 : 0); }
+            return end && n === 0 ? 24 : n;
+        };
+        if (step < 2) {
+            if (!/^\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:to|[-–—,])\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?$/i.test(value)) return null;
+            // Mixed notation such as "4 to 9 PM" is ambiguous; do not silently
+            // turn the first hour into 4 AM. Ask for both AM/PM labels or 24h.
+            if (Boolean(hours[0] && hours[0][3]) !== Boolean(hours[1] && hours[1][3])) return null;
+            const start = hour(hours[0], false), end = hour(hours[1], step === 1);
+            if (hours.length !== 2 || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > (step === 0 ? 23 : 24) || start >= end) return null;
+            return step === 0 ? { schoolStartHour: start, schoolEndHour: end } : { earliestStudyHour: start, latestStudyHour: end };
+        }
+        if (step === 2) {
+            if (!/^\d{1,3}\s*(?:,|\/|and)\s*\d{1,2}$/i.test(value)) return null;
+            const nums = value.match(/\d+/g) || []; const focus = Number(nums[0]), rest = Number(nums[1]);
+            return nums.length === 2 && focus >= 10 && focus <= 180 && rest >= 0 && rest <= 60 ? { studyBlockMinutes: focus, breakMinutes: rest } : null;
+        }
+        if (step === 3) { if (!/^\d{1,2}(?::\d{2})?\s*(?:am|pm)?$/i.test(value)) return null; let end = hour(hours[0], false); if (end <= 2) end += 24; return hours.length === 1 && end >= 18 && end <= 26 ? { bedtimeHour: end } : null; }
+        if (step === 4) return /^(yes|y|no|n)$/i.test(value) ? { scheduleWeekends: /^y/i.test(value) } : null;
+        if (step === 5) { const style = value.toLowerCase(); return ['flashcards', 'learn', 'write', 'test', 'match'].includes(style) ? { preferredReviewStyle: style } : null; }
+        return value.length && value.length <= 200 ? { hardestClasses: value } : null;
+    }
+    function validateStudySetupPreferences(values) {
+        if (!values || typeof values !== 'object' || Array.isArray(values)) return false;
+        const ranges = { schoolStartHour: [0,23], schoolEndHour: [0,23], earliestStudyHour: [0,23], latestStudyHour: [1,24], studyBlockMinutes: [10,180], breakMinutes: [0,60], bedtimeHour: [18,26] };
+        const keys = Object.keys(values); if (!keys.length || keys.length > 10) return false;
+        return keys.every(key => ranges[key] ? Number.isInteger(values[key]) && values[key] >= ranges[key][0] && values[key] <= ranges[key][1]
+            : key === 'scheduleWeekends' ? typeof values[key] === 'boolean'
+            : key === 'preferredReviewStyle' ? ['flashcards','learn','write','test','match'].includes(values[key])
+            : key === 'hardestClasses' && typeof values[key] === 'string' && values[key].length <= 200)
+            && !(values.schoolStartHour != null && values.schoolEndHour != null && values.schoolStartHour >= values.schoolEndHour)
+            && !(values.earliestStudyHour != null && values.latestStudyHour != null && values.earliestStudyHour >= values.latestStudyHour);
+    }
+    function routeStudyInterview(text) {
+        const chatId = getCurrentChatIdSafe();
+        const start = /^(?:get to know me|help me set up my study preferences|set up my study preferences)[.!?]*$/i.test(text);
+        if (start) { studyInterview = { chatId, step: 0, values: {} }; return { handled: true, source: 'study-setup', message: 'Let’s get to know your routine. I’ll ask seven short questions, one at a time. No provider is contacted for this setup. Your study settings change only after you review Settings and choose Save Changes. Reply **skip** for any question or **cancel setup** to stop.\n\n' + STUDY_SETUP_QUESTIONS[0] }; }
+        if (!studyInterview || studyInterview.chatId !== chatId) return null;
+        if (/^(?:cancel(?: setup)?|stop(?: setup)?)$/i.test(text)) { studyInterview = null; return { handled: true, source: 'study-setup', message: 'Setup cancelled. Your study settings have not changed.' }; }
+        const answer = parseStudyInterviewAnswer(studyInterview.step, text);
+        if (!answer) return { handled: true, source: 'study-setup', message: 'I couldn’t use that answer. Use whole hours such as 8 AM or 16:00 for times. You can also reply **skip**.\n\n' + STUDY_SETUP_QUESTIONS[studyInterview.step] };
+        Object.assign(studyInterview.values, answer); studyInterview.step += 1;
+        if (studyInterview.step < STUDY_SETUP_QUESTIONS.length) return { handled: true, source: 'study-setup', message: '**' + (studyInterview.step + 1) + ' of 7** · ' + STUDY_SETUP_QUESTIONS[studyInterview.step] };
+        const values = studyInterview.values; studyInterview = null;
+        if (!Object.keys(values).length) return { handled: true, source: 'study-setup', message: 'You skipped every question. Your current study settings are unchanged.' };
+        return { handled: true, source: 'study-setup', message: 'Your answers are ready. **Review in Settings** opens a draft; choose **Save Changes** there when you’re happy with it. Skipped answers keep their current values.\n\n' + buildActionFence([{ type: 'review_study_preferences', preferences: values, label: 'Review my study preferences in Settings' }]) };
+    }
+
     function tryHandleCommand(rawText, options = {}) {
         const text = String(rawText || '').trim();
         if (!text) return { handled: false };
         const lc = text.toLowerCase();
+        const setup = routeStudyInterview(text);
+        if (setup) return setup;
         const viewMap = {
             today: 'today', notes: 'notes', note: 'notes', homework: 'homework', timeline: 'timeline',
             calendar: 'timeline', review: 'review', cram: 'cramhub', 'cram hub': 'cramhub',
@@ -7396,9 +7488,8 @@
                 expiresInDays = n * (/week/i.test(span[2]) ? 7 : (/month/i.test(span[2]) ? 30 : 1));
                 category = 'temporary_context';
             }
-            // Saving a memory is still a reviewed Assistant write. Present it as
-            // an action card so the canonical permission mode and Apply control
-            // decide whether it may be committed.
+            // Local memory management has its own reviewed permission. It never
+            // grants workspace reads/writes or permits silent model memory saves.
             const action = {
                 type: 'create_memory', category, content: fact,
                 expiresInDays: expiresInDays || undefined,
@@ -8974,13 +9065,17 @@
         }
     }
 
+    function isLocalMemoryAction(type) {
+        return ['create_memory', 'update_memory', 'enable_memory', 'disable_memory', 'delete_memory', 'clear_expired_memories', 'clear_temporary_memories'].includes(type);
+    }
+
     function assistantActionPermissionError(action, meta, prospective) {
         const definition = getActionDefinition(action && action.type);
         if (!definition) return 'Assistant action is unavailable.';
         const required = Array.isArray(definition.permissions) ? definition.permissions.slice() : [];
         if (EXTRA_ACTION_DEFINITIONS[action.type]) required.push('plugin.execute');
-        else if (!definition.readOnly) required.push('workspace.write');
-        if (definition.destructive) required.push('workspace.delete');
+        else if (!definition.readOnly) required.push(isLocalMemoryAction(action.type) ? 'assistant.memory.write' : 'workspace.write');
+        if (definition.destructive) required.push(isLocalMemoryAction(action.type) ? 'assistant.memory.delete' : 'workspace.delete');
         // Even read-only APIs require an available policy; a missing service
         // must not turn a known action into an implicit grant.
         if (!window.SutraAssistantPrivacy || typeof window.SutraAssistantPrivacy.getActionPermissions !== 'function') {
@@ -9028,10 +9123,19 @@
                     items: { type: 'object', additionalProperties: false, required: ['front', 'back'], properties: { front: { type: 'string', minLength: 1, maxLength: 10000 }, back: { type: 'string', minLength: 1, maxLength: 20000 } } }
                 };
             }
+            if (entry.type === 'review_study_preferences') {
+                schema.properties.preferences = { type: 'object', additionalProperties: false, properties: {
+                    schoolStartHour: { type: 'number', minimum: 0, maximum: 23 }, schoolEndHour: { type: 'number', minimum: 0, maximum: 23 },
+                    earliestStudyHour: { type: 'number', minimum: 0, maximum: 23 }, latestStudyHour: { type: 'number', minimum: 1, maximum: 24 },
+                    studyBlockMinutes: { type: 'number', minimum: 10, maximum: 180 }, breakMinutes: { type: 'number', minimum: 0, maximum: 60 },
+                    bedtimeHour: { type: 'number', minimum: 18, maximum: 26 }, scheduleWeekends: { type: 'boolean' },
+                    preferredReviewStyle: { type: 'string', enum: ['flashcards', 'learn', 'write', 'test', 'match'] }, hardestClasses: { type: 'string', maxLength: 200 }
+                } };
+            }
             const permissions = [];
             if (cap && cap.scope !== 'none') permissions.push('workspace.read');
-            if (!(cap && cap.readOnly) && entry.risk !== 'read_only') permissions.push('workspace.write');
-            if (cap && cap.destructive) permissions.push('workspace.delete');
+            if (!(cap && cap.readOnly) && entry.risk !== 'read_only') permissions.push(isLocalMemoryAction(entry.type) ? 'assistant.memory.write' : 'workspace.write');
+            if (cap && cap.destructive) permissions.push(isLocalMemoryAction(entry.type) ? 'assistant.memory.delete' : 'workspace.delete');
             system.register({
                 type: entry.type,
                 description: entry.desc,
@@ -9041,7 +9145,7 @@
                 affectedEntities: [cap && cap.domain || 'assistant'],
                 preview: (action) => ({ label: describeAction(action), html: buildPreviewHtml(action, classifyRisk(action)) }),
                 persistence: { required: !(cap && cap.readOnly) && entry.risk !== 'read_only', strategy: 'workspace' },
-                confirmation: (cap && cap.destructive) ? 'destructive' : (entry.risk === 'read_only' ? 'never' : (entry.risk === 'high' ? 'always' : 'writes')),
+                confirmation: (cap && cap.destructive) ? 'destructive' : (entry.type === 'review_study_preferences' ? 'always' : (entry.risk === 'read_only' ? 'never' : (entry.risk === 'high' ? 'always' : 'writes'))),
                 destructive: !!(cap && cap.destructive),
                 readOnly: !!(cap && cap.readOnly) || entry.risk === 'read_only',
                 limits: { maxBytes: 256000 },

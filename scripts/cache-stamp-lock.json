@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261022-investigation1",
-    "hash": "0c0fc07058622522"
+    "stamp": "20261022-assistant-polish5",
+    "hash": "2585705556300e44"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-investigation4",
-    "hash": "a6c6961ed8d8a56d"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "cd050e8687c80840"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -184,20 +184,20 @@
     "hash": "7168f34034a3e5ce"
   },
   "src/features/assistant/assistant-core.js": {
-    "stamp": "20261022-investigation2",
-    "hash": "5c158a6430141e22"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "045820024d5bccfc"
   },
   "src/features/assistant/assistant-permissions.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "8b62141875ba48b2"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "97008fbab27f7a47"
   },
   "src/features/assistant/assistant-safety.js": {
     "stamp": "20261015-caveat-fixes6",
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261022-investigation1",
-    "hash": "825d5bc86b8f6cc2"
+    "stamp": "20261022-assistant-polish5",
+    "hash": "fe9b7de8b8861c1e"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -224,16 +224,16 @@
     "hash": "87def3fca46ffcab"
   },
   "src/features/assistant/sutra-capability-registry.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "336d5b60e5ec4766"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "f64a7eecc4fd7e86"
   },
   "src/features/assistant/sutra-local-help.js": {
     "stamp": "20261014-assistant-retrieval7",
     "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261022-investigation1",
-    "hash": "c1d006f6810ee509"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "7e4feee42fe60aac"
   },
   "src/features/assistant/writing-commands.js": {
     "stamp": "20261015-writing1",
@@ -372,8 +372,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261022-create-split3",
-    "hash": "d7f663e03cf0ac42"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "86e06d8c0afacd2e"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -720,8 +720,8 @@
     "hash": "d250ec565ffba14d"
   },
   "styles/responsive/student-workspaces-polish.css": {
-    "stamp": "20261022-investigation1",
-    "hash": "658cf8d9ab59a208"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "95a71873ae9c0931"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -748,8 +748,8 @@
     "hash": "7bb9325f231114c9"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20261022-investigation1",
-    "hash": "2997dd1fc0a4a8cc"
+    "stamp": "20261022-assistant-polish3",
+    "hash": "23882a93ae06f7c4"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20261021-space-move1",
