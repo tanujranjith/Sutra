@@ -395,17 +395,26 @@ proposed in a review card before a deck is saved.
 
 Choose **Get to know me with Assistant** in Settings → Assistant → Student
 preferences, or ask **Help me set up my study preferences** in chat. The optional
-on-device conversation asks seven questions, one at a time: school hours, study
-window, block/break lengths, evening cutoff, weekends, review style, and harder
-classes. No provider or API key is needed. Times currently use whole hours,
-matching the existing planner settings. Ambiguous or invalid answers ask again.
+on-device conversation asks one question at a time: school start, school finish,
+study start, study finish, block length, break length, evening cutoff, weekends,
+review style, and harder
+classes. No provider or API key is needed. Times accept minutes, AM/PM and 24-hour
+notation. For an ambiguous answer such as 7:30, a short AM-or-PM follow-up retains
+the entered time. Ordinary answers such as 45 minutes, usually not on weekends,
+and practice questions are supported. An invalid answer clarifies only that
+question; an invalid finish does not discard the already accepted start.
 
 Reply **skip** to keep a current value or **cancel setup** to stop. The interview
 is scoped to its conversation and lasts for the current page session. At the end,
 **Review in Settings** stages only supplied answers; **Save Changes** applies them
 through canonical Settings persistence, and **Revert** discards the draft. An
 existing draft for a supplied field must be saved or reverted first. No second
-profile store or new durable preference fields are created. Normal saved chat
+profile store or new durable preference fields are created. Existing hour-valued
+preferences retain their units and now preserve fractions to the nearest minute
+(7:30 AM is 7.5); old whole-hour values remain valid. Midnight study finish is 24,
+and post-midnight evening cutoffs use 24–26. Settings displays real time inputs.
+This precision survives canonical normalization, JSON serialization, reload and
+the existing portable settings paths. Normal saved chat
 history follows the existing history/export controls; interview replies are not
 sent to a provider by the setup flow.
 

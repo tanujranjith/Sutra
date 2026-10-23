@@ -105,3 +105,23 @@ Assistant UI and local-setup QA used no provider calls.
   shell, cache stamps, CSP, links, responsive and modal static checks passed.
   New and updated unit/E2E tests await CI; no suites were run on the user's PC.
 - Local code commit: `449afb6`. No push, merge, deployment or account changes.
+
+## Study conversation correction
+
+The first setup incorrectly combined start/finish questions and rejected 7:30 AM.
+The existing preference normalizer also truncated fractional hours. Setup now
+asks one value per turn, accepts minute-accurate times and ordinary duration,
+weekend and review-style answers, clarifies AM/PM without losing the time, and
+shows a readable summary before Settings review. Canonical hour units remain
+unchanged; normalization preserves fractions to minute precision and Settings
+uses labeled time inputs. Existing integer values still work.
+
+Chrome checks in the disposable 127.0.0.1 workspace covered all ten prompts,
+7:30 AM and 2:45 PM school times, 4:15 PM / 9:40 PM study times, 45 minutes,
+10 minutes, 10:30 PM cutoff, ordinary weekend/review answers, Save and reload.
+The exact times survived. A second pass covered AM/PM clarification, an invalid
+finish without losing the start, skip/not sure, half an hour, no break, 1:15 AM
+next-day cutoff, none, Review, Revert and cancel. The no-break pass found and
+repaired a suffix-parsing bug. Phone-width time controls stayed inside 390px
+without document overflow. No provider calls were made. Updated unit and browser
+regressions, including serialization round trips, await CI.
