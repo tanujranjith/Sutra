@@ -73,7 +73,7 @@
     <script src="src/domain/student-life.js?v=20261015-reliability2"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260913-content-limits-import1"></script>
-    <script src="src/features/assistant/assistant-permissions.js?v=20261022-assistant-polish3"></script>
+    <script src="src/features/assistant/assistant-permissions.js?v=20261022-everyday2"></script>
     <!-- Durable chat normalization must be ready before workspace hydration,
          even when the optional Assistant feature pack is disabled. -->
     <script src="src/features/assistant/assistant-core.js?v=20261022-assistant-polish3"></script>
@@ -92,7 +92,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20261022-investigation1"></script>
-    <script src="src/config/feature-manifest.js?v=20261022-study-resume1"></script>
+    <script src="src/config/feature-manifest.js?v=20261022-everyday2"></script>
     <script src="src/features/feature-registry.js?v=20261022-lifecycle1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -3883,6 +3883,17 @@
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="assistant">Reset</button>
                     </header>
                     <div class="cc-group">
+                        <span class="cc-group-title">Assistant setup</span>
+                        <div class="cc-row" data-setting-item>
+                            <label class="cc-row-text" for="assistantAccessPreset"><span class="cc-row-name">Assistant preset</span><span class="cc-row-help">Everyday finds relevant workspace content, follows your conversation, and offers reviewed changes. Private excludes workspace content. Advanced keeps your configuration for fine-tuning below. Presets apply immediately; save or revert any pending Settings changes first.</span></label>
+                            <div class="cc-row-control">
+                                <select class="modal-input cc-select" id="assistantAccessPreset" data-assistant-preset data-native-select="true" aria-describedby="assistantWorkspaceAccessStatus" disabled>
+                                    <option value="private">Private</option>
+                                    <option value="everyday">Everyday (recommended)</option>
+                                    <option value="advanced">Advanced (customize)</option>
+                                </select>
+                            </div>
+                        </div>
                         <span class="cc-group-title">Panel</span>
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text"><span class="cc-row-name">Panel default</span><span class="cc-row-help">Whether the assistant opens with the workspace.</span></div>
@@ -3910,8 +3921,8 @@
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="assistant.contextDepth">
                                     <option value="minimal">Minimal (view only)</option>
-                                    <option value="currentView">Current view (recommended)</option>
-                                    <option value="workspace">Workspace-aware</option>
+                                    <option value="currentView">Current view</option>
+                                    <option value="workspace">Workspace-aware (recommended)</option>
                                 </select>
                             </div>
                         </div>
@@ -3935,7 +3946,7 @@
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Chat memory</span>
-                                <span class="cc-row-help"><strong>Stateless:</strong> Each message is treated independently. Faster, cleaner, and more private, but the Assistant will not remember earlier chat context. <strong>Stateful:</strong> the Assistant includes recent chat history so replies can follow the conversation. More contextual, but uses more tokens.</span>
+                                <span class="cc-row-help"><strong>Stateless:</strong> Each message is independent. <strong>Stateful:</strong> includes recent messages and short excerpts of up to four older turns so follow-ups work. The request budget still limits context; this uses more tokens.</span>
                             </div>
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="assistant.chatMemoryMode">
@@ -7596,7 +7607,7 @@
     <script src="src/features/search/global-search-engine.js?v=20261015-search-typos4"></script>
     <script src="src/features/search/global-search-modal.js?v=20261015-search-keyboard3"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261022-study-times1"></script>
+    <script src="src/core/app.js?v=20261022-everyday2"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>

@@ -402,13 +402,23 @@
         if (mode !== 'stateful') return [];
         const depth = normalizeChatMemoryDepth(options.chatMemoryDepth != null ? options.chatMemoryDepth : getChatMemoryDepth(), 10);
         const source = Array.isArray(conversation) ? conversation : [];
-        return source.slice(-depth).map(entry => {
+        // A small extractive recap uses existing chat only: no extra AI call,
+        // hidden durable summary or invented facts. Keep each original role.
+        const recap = source.slice(-depth - 4, -depth).map(entry => {
+            const text = String(entry && entry.content || '').trim();
+            if (!text) return null;
+            return {
+                role: String(entry.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user',
+                content: '[Earlier message excerpt; newer messages take priority] ' + text.slice(0, 180) + (text.length > 180 ? '…' : '')
+            };
+        }).filter(Boolean);
+        return recap.concat(source.slice(-depth).map(entry => {
             const role = String(entry && entry.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
             return {
                 role,
                 content: String(entry && entry.content || '').trim()
             };
-        }).filter(entry => entry.content);
+        }).filter(entry => entry.content));
     }
 
     function buildRequestMessages(userText, conversation, options = {}) {
@@ -4405,7 +4415,28 @@
                 const permissionNote = document.createElement('div');
                 permissionNote.className = 'flow-action-permission-note';
                 permissionNote.setAttribute('role', 'status');
-                permissionNote.textContent = `Currently blocked: ${permissionError} Change Workspace access to Read + reviewed changes in Settings → Assistant, then click Apply.`;
+                permissionNote.textContent = `Currently blocked: ${permissionError} You can enable reviewed changes here; nothing applies until you choose Apply.`;
+                const enable = document.createElement('button');
+                enable.type = 'button';
+                enable.className = 'flow-action-select-btn';
+                enable.textContent = 'Use Everyday Assistant';
+                enable.addEventListener('click', async () => {
+                    const approved = typeof window.showCustomConfirmDialog === 'function' && await window.showCustomConfirmDialog({
+                        title: 'Use Everyday Assistant?',
+                        message: 'Allow relevant workspace reading and reviewed changes, with recent conversation context. Existing area blocks, locked-page protection and sensitive-content settings stay in place. This does not apply the proposed change or connect a provider.',
+                        confirmText: 'Enable Everyday', cancelText: 'Keep current permissions'
+                    });
+                    if (!approved) return;
+                    try {
+                        window.SutraAssistantPermissions.applyPreset('everyday');
+                        refreshAssistantPermissionControls();
+                        permissionNote.textContent = 'Everyday is enabled. Review this proposal and choose Apply when ready.';
+                    } catch (error) { showToast(error.message || 'Could not change Assistant setup.'); }
+                });
+                const setupRow = document.createElement('div');
+                setupRow.className = 'flow-action-row';
+                setupRow.appendChild(enable);
+                permissionNote.appendChild(setupRow);
                 card.appendChild(permissionNote);
             }
 
@@ -9452,11 +9483,13 @@
         const mode = document.getElementById('assistantWorkspaceAccess');
         const container = document.getElementById('assistantWorkspaceAreas');
         const status = document.getElementById('assistantWorkspaceAccessStatus');
+        const preset = document.getElementById('assistantAccessPreset');
         if (!mode || !container || !status) return;
         const privacy = window.SutraAssistantPrivacy;
         const controls = window.SutraAssistantPermissions;
         const ready = privacy && typeof privacy.getPermissions === 'function' && typeof privacy.canRead === 'function' && controls && typeof controls.setMode === 'function' && typeof controls.setArea === 'function';
         mode.disabled = !ready;
+        if (preset) preset.disabled = !ready || typeof controls.applyPreset !== 'function';
         if (!ready) {
             container.querySelectorAll('select').forEach(select => { select.disabled = true; });
             status.textContent = 'Workspace access is unavailable. Reload Sutra to restore its permission controls.';
@@ -9464,6 +9497,7 @@
         }
         const permissions = privacy.getPermissions();
         mode.value = permissions.mode;
+        if (preset) preset.value = privacy.identifyPreset(permissions, getPref('assistant', {}));
         if (!container.children.length) {
             Object.entries(assistantPermissionAreas).forEach(([area, name]) => {
                 const row = document.createElement('label');
@@ -9502,16 +9536,24 @@
     }
     const handleAssistantPermissionChange = (event) => {
         const target = event.target;
-        if (!target || !target.matches('[data-assistant-permission-mode], [data-assistant-permission-area]')) return;
+        if (!target || !target.matches('[data-assistant-preset], [data-assistant-permission-mode], [data-assistant-permission-area]')) return;
         try {
             const controls = window.SutraAssistantPermissions;
-            if (target.hasAttribute('data-assistant-permission-mode')) controls.setMode(target.value);
+            if (target.hasAttribute('data-assistant-preset')) {
+                if (target.value === 'advanced') {
+                    const status = document.getElementById('assistantWorkspaceAccessStatus');
+                    if (status) status.textContent = 'Advanced keeps your current permissions. Customize workspace access, areas, conversation and confirmation below.';
+                    return;
+                }
+                controls.applyPreset(target.value);
+            } else if (target.hasAttribute('data-assistant-permission-mode')) controls.setMode(target.value);
             else if (Object.prototype.hasOwnProperty.call(assistantPermissionAreas, target.dataset.assistantPermissionArea)) controls.setArea(target.dataset.assistantPermissionArea, target.value);
             refreshAssistantPermissionControls();
         } catch (error) {
+            refreshAssistantPermissionControls();
             if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'flow-assistant.permission-settings' }, 'error');
             const status = document.getElementById('assistantWorkspaceAccessStatus');
-            if (status) status.textContent = 'Could not save workspace access. Review the current setting, then reload and try again.';
+            if (status) status.textContent = error.message || 'Could not save workspace access. Review the current setting, then reload and try again.';
         }
     };
     let assistantInitialized = false;
@@ -9521,6 +9563,7 @@
         const target = e.target;
         if (!target) return;
         if (target.closest && target.closest('[data-settings-nav="assistant"]')) refreshAssistantPermissionControls();
+        if (target.closest && target.closest('#settingsApplyBtnTop, #settingsApplyBtn, #settingsRevertBtnTop, #settingsRevertBtn')) requestAnimationFrame(refreshAssistantPermissionControls);
         const askBtn = target.closest && target.closest('[data-flow-ask]');
         if (askBtn) {
             e.preventDefault();
@@ -9571,7 +9614,7 @@
         document.removeEventListener('click', handleAssistantDocumentClick, true);
         document.removeEventListener('change', handleAssistantPermissionChange);
         window.removeEventListener('noteflow:view-changed', refreshAssistantPermissionControls);
-        document.querySelectorAll('[data-assistant-permission-mode], [data-assistant-permission-area]').forEach(control => { control.disabled = true; });
+        document.querySelectorAll('[data-assistant-preset], [data-assistant-permission-mode], [data-assistant-permission-area]').forEach(control => { control.disabled = true; });
         const accessStatus = document.getElementById('assistantWorkspaceAccessStatus');
         if (accessStatus) accessStatus.textContent = 'Enable Sutra Assistant to manage workspace access.';
         document.querySelectorAll('.flow-activity-overlay,.flow-review-overlay,.flow-context-overlay').forEach(node => node.remove());

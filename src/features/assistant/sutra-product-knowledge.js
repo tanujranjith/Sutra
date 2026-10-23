@@ -493,14 +493,15 @@
             summary: 'Settings ▸ Assistant controls workspace access permission, context depth, panel behavior, confirmation mode, conversation memory depth, action previews, and long-term Assistant Memory.',
             body: [
                 'In **Settings ▸ Assistant** you control how the assistant works:',
+                '- **Assistant preset** — new workspaces use Everyday: relevant workspace retrieval, recent conversation context, and reviewed changes with Apply and Undo. Private excludes workspace content and treats messages independently. Advanced keeps your configuration for individual controls. Presets apply immediately after unsaved Settings changes are saved or reverted; existing workspaces are not silently upgraded and area Blocks remain.',
                 '- **Workspace access** — whether it may read workspace areas. Choose Read workspace for ordinary read access; explicit area blocks remain respected.',
                 '- **Context depth** — where to search for relevant context. Workspace-aware does not grant access when Workspace access is off.',
                 '- **Confirmation & action previews** — whether proposed actions need explicit approval.',
-                '- **Conversation memory** — how many recent messages it remembers within a session.',
+                '- **Conversation memory** — recent messages and brief older excerpts from the current chat, all within the request budget. Everyday uses five recent messages; Stateless sends neither history nor excerpts.',
                 '- **Assistant Memory** — manage the long-term facts it remembers across sessions.',
                 '- **Get to know me with Assistant** — answer optional study-routine questions locally, one at a time, with minute-accurate times and ordinary answers. Skip or cancel anytime, then review the draft in Settings and choose Save Changes. No API key is needed.'
             ],
-            keywords: ['assistant settings', 'assistant behavior', 'confirmation', 'context depth', 'workspace access', 'conversation memory', 'action previews'],
+            keywords: ['assistant settings', 'assistant behavior', 'assistant preset', 'everyday assistant', 'private assistant', 'confirmation', 'context depth', 'workspace access', 'conversation memory', 'action previews'],
             nav: { view: 'settings', section: 'assistant' },
             relatedActions: ['navigate', 'change_context_depth'],
             related: ['workspace-access', 'assistant-memory', 'activity-undo']

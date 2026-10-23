@@ -220,7 +220,8 @@ test('read-only workspace still shows task review controls and explains the perm
   await expect(taskCard.locator('.flow-action-apply')).toBeEnabled();
   await expect(taskCard.locator('.flow-action-decline')).toBeVisible();
   await expect(taskCard.locator('.flow-action-permission-note'))
-    .toContainText('Read + reviewed changes in Settings → Assistant');
+    .toContainText('nothing applies until you choose Apply');
+  await expect(taskCard.getByRole('button', { name: 'Use Everyday Assistant', exact: true })).toBeVisible();
 
   await taskCard.locator('.flow-action-apply').click();
   await expect(taskCard.locator('.flow-action-error')).toContainText('not allowed');

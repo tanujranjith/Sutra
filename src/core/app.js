@@ -3946,9 +3946,9 @@ function populateProgressDashboard() {
                     panelDefault: 'closed',
                     selectedTextActions: true,
                     autoSuggestions: true,
-                    contextDepth: 'currentView',
-                    chatMemoryMode: 'stateless',
-                    chatMemoryDepth: 10,
+                    contextDepth: 'workspace',
+                    chatMemoryMode: 'stateful',
+                    chatMemoryDepth: 5,
                     saveChatHistory: true,
                     includeChatsInEncryptedBackups: true,
                     includeChatsInPlaintextRecovery: false,
@@ -6915,7 +6915,7 @@ function populateProgressDashboard() {
                 masteryRecords: [],
                 confidenceObservations: [],
                 studentDecisionState: { version: 1, preset: 'balanced', snoozed: {}, dismissed: [], pinned: [] },
-                assistantPermissions: { version: 1, mode: 'read_only', areas: {}, allowLockedNotes: false, allowWellness: false, allowFinancial: false, allowPrivateDocuments: false },
+                assistantPermissions: { version: 1, mode: 'approved_actions', areas: {}, allowLockedNotes: false, allowWellness: false, allowFinancial: false, allowPrivateDocuments: false },
                 assistantMemory: { version: 1, enabled: false, items: [] },
                 assistantChatHistory: { version: 1, currentChatId: '', conversations: [], legacyMigrationComplete: false },
                 syncAuditLog: [],
@@ -7646,6 +7646,8 @@ function populateProgressDashboard() {
             }
             const defaults = getDefaultAppData();
             const merged = { ...defaults, ...stored };
+            // New defaults never upgrade an older workspace's access or history.
+            if (stored && !stored.assistantPermissions) merged.assistantPermissions = { ...defaults.assistantPermissions, mode: 'off' };
             const storedSettings = stored && stored.settings ? stored.settings : {};
             merged.settings = { ...defaults.settings, ...storedSettings };
             merged.settings.font = { ...defaults.settings.font, ...(stored && stored.settings && stored.settings.font ? stored.settings.font : {}) };
@@ -7658,7 +7660,8 @@ function populateProgressDashboard() {
                 ...(stored && stored.settings && stored.settings.dataHealth ? stored.settings.dataHealth : {})
             };
             merged.settings.preferences = normalizeWorkspacePreferences(
-                { ...defaults.settings.preferences, ...(stored && stored.settings && stored.settings.preferences ? stored.settings.preferences : {}) },
+                { ...defaults.settings.preferences, ...(stored && stored.settings && stored.settings.preferences ? stored.settings.preferences : {}),
+                    ...(stored ? { assistant: { contextDepth: 'currentView', chatMemoryMode: 'stateless', chatMemoryDepth: 10, ...(stored.settings?.preferences?.assistant || {}) } } : {}) },
                 getLegacyPreferenceSeed({ ...defaults.settings, ...storedSettings })
             );
             merged.settings.autoEventBlocksEnabled = merged.settings.autoEventBlocksEnabled !== false;
@@ -9761,7 +9764,7 @@ function populateProgressDashboard() {
 
         function ensureAssistantPermissionState() {
             if (!appData.assistantPermissions || typeof appData.assistantPermissions !== 'object') {
-                appData.assistantPermissions = cloneSerializable(getDefaultAppData().assistantPermissions, {});
+                appData.assistantPermissions = { ...getDefaultAppData().assistantPermissions, mode: 'off' };
             }
             if (!appData.assistantPermissions.areas || typeof appData.assistantPermissions.areas !== 'object') appData.assistantPermissions.areas = {};
             return appData.assistantPermissions;
@@ -9780,6 +9783,15 @@ function populateProgressDashboard() {
             window.SutraAssistantPermissions = {
                 MODES: ['off', 'read_only', 'ask_per_area', 'approved_actions'],
                 get: () => cloneSerializable(ensureAssistantPermissionState(), {}),
+                applyPreset(name) {
+                    if (settingsDraftValues.size) throw new Error('Save or Revert your unsaved Settings changes before choosing a preset.');
+                    const plan = window.SutraAssistantPrivacy.presetPlan(name, ensureAssistantPermissionState());
+                    appData.assistantPermissions = plan.permissions;
+                    setWorkspacePreference('assistant', { ...appSettings.preferences.assistant, ...plan.preferences }, { persist: false, refresh: false });
+                    persistAppData();
+                    syncSettingsControls();
+                    return { persistenceStatus: 'scheduled' };
+                },
                 setMode(mode) {
                     if (!this.MODES.includes(String(mode))) throw new Error('Unknown assistant permission mode.');
                     ensureAssistantPermissionState().mode = String(mode);
@@ -44400,7 +44412,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>Sutra Assistant retrieves permitted workspace content relevant to your request. Workspace-aware context does not grant access by itself: enable the areas you want in Assistant privacy settings. Sutra uses bounded retrieval rather than sending the entire workspace.</li>
-  <li><strong>Context depth</strong> in <em>Settings &rsaquo; Assistant</em> controls how much it sees: <em>Minimal</em> (view only), <em>Current view</em> (default), or <em>Workspace-aware</em> (selective access to permitted workspace areas).</li>
+  <li>New workspaces use <strong>Everyday</strong>: workspace-aware retrieval, five recent messages plus brief older excerpts, and reviewed changes with Apply and Undo. <strong>Private</strong> uses no workspace access and independent messages; <strong>Advanced</strong> lets you customize the existing controls. Existing permissions and area blocks are preserved. Presets apply immediately after any unsaved Settings draft is saved or reverted.</li>
   <li><strong>Effort</strong> appears for models with supported reasoning controls, including Gemini 3 text models. Available levels follow the selected model; unsupported attachment messages identify the file and reason.</li>
   <li>An <strong>adaptive quick actions</strong> row changes per view (Shape my day, Summarize, Selection &rarr; tasks, Generate review cards, Schedule open tasks, &hellip;).</li>
   <li>Every major view also has a small <strong>Ask Sutra</strong> pill row at the top with view-relevant prompts.</li>
@@ -56022,7 +56034,7 @@ function getActiveEditor() {
                 masteryRecords: cloneSerializable(appData && appData.masteryRecords, []),
                 confidenceObservations: cloneSerializable(appData && appData.confidenceObservations, []),
                 studentDecisionState: cloneSerializable(appData && appData.studentDecisionState, getDefaultAppData().studentDecisionState),
-                assistantPermissions: cloneSerializable(appData && appData.assistantPermissions, getDefaultAppData().assistantPermissions),
+                assistantPermissions: cloneSerializable(appData && appData.assistantPermissions, { ...getDefaultAppData().assistantPermissions, mode: 'off' }),
                 assistantMemory: cloneSerializable(appData && appData.assistantMemory, getDefaultAppData().assistantMemory),
                 syncAuditLog: cloneSerializable(appData && appData.syncAuditLog, []),
                 workspaceMeta: cloneSerializable(appData && appData.workspaceMeta, getDefaultAppData().workspaceMeta),
@@ -61706,7 +61718,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             sutra2WorkspaceFields.forEach(key => {
                 if (Object.prototype.hasOwnProperty.call(data, key)) importedSutra2Fields[key] = data[key];
                 else if (workspace && Object.prototype.hasOwnProperty.call(workspace, key)) importedSutra2Fields[key] = workspace[key];
-                else importedSutra2Fields[key] = defaults[key];
+                else importedSutra2Fields[key] = key === 'assistantPermissions' ? { ...defaults[key], mode: 'off' } : defaults[key];
             });
 
             pages = normalizePagesCollection(importedPages);
@@ -61875,7 +61887,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 appSettings.customization.installedPlugins = importedPluginsApi.markForReviewOnImport(appSettings.customization.installedPlugins);
             }
             appSettings.preferences = normalizeWorkspacePreferences(
-                { ...settingsDefaults.preferences, ...(importedSettingsSource.preferences || {}) },
+                { ...settingsDefaults.preferences, ...(importedSettingsSource.preferences || {}),
+                    assistant: { contextDepth: 'currentView', chatMemoryMode: 'stateless', chatMemoryDepth: 10, ...(importedSettingsSource.preferences?.assistant || {}) } },
                 getLegacyPreferenceSeed({ ...settingsDefaults, ...importedSettingsSource })
             );
             if (localSyncPreference) {
@@ -77270,7 +77283,7 @@ ${cspMeta}
                 none: 'none (just your message)',
                 currentView: 'the view you are on',
                 currentNote: 'the current note',
-                workspace: 'a broad workspace summary'
+                workspace: 'relevant excerpts from permitted workspace areas'
             };
             const body = document.createElement('div');
             body.setAttribute('style', 'font-size:0.9rem;line-height:1.5;');
@@ -77279,7 +77292,7 @@ ${cspMeta}
                 <ul style="margin:0 0 12px;padding-left:20px;">
                     <li><strong>Provider:</strong> ${escapeHtml(detail.providerLabel || 'remote provider')} (remote endpoint)</li>
                     <li><strong>Model:</strong> ${escapeHtml(detail.model || 'selected model')}</li>
-                    ${detail.inlineNote ? '<li><strong>Text included:</strong> your writing instruction and the passage displayed in AI writing help.</li><li>No other notes, prior chats, or attachments are included in this writing request.</li>' : `<li><strong>Context depth:</strong> ${escapeHtml(depthLabels[depth] || depth)}</li><li><strong>Selected text:</strong> ${includeSelection ? 'included when you have a selection' : 'not included by default'}</li><li><strong>Prior chat messages:</strong> ${String(chatMemoryMode).toLowerCase() === 'stateful' ? 'recent visible messages are included' : 'not included in Stateless mode'}</li><li><strong>Attached files</strong> (PDFs, images, or locally-extracted text) are included only when you attach them AND the selected model supports that file type — each file chip shows exactly how it will be processed</li>`}
+                    ${detail.inlineNote ? '<li><strong>Text included:</strong> your writing instruction and the passage displayed in AI writing help.</li><li>No other notes, prior chats, or attachments are included in this writing request.</li>' : `<li><strong>Context depth:</strong> ${escapeHtml(depthLabels[depth] || depth)}</li><li><strong>Selected text:</strong> ${includeSelection ? 'included when you have a selection' : 'not included by default'}</li><li><strong>Prior chat messages:</strong> ${String(chatMemoryMode).toLowerCase() === 'stateful' ? 'recent visible messages and brief older excerpts are included' : 'not included in Stateless mode'}</li><li><strong>Attached files</strong> (PDFs, images, or locally-extracted text) are included only when you attach them AND the selected model supports that file type — each file chip shows exactly how it will be processed</li>`}
                 </ul>
                 <p style="margin:0 0 10px;">Choose your AI provider and model carefully. Sutra Assistant uses the provider and model you select, so response quality, accuracy, speed, availability, and cost may vary. AI can make mistakes. Review suggestions before applying them to your workspace. You remain responsible for the model you choose and for decisions made using its responses.</p>
                 <p style="margin:0 0 10px;">Your API key is stored in this browser's <strong>session storage</strong> (cleared when the tab closes) and is never written into workspace backups. Session storage still relies on this page being free of malicious scripts.</p>

@@ -74,6 +74,29 @@ currently see) anchors directly after the badge.
 
 ## 3. Workspace access and context depth
 
+New workspaces start with **Everyday**: Read + reviewed changes,
+Workspace-aware context, Stateful conversation with five recent messages, and
+explicit previews/approval for every workspace mutation. No provider is connected
+or contacted by choosing a preset. Locked pages still need page-scoped PIN
+consent; financial/private documents still need their separate opt-in.
+
+**Settings → Assistant → Assistant preset** applies existing portable fields:
+
+- **Private** disables workspace reading, selects Minimal and Stateless, and
+  turns off sensitive-content opt-ins. It does not erase chats or saved memories.
+- **Everyday** selects the defaults above without clearing explicit area Blocks
+  or changing existing sensitive-content choices. Apply and Undo stay in chat.
+- **Advanced (customize)** keeps the current configuration and directs you to
+  the individual controls below; it grants no additional access.
+
+Preset selection applies immediately and refuses to overwrite an unsaved
+Settings draft: Save or Revert that draft first. A blocked action also offers
+**Use Everyday Assistant**, with a configuration confirmation; enabling it
+does not apply the proposal. The proposal still needs its own Apply click.
+Existing saved workspaces are not upgraded automatically. Older missing
+permissions remain Off on load/import; older missing conversation preferences
+retain Current view / Stateless. No new durable field or permission store exists.
+
 Settings → Assistant exposes two separate controls:
 
 - **Workspace access** grants permission: No workspace access, Read workspace,
@@ -192,6 +215,12 @@ The Assistant has two memory modes:
 - **Conversation Memory** — the Assistant remembers earlier turns in the current
   conversation so you can follow up naturally ("now make it shorter," "do the
   same for chapter 3").
+
+Stateful requests include the configured recent messages plus at most four
+older message excerpts (180 characters each), preserving each original role and
+labeling them as excerpts that newer messages supersede. This is a local
+extractive recap of the current chat, with no additional AI call or saved summary.
+The same request budget may remove older turns; Stateless sends no recap.
 
 Visible conversations are saved locally by default so both the docked panel and
 full Assistant view share the same chats. You can disable **Save chat history**

@@ -63,6 +63,34 @@
     };
   }
   function configure(nextAdapter) { adapter = nextAdapter || null; return api; }
+  // Presets reuse existing portable fields. Choosing Everyday never clears an
+  // area's explicit Block or opts into protected content, plugins or networking.
+  function presetPlan(name, current) {
+    if (name !== 'private' && name !== 'everyday') throw new Error('Unknown Assistant preset.');
+    var permissions = Object.assign({}, clone(current || {}), normalize(current));
+    permissions.areas = Object.assign({}, current && current.areas || {}, permissions.areas);
+    permissions.mode = name === 'private' ? 'off' : 'approved_actions';
+    if (name === 'private') {
+      permissions.allowLockedNotes = false;
+      permissions.allowFinancial = false;
+      permissions.allowPrivateDocuments = false;
+    }
+    return { permissions: permissions, preferences: {
+      contextDepth: name === 'private' ? 'minimal' : 'workspace',
+      chatMemoryMode: name === 'private' ? 'stateless' : 'stateful',
+      chatMemoryDepth: 5, showActionPreviews: true, requireConfirmation: true,
+      requireApprovalForActions: true, confirmationMode: 'always'
+    } };
+  }
+  function identifyPreset(permissions, preferences) {
+    var prefs = preferences || {};
+    var mode = normalize(permissions).mode;
+    if (mode === 'off' && prefs.contextDepth === 'minimal' && prefs.chatMemoryMode === 'stateless') return 'private';
+    return mode === 'approved_actions' && prefs.contextDepth === 'workspace'
+      && prefs.chatMemoryMode === 'stateful' && Number(prefs.chatMemoryDepth) === 5
+      && prefs.showActionPreviews !== false && prefs.requireApprovalForActions !== false
+      && prefs.requireConfirmation !== false && prefs.confirmationMode === 'always' ? 'everyday' : 'advanced';
+  }
   function getPermissions() {
     try { return normalize(adapter && typeof adapter.getPermissions === 'function' ? adapter.getPermissions() : {}); }
     catch (_) { return normalize({}); }
@@ -173,7 +201,7 @@
     return { type: type, value: value, sources: Array.isArray(sources) ? sources.map(function (source) { return clone(source); }).slice(0, 20) : [] };
   }
 
-  var api = { VERSION: '1.0.0', MODES: MODES.slice(), configure: configure, normalize: normalize, getPermissions: getPermissions, canRead: canRead, filterContext: filterContext, getActionPermissions: getActionPermissions, describeClaim: describeClaim };
+  var api = { VERSION: '1.0.0', MODES: MODES.slice(), configure: configure, normalize: normalize, presetPlan: presetPlan, identifyPreset: identifyPreset, getPermissions: getPermissions, canRead: canRead, filterContext: filterContext, getActionPermissions: getActionPermissions, describeClaim: describeClaim };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraAssistantPrivacy = api;
 }(typeof window !== 'undefined' ? window : globalThis));

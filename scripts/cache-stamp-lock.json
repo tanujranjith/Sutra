@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261022-study-resume1",
-    "hash": "e8644567a6f95548"
+    "stamp": "20261022-everyday2",
+    "hash": "6cefcebbe91f05ce"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-study-times1",
-    "hash": "dcb510197c647e48"
+    "stamp": "20261022-everyday2",
+    "hash": "378ba9a738bd227b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -188,16 +188,16 @@
     "hash": "045820024d5bccfc"
   },
   "src/features/assistant/assistant-permissions.js": {
-    "stamp": "20261022-assistant-polish3",
-    "hash": "97008fbab27f7a47"
+    "stamp": "20261022-everyday2",
+    "hash": "615b7f7366fbd6a1"
   },
   "src/features/assistant/assistant-safety.js": {
     "stamp": "20261015-caveat-fixes6",
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261022-study-resume1",
-    "hash": "60d023c3e40d975c"
+    "stamp": "20261022-everyday2",
+    "hash": "1853bb6b7d72eb28"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -232,8 +232,8 @@
     "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261022-study-times1",
-    "hash": "6915d2b3b0078d41"
+    "stamp": "20261022-everyday2",
+    "hash": "90689f9cbbabdfd8"
   },
   "src/features/assistant/writing-commands.js": {
     "stamp": "20261015-writing1",
