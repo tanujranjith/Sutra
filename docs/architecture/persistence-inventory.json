@@ -161,6 +161,7 @@
     "pdfAnnotations[]": ["id", "documentId", "pageId", "type", "geometry", "style", "text", "inkPaths", "fieldKey", "value", "createdAt", "updatedAt"],
     "settings.preferences": ["appearance", "layout", "editor", "tasks", "calendar", "today", "focus", "quotes", "study", "business", "assistant", "studentPreferences", "integrations", "notifications", "accessibility", "startup", "data", "workspace", "sync"],
     "settings.preferences.assistant": ["chatMemoryDepth", "localEndpoint"],
+    "settings.preferences.studentPreferences": ["schoolStartHour", "schoolEndHour", "earliestStudyHour", "latestStudyHour", "studyBlockMinutes", "breakMinutes", "bedtimeHour", "scheduleWeekends", "overloadThreshold", "defaultHomeworkDifficulty", "preferredReviewStyle", "hardestClasses"],
     "settings.preferences.assistant.localEndpoint": ["enabled", "baseUrl", "model", "visionCapable"],
     "settings.preferences.today": ["priorityFocus", "dashboard"],
     "settings.preferences.today.dashboard": ["version", "preset", "order", "hidden", "sizes"],

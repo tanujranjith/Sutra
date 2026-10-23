@@ -7089,48 +7089,69 @@
 
     let studyInterview = null;
     const STUDY_SETUP_QUESTIONS = [
-        'What time does school usually start and finish? For example: 8 AM to 3 PM.',
-        'When would you like to study? For example: 4 PM to 9 PM.',
-        'How long should a focus block and its break be, in minutes? For example: 45, 10.',
-        'When should evening planning stop? For example: 10 PM.',
-        'Would you like study blocks on weekends? Reply yes or no.',
-        'How do you prefer to review: flashcards, learn, write, test, or match?',
-        'Which classes need extra study time? Separate their names with commas, or skip.'
+        { key: 'schoolStartHour', label: 'School starts', type: 'time', prompt: 'What time does school usually start?', example: '7:30 AM', min: 0, max: 1439 / 60 },
+        { key: 'schoolEndHour', label: 'School finishes', type: 'time', prompt: 'What time does school usually finish?', example: '2:45 PM', min: 0, max: 1439 / 60 },
+        { key: 'earliestStudyHour', label: 'Study starts', type: 'time', prompt: 'What’s the earliest time you’d like to start studying?', example: '4:30 PM', min: 0, max: 1439 / 60 },
+        { key: 'latestStudyHour', label: 'Study finishes', type: 'time', prompt: 'What time would you like to finish studying?', example: '9 PM', min: 0, max: 24 },
+        { key: 'studyBlockMinutes', label: 'Focus block', type: 'minutes', prompt: 'How long can you comfortably focus before a break?', example: '45 minutes', min: 10, max: 180 },
+        { key: 'breakMinutes', label: 'Break', type: 'minutes', prompt: 'How long would you like each break to be?', example: '10 minutes', min: 0, max: 60 },
+        { key: 'bedtimeHour', label: 'Evening cutoff', type: 'time', prompt: 'What time should I stop planning work for the night?', example: '10:30 PM', min: 18, max: 26 },
+        { key: 'scheduleWeekends', label: 'Weekend study', type: 'boolean', prompt: 'Would you like me to schedule study blocks on weekends?', example: 'yes, or usually not' },
+        { key: 'preferredReviewStyle', label: 'Review style', type: 'review', prompt: 'What helps you review best: flashcards, explanations, writing answers, practice questions, or matching?', example: 'practice questions' },
+        { key: 'hardestClasses', label: 'Classes needing extra time', type: 'classes', prompt: 'Which classes would you like extra study time for?', example: 'Physics and Chemistry, or none' }
     ];
+    function formatStudySetupValue(question, value) {
+        if (question.type === 'time') {
+            const minutes = Math.round(value * 60), hour = Math.floor(minutes / 60) % 24;
+            return (hour % 12 || 12) + ':' + String(minutes % 60).padStart(2, '0') + (hour < 12 ? ' AM' : ' PM') + (value >= 24 ? ' (next day)' : '');
+        }
+        if (question.type === 'minutes') return value + ' minutes';
+        if (question.type === 'boolean') return value ? 'Yes' : 'No';
+        if (question.type === 'review') return ({ flashcards: 'Flashcards', learn: 'Explanations', write: 'Writing answers', test: 'Practice questions', match: 'Matching' })[value];
+        return value || 'None';
+    }
     function parseStudyInterviewAnswer(step, text) {
-        const value = String(text || '').trim();
-        if (/^skip$/i.test(value)) return {};
-        const hours = [...value.toLowerCase().matchAll(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/g)];
-        const hour = (match, end) => {
-            if (!match || Number(match[2] || 0) !== 0) return NaN;
-            let n = Number(match[1]); const meridiem = match[3];
-            if (meridiem) { if (n < 1 || n > 12) return NaN; n = n % 12 + (meridiem === 'pm' ? 12 : 0); }
-            return end && n === 0 ? 24 : n;
-        };
-        if (step < 2) {
-            if (!/^\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:to|[-–—,])\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?$/i.test(value)) return null;
-            // Mixed notation such as "4 to 9 PM" is ambiguous; do not silently
-            // turn the first hour into 4 AM. Ask for both AM/PM labels or 24h.
-            if (Boolean(hours[0] && hours[0][3]) !== Boolean(hours[1] && hours[1][3])) return null;
-            const start = hour(hours[0], false), end = hour(hours[1], step === 1);
-            if (hours.length !== 2 || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > (step === 0 ? 23 : 24) || start >= end) return null;
-            return step === 0 ? { schoolStartHour: start, schoolEndHour: end } : { earliestStudyHour: start, latestStudyHour: end };
+        const question = STUDY_SETUP_QUESTIONS[step];
+        if (!question) return null;
+        const value = String(text || '').trim().replace(/[.!]+$/, '').toLowerCase();
+        if (/^(?:skip|not sure|i(?:'m| am) not sure|i don'?t know|no preference|use the default|keep (?:it|the default|my current settings))$/.test(value)) return {};
+        if (question.type === 'time') {
+            const clock = value.replace(/^(?:(?:school|classes|it)\s+)?(?:usually\s+)?(?:(?:starts?|ends?|finishes?|finish|start|stop|bedtime is)\s+(?:(?:at|around|by)\s+)?)?(?:(?:at|around|about|by)\s+)?/, '');
+            const match = clock.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?$/) || clock.match(/^(\d{1,2})(?::(\d{2}))?$/);
+            if (!match) return null;
+            let hour = Number(match[1]); const minute = Number(match[2] || 0), period = match[3];
+            if (minute > 59 || hour > 24 || (hour === 24 && minute !== 0)) return null;
+            if (period) { if (hour < 1 || hour > 12) return null; hour = hour % 12 + (period === 'p' ? 12 : 0); }
+            else if (hour >= 1 && hour <= 12 && !match[1].startsWith('0')) return { clarifyTime: clock };
+            let result = hour + minute / 60;
+            if (question.key === 'latestStudyHour' && result === 0) result = 24;
+            if (question.key === 'bedtimeHour' && result < 18) result += 24;
+            return result >= question.min && result <= question.max ? { [question.key]: result } : null;
         }
-        if (step === 2) {
-            if (!/^\d{1,3}\s*(?:,|\/|and)\s*\d{1,2}$/i.test(value)) return null;
-            const nums = value.match(/\d+/g) || []; const focus = Number(nums[0]), rest = Number(nums[1]);
-            return nums.length === 2 && focus >= 10 && focus <= 180 && rest >= 0 && rest <= 60 ? { studyBlockMinutes: focus, breakMinutes: rest } : null;
+        if (question.type === 'minutes') {
+            const duration = value.replace(/^(?:about|around|roughly)\s+/, '').replace(/\s+(?:break|focus|study)(?:s| block)?$/, '');
+            const match = duration.match(/^(\d{1,3})\s*(?:minutes?|mins?|m)?$/) || duration.match(/^(\d{1,2})\s*(hours?|hrs?|h)$/);
+            const minutes = match ? Number(match[1]) * (/^h/.test(match[2] || '') ? 60 : 1) : ({ 'an hour': 60, 'one hour': 60, 'half an hour': 30, 'half hour': 30, 'a quarter of an hour': 15, no: 0, none: 0 })[duration];
+            return Number.isInteger(minutes) && minutes >= question.min && minutes <= question.max ? { [question.key]: minutes } : null;
         }
-        if (step === 3) { if (!/^\d{1,2}(?::\d{2})?\s*(?:am|pm)?$/i.test(value)) return null; let end = hour(hours[0], false); if (end <= 2) end += 24; return hours.length === 1 && end >= 18 && end <= 26 ? { bedtimeHour: end } : null; }
-        if (step === 4) return /^(yes|y|no|n)$/i.test(value) ? { scheduleWeekends: /^y/i.test(value) } : null;
-        if (step === 5) { const style = value.toLowerCase(); return ['flashcards', 'learn', 'write', 'test', 'match'].includes(style) ? { preferredReviewStyle: style } : null; }
-        return value.length && value.length <= 200 ? { hardestClasses: value } : null;
+        if (question.type === 'boolean') {
+            if (/^(?:yes|y|yeah|yep|sure|of course|weekends are (?:fine|okay|ok))$/.test(value)) return { scheduleWeekends: true };
+            if (/^(?:no|n|nope|not really|usually not(?: on weekends)?|not usually|not on weekends|weekdays only|no weekends)$/.test(value)) return { scheduleWeekends: false };
+            return null;
+        }
+        if (question.type === 'review') {
+            const styles = { flashcards: 'flashcards', 'flash cards': 'flashcards', learn: 'learn', explanations: 'learn', 'guided learning': 'learn', write: 'write', writing: 'write', 'writing answers': 'write', test: 'test', 'practice questions': 'test', 'practice tests': 'test', quizzes: 'test', match: 'match', matching: 'match' };
+            const style = styles[value.replace(/^(?:i (?:like|prefer)|mostly)\s+/, '')];
+            return style ? { preferredReviewStyle: style } : null;
+        }
+        const classes = String(text || '').trim();
+        return classes.length && classes.length <= 200 && !/[`\r\n]/.test(classes) ? { hardestClasses: /^(?:none|no classes|nothing|all good)$/i.test(value) ? '' : classes } : null;
     }
     function validateStudySetupPreferences(values) {
         if (!values || typeof values !== 'object' || Array.isArray(values)) return false;
-        const ranges = { schoolStartHour: [0,23], schoolEndHour: [0,23], earliestStudyHour: [0,23], latestStudyHour: [1,24], studyBlockMinutes: [10,180], breakMinutes: [0,60], bedtimeHour: [18,26] };
+        const ranges = { schoolStartHour: [0,1439 / 60], schoolEndHour: [0,1439 / 60], earliestStudyHour: [0,1439 / 60], latestStudyHour: [0,24], studyBlockMinutes: [10,180], breakMinutes: [0,60], bedtimeHour: [18,26] };
         const keys = Object.keys(values); if (!keys.length || keys.length > 10) return false;
-        return keys.every(key => ranges[key] ? Number.isInteger(values[key]) && values[key] >= ranges[key][0] && values[key] <= ranges[key][1]
+        return keys.every(key => ranges[key] ? Number.isFinite(values[key]) && (/Hour$/.test(key) ? Math.abs(values[key] * 60 - Math.round(values[key] * 60)) < 0.000001 : Number.isInteger(values[key])) && values[key] >= ranges[key][0] && values[key] <= ranges[key][1]
             : key === 'scheduleWeekends' ? typeof values[key] === 'boolean'
             : key === 'preferredReviewStyle' ? ['flashcards','learn','write','test','match'].includes(values[key])
             : key === 'hardestClasses' && typeof values[key] === 'string' && values[key].length <= 200)
@@ -7140,16 +7161,24 @@
     function routeStudyInterview(text) {
         const chatId = getCurrentChatIdSafe();
         const start = /^(?:get to know me|help me set up my study preferences|set up my study preferences)[.!?]*$/i.test(text);
-        if (start) { studyInterview = { chatId, step: 0, values: {} }; return { handled: true, source: 'study-setup', message: 'Let’s get to know your routine. I’ll ask seven short questions, one at a time. No provider is contacted for this setup. Your study settings change only after you review Settings and choose Save Changes. Reply **skip** for any question or **cancel setup** to stop.\n\n' + STUDY_SETUP_QUESTIONS[0] }; }
+        if (start) { studyInterview = { chatId, step: 0, values: {} }; return { handled: true, source: 'study-setup', message: 'Let’s start with your routine. You can **skip** anything or say **cancel setup**. This conversation runs locally without an AI provider; we’ll review your answers before changing any settings.\n\n' + STUDY_SETUP_QUESTIONS[0].prompt }; }
         if (!studyInterview || studyInterview.chatId !== chatId) return null;
         if (/^(?:cancel(?: setup)?|stop(?: setup)?)$/i.test(text)) { studyInterview = null; return { handled: true, source: 'study-setup', message: 'Setup cancelled. Your study settings have not changed.' }; }
-        const answer = parseStudyInterviewAnswer(studyInterview.step, text);
-        if (!answer) return { handled: true, source: 'study-setup', message: 'I couldn’t use that answer. Use whole hours such as 8 AM or 16:00 for times. You can also reply **skip**.\n\n' + STUDY_SETUP_QUESTIONS[studyInterview.step] };
+        const question = STUDY_SETUP_QUESTIONS[studyInterview.step];
+        const candidate = studyInterview.pendingTime && /^[ap]\.?m\.?$/i.test(text.trim()) ? studyInterview.pendingTime + ' ' + text : text;
+        const answer = parseStudyInterviewAnswer(studyInterview.step, candidate);
+        if (answer && answer.clarifyTime) { studyInterview.pendingTime = answer.clarifyTime; return { handled: true, source: 'study-setup', message: 'Do you mean **' + answer.clarifyTime + ' AM or PM**? You can reply with just AM or PM.' }; }
+        if (!answer) return { handled: true, source: 'study-setup', message: question.type === 'time' ? 'What time do you mean? Something like **' + question.example + '** works, including minutes. You can skip this if you’re not sure.\n\n' + question.prompt : question.type === 'minutes' ? 'About how many minutes? For this setting, choose ' + question.min + '–' + question.max + ' minutes, or skip.\n\n' + question.prompt : 'For example, **' + question.example + '**. You can also say **not sure** to keep your current setting.\n\n' + question.prompt };
+        const proposed = { ...studyInterview.values, ...answer };
+        const earlier = question.key === 'schoolEndHour' ? 'schoolStartHour' : question.key === 'latestStudyHour' ? 'earliestStudyHour' : null;
+        if (earlier && proposed[earlier] != null && proposed[question.key] != null && proposed[question.key] <= proposed[earlier]) return { handled: true, source: 'study-setup', message: 'The finish needs to be after the start. ' + question.prompt };
+        delete studyInterview.pendingTime;
         Object.assign(studyInterview.values, answer); studyInterview.step += 1;
-        if (studyInterview.step < STUDY_SETUP_QUESTIONS.length) return { handled: true, source: 'study-setup', message: '**' + (studyInterview.step + 1) + ' of 7** · ' + STUDY_SETUP_QUESTIONS[studyInterview.step] };
+        if (studyInterview.step < STUDY_SETUP_QUESTIONS.length) return { handled: true, source: 'study-setup', message: (Object.keys(answer).length ? 'Got it — ' + formatStudySetupValue(question, answer[question.key]) + '.\n\n' : 'We’ll keep your current setting.\n\n') + STUDY_SETUP_QUESTIONS[studyInterview.step].prompt };
         const values = studyInterview.values; studyInterview = null;
         if (!Object.keys(values).length) return { handled: true, source: 'study-setup', message: 'You skipped every question. Your current study settings are unchanged.' };
-        return { handled: true, source: 'study-setup', message: 'Your answers are ready. **Review in Settings** opens a draft; choose **Save Changes** there when you’re happy with it. Skipped answers keep their current values.\n\n' + buildActionFence([{ type: 'review_study_preferences', preferences: values, label: 'Review my study preferences in Settings' }]) };
+        const summary = STUDY_SETUP_QUESTIONS.filter(row => Object.prototype.hasOwnProperty.call(values, row.key)).map(row => '- **' + row.label + ':** ' + formatStudySetupValue(row, values[row.key])).join('\n');
+        return { handled: true, source: 'study-setup', message: 'Here’s what I picked up:\n\n' + summary + '\n\n**Review in Settings** opens a draft. Nothing changes until you choose **Save Changes** there. Skipped answers keep their current values.\n\n' + buildActionFence([{ type: 'review_study_preferences', preferences: values, label: 'Review my study preferences in Settings' }]) };
     }
 
     function tryHandleCommand(rawText, options = {}) {
@@ -9125,8 +9154,8 @@
             }
             if (entry.type === 'review_study_preferences') {
                 schema.properties.preferences = { type: 'object', additionalProperties: false, properties: {
-                    schoolStartHour: { type: 'number', minimum: 0, maximum: 23 }, schoolEndHour: { type: 'number', minimum: 0, maximum: 23 },
-                    earliestStudyHour: { type: 'number', minimum: 0, maximum: 23 }, latestStudyHour: { type: 'number', minimum: 1, maximum: 24 },
+                    schoolStartHour: { type: 'number', minimum: 0, maximum: 1439 / 60 }, schoolEndHour: { type: 'number', minimum: 0, maximum: 1439 / 60 },
+                    earliestStudyHour: { type: 'number', minimum: 0, maximum: 1439 / 60 }, latestStudyHour: { type: 'number', minimum: 0, maximum: 24 },
                     studyBlockMinutes: { type: 'number', minimum: 10, maximum: 180 }, breakMinutes: { type: 'number', minimum: 0, maximum: 60 },
                     bedtimeHour: { type: 'number', minimum: 18, maximum: 26 }, scheduleWeekends: { type: 'boolean' },
                     preferredReviewStyle: { type: 'string', enum: ['flashcards', 'learn', 'write', 'test', 'match'] }, hardestClasses: { type: 'string', maxLength: 200 }

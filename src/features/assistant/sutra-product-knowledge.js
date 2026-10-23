@@ -498,7 +498,7 @@
                 '- **Confirmation & action previews** — whether proposed actions need explicit approval.',
                 '- **Conversation memory** — how many recent messages it remembers within a session.',
                 '- **Assistant Memory** — manage the long-term facts it remembers across sessions.',
-                '- **Get to know me with Assistant** — answer seven optional study-routine questions locally, one at a time. Skip or cancel anytime, then review the draft in Settings and choose Save Changes. No API key is needed.'
+                '- **Get to know me with Assistant** — answer optional study-routine questions locally, one at a time, with minute-accurate times and ordinary answers. Skip or cancel anytime, then review the draft in Settings and choose Save Changes. No API key is needed.'
             ],
             keywords: ['assistant settings', 'assistant behavior', 'confirmation', 'context depth', 'workspace access', 'conversation memory', 'action previews'],
             nav: { view: 'settings', section: 'assistant' },

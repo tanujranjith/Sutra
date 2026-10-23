@@ -3770,6 +3770,10 @@ function populateProgressDashboard() {
             return Math.min(maxValue, Math.max(minValue, numeric));
         }
 
+        function normalizeStudentPreferenceHour(value, fallbackValue, minValue, maxValue) {
+            return Math.round(clampSettingNumber(value, fallbackValue, minValue, maxValue) * 60) / 60;
+        }
+
         function normalizeAssistantChatMemoryDepth(value, fallbackValue = 10) {
             const numeric = Number(value);
             if (!Number.isFinite(numeric)) return fallbackValue;
@@ -4269,13 +4273,13 @@ function populateProgressDashboard() {
                     }
                 },
                 studentPreferences: {
-                    schoolStartHour: Math.floor(clampSettingNumber(studentPrefSource.schoolStartHour, defaults.studentPreferences.schoolStartHour, 0, 23)),
-                    schoolEndHour: Math.floor(clampSettingNumber(studentPrefSource.schoolEndHour, defaults.studentPreferences.schoolEndHour, 0, 23)),
-                    earliestStudyHour: Math.floor(clampSettingNumber(studentPrefSource.earliestStudyHour, defaults.studentPreferences.earliestStudyHour, 0, 23)),
-                    latestStudyHour: Math.floor(clampSettingNumber(studentPrefSource.latestStudyHour, defaults.studentPreferences.latestStudyHour, 0, 24)),
+                    schoolStartHour: normalizeStudentPreferenceHour(studentPrefSource.schoolStartHour, defaults.studentPreferences.schoolStartHour, 0, 1439 / 60),
+                    schoolEndHour: normalizeStudentPreferenceHour(studentPrefSource.schoolEndHour, defaults.studentPreferences.schoolEndHour, 0, 1439 / 60),
+                    earliestStudyHour: normalizeStudentPreferenceHour(studentPrefSource.earliestStudyHour, defaults.studentPreferences.earliestStudyHour, 0, 1439 / 60),
+                    latestStudyHour: normalizeStudentPreferenceHour(studentPrefSource.latestStudyHour, defaults.studentPreferences.latestStudyHour, 0, 24),
                     studyBlockMinutes: Math.floor(clampSettingNumber(studentPrefSource.studyBlockMinutes, defaults.studentPreferences.studyBlockMinutes, 10, 180)),
                     breakMinutes: Math.floor(clampSettingNumber(studentPrefSource.breakMinutes, defaults.studentPreferences.breakMinutes, 0, 60)),
-                    bedtimeHour: Math.floor(clampSettingNumber(studentPrefSource.bedtimeHour, defaults.studentPreferences.bedtimeHour, 18, 26)),
+                    bedtimeHour: normalizeStudentPreferenceHour(studentPrefSource.bedtimeHour, defaults.studentPreferences.bedtimeHour, 18, 26),
                     scheduleWeekends: studentPrefSource.scheduleWeekends !== false,
                     overloadThreshold: Math.floor(clampSettingNumber(studentPrefSource.overloadThreshold, defaults.studentPreferences.overloadThreshold, 2, 20)),
                     defaultHomeworkDifficulty: normalizeSettingChoice(studentPrefSource.defaultHomeworkDifficulty, ['easy', 'medium', 'hard'], defaults.studentPreferences.defaultHomeworkDifficulty),
@@ -31079,6 +31083,15 @@ function buildOnboardingPlanPreview() {
             }
             const type = String(control.type || '').toLowerCase();
             if (type === 'checkbox') return !!control.checked;
+            if (type === 'time' && control.hasAttribute('data-pref-hour-time')) {
+                if (!/^\d{2}:\d{2}$/.test(control.value) || !control.validity.valid) return null;
+                const [hour, minute] = control.value.split(':').map(Number);
+                let result = hour + minute / 60;
+                const path = control.getAttribute('data-pref-path');
+                if (path === 'studentPreferences.bedtimeHour' && result < 18) result += 24;
+                if (path === 'studentPreferences.latestStudyHour' && result === 0) result = 24;
+                return result;
+            }
             if (type === 'number' || type === 'range') {
                 const numeric = Number(control.value);
                 return Number.isFinite(numeric) ? numeric : control.value;
@@ -31100,6 +31113,11 @@ function buildOnboardingPlanPreview() {
             const type = String(control.type || '').toLowerCase();
             if (type === 'checkbox') {
                 control.checked = value === true;
+                return;
+            }
+            if (type === 'time' && control.hasAttribute('data-pref-hour-time')) {
+                const minutes = Math.round(Number(value) * 60) % 1440;
+                control.value = Number.isFinite(minutes) ? String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0') : '';
                 return;
             }
             control.value = value == null ? '' : String(value);
@@ -31997,7 +32015,9 @@ function buildOnboardingPlanPreview() {
                 if (!path || control.dataset.bound === 'true') return;
                 control.dataset.bound = 'true';
                 const listener = () => {
-                    setDraftWorkspacePreference(path, readPreferenceControlValue(control));
+                    const value = readPreferenceControlValue(control);
+                    if (control.hasAttribute('data-pref-hour-time') && value === null) { syncWorkspacePreferenceControls(); return; }
+                    setDraftWorkspacePreference(path, value);
                     syncWorkspacePreferenceControls();
                     filterSettingsControlsBySearch();
                 };

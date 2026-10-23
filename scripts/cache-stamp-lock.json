@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261022-assistant-polish5",
-    "hash": "2585705556300e44"
+    "stamp": "20261022-study-times2",
+    "hash": "d4b22671278e30d5"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-assistant-polish3",
-    "hash": "cd050e8687c80840"
+    "stamp": "20261022-study-times1",
+    "hash": "dcb510197c647e48"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261022-assistant-polish5",
-    "hash": "fe9b7de8b8861c1e"
+    "stamp": "20261022-study-times2",
+    "hash": "6d4dca4e89e37f9e"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -232,8 +232,8 @@
     "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261022-assistant-polish3",
-    "hash": "7e4feee42fe60aac"
+    "stamp": "20261022-study-times1",
+    "hash": "6915d2b3b0078d41"
   },
   "src/features/assistant/writing-commands.js": {
     "stamp": "20261015-writing1",
@@ -372,8 +372,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261022-assistant-polish3",
-    "hash": "86e06d8c0afacd2e"
+    "stamp": "20261022-study-times1",
+    "hash": "92478c6470bf6ee1"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
