@@ -38,8 +38,8 @@ test('study drafts accept only canonical bounded fields and consistent time wind
 
 test('interview is conversation-scoped, cancellable, and stages only supplied answers', () => {
   let chatId = 'first';
-  const route = new Function('getCurrentChatIdSafe', 'buildActionFence', `let studyInterview = null; const STUDY_SETUP_QUESTIONS = ${questions}; ${declaration('formatStudySetupValue')}; ${declaration('parseStudyInterviewAnswer')}; ${declaration('routeStudyInterview')}; return routeStudyInterview;`)(
-    () => chatId, actions => JSON.stringify(actions)
+  const route = new Function('getCurrentChatIdSafe', 'buildActionFence', 'readStudyInterviewConversation', `let studyInterview = null; const STUDY_SETUP_QUESTIONS = ${questions}; ${declaration('formatStudySetupValue')}; ${declaration('parseStudyInterviewAnswer')}; ${declaration('isStudyInterviewStart')}; ${declaration('advanceStudyInterview')}; ${declaration('rebuildStudyInterview')}; ${declaration('routeStudyInterview')}; return routeStudyInterview;`)(
+    () => chatId, actions => JSON.stringify(actions), () => null
   );
   assert.match(route('Get to know me').message, /usually start/);
   assert.match(route('7:30').message, /AM or PM/);
@@ -57,6 +57,36 @@ test('interview is conversation-scoped, cancellable, and stages only supplied an
   const actions = JSON.parse(final.message.slice(final.message.indexOf('[{')));
   assert.deepEqual(actions, [{ type: 'review_study_preferences', preferences: { schoolStartHour: 7.5, schoolEndHour: 14.75, hardestClasses: 'Physics' }, label: 'Review my study preferences in Settings' }]);
   assert.equal(route('extra answer'), null);
+});
+
+test('setup recovery replays the current chat without reapplying settings, crossing chats, or restarting completed setup', () => {
+  const rebuild = new Function(`const STUDY_SETUP_QUESTIONS = ${questions}; ${declaration('parseStudyInterviewAnswer')}; ${declaration('isStudyInterviewStart')}; ${declaration('advanceStudyInterview')}; ${declaration('rebuildStudyInterview')}; return rebuildStudyInterview;`)();
+  const user = content => ({ role: 'user', content });
+  const transcript = [user('Get to know me'), { role: 'assistant', content: 'What time does school usually start?' }, user('7:30')];
+  const clarification = rebuild(transcript, 'chat-a');
+  assert.equal(clarification.pendingTime, '7:30');
+  assert.equal(clarification.step, 0);
+  transcript.push(user('AM'));
+  assert.deepEqual(rebuild(transcript, 'chat-a'), { chatId: 'chat-a', step: 1, values: { schoolStartHour: 7.5 } });
+  transcript.push(user('6 AM'), user('2:15 PM'));
+  assert.deepEqual(rebuild(transcript, 'chat-a'), { chatId: 'chat-a', step: 2, values: { schoolStartHour: 7.5, schoolEndHour: 14.25 } });
+  assert.equal(rebuild([], 'chat-b'), null);
+  assert.equal(rebuild([...transcript, user('cancel setup')], 'chat-a'), null);
+  for (let i = 0; i < 8; i++) transcript.push(user('skip'));
+  assert.equal(rebuild(transcript, 'chat-a'), null);
+  assert.equal(rebuild([...transcript, user('2:15 PM')], 'chat-a'), null);
+  assert.equal(rebuild([{ role: 'assistant', content: 'Get to know me' }], 'chat-b'), null);
+});
+
+test('fresh routing restores a pending interview before processing the next answer', () => {
+  const current = { id: 'restored-chat', messages: [{ role: 'user', content: 'Get to know me' }, { role: 'user', content: '7:30 AM' }] };
+  const route = new Function('getCurrentChatIdSafe', 'buildActionFence', 'readStudyInterviewConversation', `let studyInterview = null; const STUDY_SETUP_QUESTIONS = ${questions}; ${declaration('formatStudySetupValue')}; ${declaration('parseStudyInterviewAnswer')}; ${declaration('isStudyInterviewStart')}; ${declaration('advanceStudyInterview')}; ${declaration('rebuildStudyInterview')}; ${declaration('routeStudyInterview')}; return routeStudyInterview;`)(
+    () => 'stale-id', actions => JSON.stringify(actions), () => current
+  );
+  const reply = route('2:15 PM');
+  assert.equal(reply.handled, true);
+  assert.match(reply.message, /2:15 PM[\s\S]*earliest time/);
+  assert.equal(current.messages.length, 2, 'recovery does not append or execute anything');
 });
 
 test('canonical hour normalization and Settings time controls round-trip exact minutes and overnight cutoffs', () => {

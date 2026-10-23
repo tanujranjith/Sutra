@@ -7158,22 +7158,59 @@
             && !(values.schoolStartHour != null && values.schoolEndHour != null && values.schoolStartHour >= values.schoolEndHour)
             && !(values.earliestStudyHour != null && values.latestStudyHour != null && values.earliestStudyHour >= values.latestStudyHour);
     }
+    function isStudyInterviewStart(text) {
+        return /^(?:get to know me|help me set up my study preferences|set up my study preferences)[.!?]*$/i.test(String(text || '').trim());
+    }
+    function advanceStudyInterview(state, text) {
+        if (/^(?:cancel(?: setup)?|stop(?: setup)?)$/i.test(text)) return { status: 'cancelled', state: null };
+        const question = STUDY_SETUP_QUESTIONS[state.step];
+        const candidate = state.pendingTime && /^[ap]\.?m\.?$/i.test(text.trim()) ? state.pendingTime + ' ' + text : text;
+        const answer = parseStudyInterviewAnswer(state.step, candidate);
+        if (answer && answer.clarifyTime) return { status: 'clarify', answer, state: { ...state, pendingTime: answer.clarifyTime } };
+        if (!answer || !question) return { status: 'invalid', state };
+        const proposed = { ...state.values, ...answer };
+        const earlier = question.key === 'schoolEndHour' ? 'schoolStartHour' : question.key === 'latestStudyHour' ? 'earliestStudyHour' : null;
+        if (earlier && proposed[earlier] != null && proposed[question.key] != null && proposed[question.key] <= proposed[earlier]) return { status: 'invalid-finish', state };
+        return { status: 'accepted', answer, state: { chatId: state.chatId, step: state.step + 1, values: proposed } };
+    }
+    // The visible canonical conversation is the source of truth. Replay only
+    // local answers into a draft; never execute historical proposals or use a
+    // second persistent store. This also restores pending AM/PM clarifications.
+    function rebuildStudyInterview(messages, chatId) {
+        let state = null;
+        for (const row of Array.isArray(messages) ? messages : []) {
+            if (!row || row.role !== 'user') continue;
+            const text = String(row.content || '').trim();
+            if (isStudyInterviewStart(text)) { state = { chatId, step: 0, values: {} }; continue; }
+            if (!state) continue;
+            state = advanceStudyInterview(state, text).state;
+            if (state && state.step >= STUDY_SETUP_QUESTIONS.length) state = null;
+        }
+        return state;
+    }
+    function readStudyInterviewConversation() {
+        try {
+            const controller = window.SutraAssistantConversationController;
+            return controller && typeof controller.getCurrent === 'function' ? controller.getCurrent() : null;
+        } catch (_) { return null; }
+    }
     function routeStudyInterview(text) {
-        const chatId = getCurrentChatIdSafe();
-        const start = /^(?:get to know me|help me set up my study preferences|set up my study preferences)[.!?]*$/i.test(text);
+        const conversation = readStudyInterviewConversation();
+        const chatId = conversation && conversation.id || getCurrentChatIdSafe();
+        // Read before this turn is appended by either chat shell. Rebuild after
+        // reload, chat switching, history edits or feature-pack reinitialization.
+        if (conversation && Array.isArray(conversation.messages)) studyInterview = rebuildStudyInterview(conversation.messages, chatId);
+        const start = isStudyInterviewStart(text);
         if (start) { studyInterview = { chatId, step: 0, values: {} }; return { handled: true, source: 'study-setup', message: 'Let’s start with your routine. You can **skip** anything or say **cancel setup**. This conversation runs locally without an AI provider; we’ll review your answers before changing any settings.\n\n' + STUDY_SETUP_QUESTIONS[0].prompt }; }
         if (!studyInterview || studyInterview.chatId !== chatId) return null;
-        if (/^(?:cancel(?: setup)?|stop(?: setup)?)$/i.test(text)) { studyInterview = null; return { handled: true, source: 'study-setup', message: 'Setup cancelled. Your study settings have not changed.' }; }
         const question = STUDY_SETUP_QUESTIONS[studyInterview.step];
-        const candidate = studyInterview.pendingTime && /^[ap]\.?m\.?$/i.test(text.trim()) ? studyInterview.pendingTime + ' ' + text : text;
-        const answer = parseStudyInterviewAnswer(studyInterview.step, candidate);
-        if (answer && answer.clarifyTime) { studyInterview.pendingTime = answer.clarifyTime; return { handled: true, source: 'study-setup', message: 'Do you mean **' + answer.clarifyTime + ' AM or PM**? You can reply with just AM or PM.' }; }
-        if (!answer) return { handled: true, source: 'study-setup', message: question.type === 'time' ? 'What time do you mean? Something like **' + question.example + '** works, including minutes. You can skip this if you’re not sure.\n\n' + question.prompt : question.type === 'minutes' ? 'About how many minutes? For this setting, choose ' + question.min + '–' + question.max + ' minutes, or skip.\n\n' + question.prompt : 'For example, **' + question.example + '**. You can also say **not sure** to keep your current setting.\n\n' + question.prompt };
-        const proposed = { ...studyInterview.values, ...answer };
-        const earlier = question.key === 'schoolEndHour' ? 'schoolStartHour' : question.key === 'latestStudyHour' ? 'earliestStudyHour' : null;
-        if (earlier && proposed[earlier] != null && proposed[question.key] != null && proposed[question.key] <= proposed[earlier]) return { handled: true, source: 'study-setup', message: 'The finish needs to be after the start. ' + question.prompt };
-        delete studyInterview.pendingTime;
-        Object.assign(studyInterview.values, answer); studyInterview.step += 1;
+        const transition = advanceStudyInterview(studyInterview, text);
+        studyInterview = transition.state;
+        if (transition.status === 'cancelled') return { handled: true, source: 'study-setup', message: 'Setup cancelled. Your study settings have not changed.' };
+        const answer = transition.answer;
+        if (transition.status === 'clarify') return { handled: true, source: 'study-setup', message: 'Do you mean **' + answer.clarifyTime + ' AM or PM**? You can reply with just AM or PM.' };
+        if (transition.status === 'invalid') return { handled: true, source: 'study-setup', message: question.type === 'time' ? 'What time do you mean? Something like **' + question.example + '** works, including minutes. You can skip this if you’re not sure.\n\n' + question.prompt : question.type === 'minutes' ? 'About how many minutes? For this setting, choose ' + question.min + '–' + question.max + ' minutes, or skip.\n\n' + question.prompt : 'For example, **' + question.example + '**. You can also say **not sure** to keep your current setting.\n\n' + question.prompt };
+        if (transition.status === 'invalid-finish') return { handled: true, source: 'study-setup', message: 'The finish needs to be after the start. ' + question.prompt };
         if (studyInterview.step < STUDY_SETUP_QUESTIONS.length) return { handled: true, source: 'study-setup', message: (Object.keys(answer).length ? 'Got it — ' + formatStudySetupValue(question, answer[question.key]) + '.\n\n' : 'We’ll keep your current setting.\n\n') + STUDY_SETUP_QUESTIONS[studyInterview.step].prompt };
         const values = studyInterview.values; studyInterview = null;
         if (!Object.keys(values).length) return { handled: true, source: 'study-setup', message: 'You skipped every question. Your current study settings are unchanged.' };

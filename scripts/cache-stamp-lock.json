@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261022-study-times2",
-    "hash": "d4b22671278e30d5"
+    "stamp": "20261022-study-resume1",
+    "hash": "e8644567a6f95548"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261022-study-times2",
-    "hash": "6d4dca4e89e37f9e"
+    "stamp": "20261022-study-resume1",
+    "hash": "60d023c3e40d975c"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

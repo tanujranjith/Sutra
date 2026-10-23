@@ -125,3 +125,22 @@ next-day cutoff, none, Review, Revert and cancel. The no-break pass found and
 repaired a suffix-parsing bug. Phone-width time controls stayed inside 390px
 without document overflow. No provider calls were made. Updated unit and browser
 regressions, including serialization round trips, await CI.
+
+## Setup resume correction
+
+The first correction still kept the interview step only in module memory. A
+restored chat could therefore show the next question while its next answer fell
+through to the provider gate. Setup now reconstructs its current step, validated
+answers and pending AM/PM clarification from the current canonical conversation
+before processing a reply. Replay prepares a draft only and never executes old
+action proposals. Cancelled/completed setups stay ended; separate conversations
+do not share their steps. Existing saved-history controls remain authoritative.
+
+Manual Chrome QA reproduced the exact 7:30 AM → reload → 2:15 PM sequence, which
+now continued locally to the study-start question. A separate QA conversation
+resumed an AM/PM clarification after reload, survived switching to/from the
+user's pending setup, completed all ten questions and showed the correct recovered
+times in Settings review. The QA draft was reverted and the user's conversation
+was left at its next unanswered question. No provider calls or Settings saves
+were made in this pass. Syntax, Intelligence, guardrails, cache and link checks
+passed; updated unit/E2E reload and dock regressions await CI.

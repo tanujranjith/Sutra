@@ -405,7 +405,13 @@ and practice questions are supported. An invalid answer clarifies only that
 question; an invalid finish does not discard the already accepted start.
 
 Reply **skip** to keep a current value or **cancel setup** to stop. The interview
-is scoped to its conversation and lasts for the current page session. At the end,
+is scoped to its conversation. Its current step, accepted answers and pending
+AM/PM clarification are reconstructed from that conversation's canonical user
+messages before each reply. Saved conversations therefore resume after reload,
+chat switching or feature reinitialization without needing an AI provider. This
+does not run historical action proposals or create a separate persistent profile;
+when saved chat history is disabled, the normal session-only history rule applies.
+At the end,
 **Review in Settings** stages only supplied answers; **Save Changes** applies them
 through canonical Settings persistence, and **Revert** discards the draft. An
 existing draft for a supplied field must be saved or reverted first. No second

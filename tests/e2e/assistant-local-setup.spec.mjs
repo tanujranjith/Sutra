@@ -33,8 +33,12 @@ test('local study interview opens a draft, preserves skipped values, and saves o
   await openLocalAssistant(page);
   await send(page, 'Get to know me', 'What time does school');
   await send(page, '7:30', 'AM or PM');
+  await page.reload(); await waitForAppReady(page);
+  await page.evaluate(() => window.setActiveView('assistantview'));
   await send(page, 'AM', 'usually finish');
-  await send(page, '2:45 PM', 'earliest time');
+  await page.reload(); await waitForAppReady(page);
+  await page.evaluate(() => window.setActiveView('assistantview'));
+  await send(page, '2:15 PM', 'earliest time');
   await send(page, 'not sure', 'finish studying');
   await send(page, 'not sure', 'comfortably focus');
   await send(page, '45 minutes', 'each break');
@@ -48,7 +52,7 @@ test('local study interview opens a draft, preserves skipped values, and saves o
   await expect(review).toBeEnabled();
   await review.click();
   await expect(page.locator('[data-pref-path="studentPreferences.schoolStartHour"]')).toHaveValue('07:30');
-  await expect(page.locator('[data-pref-path="studentPreferences.schoolEndHour"]')).toHaveValue('14:45');
+  await expect(page.locator('[data-pref-path="studentPreferences.schoolEndHour"]')).toHaveValue('14:15');
   await expect(page.locator('[data-pref-path="studentPreferences.bedtimeHour"]')).toHaveValue('22:30');
   await expect(page.locator('[data-pref-path="studentPreferences.studyBlockMinutes"]')).toHaveValue('45');
   await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toBeEnabled();
@@ -66,9 +70,26 @@ test('local study interview opens a draft, preserves skipped values, and saves o
   });
   expect(portable.after).toEqual(portable.before);
   expect(portable.after.schoolStartHour).toBe(7.5);
-  expect(portable.after.schoolEndHour).toBe(14.75);
+  expect(portable.after.schoolEndHour).toBe(14.25);
   expect(portable.after.bedtimeHour).toBe(22.5);
   expect(remote).toEqual([]);
+});
+
+test('a restored setup continues locally in the dock and stays with its conversation', async ({ page }) => {
+  await openLocalAssistant(page);
+  await send(page, 'Get to know me', 'usually start');
+  await send(page, '7:30 AM', 'usually finish');
+  const chatId = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent().id);
+  await page.reload(); await waitForAppReady(page);
+  await page.locator('#chatbotBtn').click();
+  await page.locator('#chatInput').fill('2:15 PM');
+  await page.locator('#chatSendBtn').click();
+  await expect(page.locator('#chatbotMessages .chatbot-msg.assistant').last()).toContainText('earliest time');
+  await expect(page.locator('#chatbotMessages')).not.toContainText('No AI provider is connected');
+  const current = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent());
+  expect(current.id).toBe(chatId);
+  expect(current.messages.filter(row => row.role === 'user' && row.content === '7:30 AM')).toHaveLength(1);
+  expect(current.messages.filter(row => row.role === 'user' && row.content === '2:15 PM')).toHaveLength(1);
 });
 
 test('reviewed local memory works without workspace access or provider and Details supports keyboard dismissal', async ({ page }) => {
