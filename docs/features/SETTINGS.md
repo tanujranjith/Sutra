@@ -1,13 +1,14 @@
 # Settings
 
-Explicit preset and light/dark theme choices use a 520ms slide: the new theme
-enters from the left while the previous theme exits right. The animation wraps
+Explicit preset and light/dark theme choices use a 900ms organic reveal: new
+colors spread from the left along a flowing, uneven boundary. Both workspace
+snapshots stay stationary; text, panels, and controls do not slide. The animation wraps
 the existing theme handlers; it adds no preferences, storage, or network use.
 Reduced/off motion, forced colors, background tabs, and browsers without View
 Transitions apply themes immediately. Rapid choices finish on the latest choice.
-During the slide, control-level color transitions are suppressed so snapshots
+During the reveal, control-level color transitions are suppressed so snapshots
 contain the final palette. A temporary theme-colored backdrop covers transparent
-areas; both overrides are removed when the slide finishes or fails.
+areas; both overrides are removed when the reveal finishes or fails.
 
 Settings uses a compact, integrated category rail on desktop, with the title and
 search above grouped Personalization, Productivity, and Services links. All 16

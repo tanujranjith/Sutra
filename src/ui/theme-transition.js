@@ -8,7 +8,7 @@
         if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') doc.documentElement.style.setProperty('--sutra-theme-backdrop', color);
     }
     function cleanup() {
-        doc.documentElement.classList.remove('sutra-theme-slide');
+        doc.documentElement.classList.remove('sutra-theme-reveal');
         doc.documentElement.style.removeProperty('--sutra-theme-backdrop');
     }
     function enabled() {
@@ -21,7 +21,7 @@
         if (active) { pending = apply; active.skipTransition(); return; }
         var applied = false, transition;
         backdrop();
-        doc.documentElement.classList.add('sutra-theme-slide');
+        doc.documentElement.classList.add('sutra-theme-reveal');
         try {
             transition = doc.startViewTransition(function () {
                 applied = true; apply();

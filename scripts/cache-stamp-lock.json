@@ -548,8 +548,8 @@
     "hash": "fec715a38e757d7f"
   },
   "src/ui/theme-transition.js": {
-    "stamp": "20261024-theme-slide2",
-    "hash": "7e9eead4182d035a"
+    "stamp": "20261024-theme-reveal1",
+    "hash": "96d8e04f3221db8e"
   },
   "styles/base/contracts.css": {
     "stamp": "20260905-updatelayer1",
@@ -696,8 +696,8 @@
     "hash": "797fa2b7dc9bdc73"
   },
   "styles/features/theme-transition.css": {
-    "stamp": "20261024-theme-slide2",
-    "hash": "7759e34bea4b0478"
+    "stamp": "20261024-theme-reveal1",
+    "hash": "5d8c68cf1aaba96d"
   },
   "styles/features/workspace-lock.css": {
     "stamp": "20261017-pin-fields2",

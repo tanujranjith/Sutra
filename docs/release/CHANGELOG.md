@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
 - Animate explicit theme choices from left to right, with reduced/off-motion
   and unsupported-browser fallbacks; preserve the canonical apply/save path.
+- Refine theme motion into a stationary workspace with an organic color front
+  spreading from the left, rather than translating the workspace snapshots.
 
 These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
 
