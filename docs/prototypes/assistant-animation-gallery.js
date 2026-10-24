@@ -23,7 +23,7 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
     'Together, we found that asking a better question often matters more than finding a quick answer.'
   ];
   const labels = {grammar:'/grammar',spelling:'/spelling',rephrase:'/rephrase',writing:'AI writing help',general:'AI general help'};
-  let base = [...source], committed = null, undoState = null, suggestions = [], controller = null, paused = false, lastTarget = null, returnTimer = null;
+  let base = [...source], committed = null, undoState = null, suggestions = [], controller = null, paused = false, lastTarget = null;
   let travel = null, travelMs = 0, reactionTimer = null;
   const reduced = () => $('reduce').checked || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const el = (tag, className, text) => { const e = document.createElement(tag); e.className = className || ''; if (text != null) e.textContent = text; return e; };
@@ -65,6 +65,10 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   }
   function targetPosition(target,docked) {
     const box=$('workspace').getBoundingClientRect(), rect=target.getBoundingClientRect();
+    if(docked) {
+      const scale=.65,size=$('character').querySelector('.assistant-logo').offsetWidth*scale;
+      return {x:rect.left-box.left+(rect.width-size)/2,y:rect.top-box.top+(rect.height-size)/2,scale};
+    }
     if(target.classList.contains('inline-change')) {
       const word=target.querySelector('ins:not(:empty)')||target.querySelector('.original-word,del')||target;
       const wordRect=word.getClientRects()[0]||rect, line=target.closest('.note-line'), rail=line.getBoundingClientRect();
@@ -72,18 +76,17 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
       // Stay above the paragraph, aligned with the exact word, including wrapped words.
       return {x:Math.max(3,Math.min(wordRect.left-box.left+wordRect.width/2-21,documentRect.right-box.left-43)),y:Math.max(8,rail.top-box.top+parseFloat(getComputedStyle(line).paddingTop)-53),scale:.82};
     }
-    return {x:docked?rect.left-box.left-3:Math.max(3,rect.left-box.left-57),y:docked?rect.top-box.top-7:rect.top-box.top+5,scale:docked ? .75 : 1};
+    return {x:Math.max(3,rect.left-box.left-57),y:rect.top-box.top+5,scale:1};
   }
-  function moveTo(target, docked = false) {
-    clearTimeout(returnTimer);
+  function moveTo(target, docked = false, instant = false) {
     const {x,y,scale}=targetPosition(target,docked);
     const character=$('character'), pose=(px,py,s,rotation=0)=>`translate(${px}px,${py}px) rotate(${rotation}deg) scale(${s})`;
     const matrix=new DOMMatrixReadOnly(getComputedStyle(character).transform==='none'?undefined:getComputedStyle(character).transform);
     const start=lastTarget?{x:matrix.e,y:matrix.f,s:Math.hypot(matrix.a,matrix.b)}:{x,y,s:scale};
     holdTravel();lastTarget=target;character.style.transform=pose(x,y,scale);
-    character.classList.add('present');character.classList.remove('is-docked');
+    character.classList.add('present');character.classList.toggle('is-docked',docked);
     const distance=Math.hypot(x-start.x,y-start.y), direction=Math.sign(x-start.x)||1;
-    travelMs=reduced()?0:Math.min(680,220+distance*.4);
+    travelMs=reduced()||instant?0:Math.min(680,220+distance*.4);
     if(travelMs) {
       const animation=character.animate([
         {transform:pose(start.x,start.y,start.s),offset:0},
@@ -96,7 +99,6 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   }
   function park() {
     $('character').classList.remove('is-writing'); moveTo($('dock'),true);
-    returnTimer=setTimeout(() => { if(lastTarget===$('dock')) $('character').classList.add('is-docked'); },travelMs+40);
   }
   function wait(ms, signal) {
     return new Promise((resolve,reject) => {
@@ -194,7 +196,7 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
     }
   }
   function reset() {
-    abort(); clearTimeout(returnTimer);clearTimeout(reactionTimer);committed=null; undoState=null; suggestions=[]; base=[...source]; renderNote(base);
+    abort();clearTimeout(reactionTimer);committed=null; undoState=null; suggestions=[]; base=[...source]; renderNote(base);
     $('review').hidden=true; $('undo').hidden=true; $('doc-mode').textContent='Original note';
     $('feed').replaceChildren(); const empty=el('div','empty-chat'); empty.append(el('span','empty-star','✦'),el('h3','','Let’s work on this together.'),el('p','','Your command starts the conversation. I’ll show my work right on the page.')); $('feed').append(empty);
     $('character').className='co-editor is-docked'; lastTarget=null; $('chat-input').value=''; activity('ready','Choose a command to get started.'); $('presence').textContent='Here when you need me';park();
@@ -225,7 +227,9 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   $('reduce').onchange=()=>{document.body.classList.toggle('reduce',$('reduce').checked);syncTravel();};
   $('speed').onchange=syncTravel;
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',syncTravel);
-  addEventListener('resize',()=>{if(lastTarget&&lastTarget.isConnected)moveTo(lastTarget,lastTarget===$('dock'));});
+  function realign() { if(lastTarget&&lastTarget.isConnected)moveTo(lastTarget,lastTarget===$('dock'),true); }
+  addEventListener('resize',realign);
+  new ResizeObserver(realign).observe($('workspace'));
 
   function renderLibrary() {
     const visible=currentMotion.filter(r=>$('family').value==='All'||r.group===$('family').value);

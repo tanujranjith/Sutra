@@ -1138,6 +1138,8 @@ the correction, keeping clear of the text. Wrapped words use a clear rail above
 their paragraph with the same horizontal alignment. The logo returns to chat
 when the pass is ready; it has no floating status badge. Travel respects
 pause/resume, playback speed, and both system and preview reduced-motion controls.
+The dock uses a fixed square target; the logo's scaled image is centered within
+it and remains still while docked, including after a completed pass.
 Inline suggestions use a word/whitespace comparison: unchanged text stays plain,
 and only changed spans show removed and inserted wording. The spelling scenario
 changes only misspelled words; grammar corrections retain surrounding wording.

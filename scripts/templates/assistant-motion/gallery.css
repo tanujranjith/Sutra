@@ -12,7 +12,9 @@
 @keyframes demo-blink{0%,43%,47%,100%{transform:scaleY(1)}45%{transform:scaleY(.1)}}@keyframes demo-caret{50%{opacity:0}}@keyframes demo-chat-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes demo-accepted{0%{background:color-mix(in srgb,var(--green) 22%,transparent)}100%{background:transparent}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 /* Proposed co-editor motion: smooth travel and word-aligned focus. */
-.co-editor{transition:opacity .24s ease;transform-origin:50% 65%;will-change:transform}
+.co-editor{transition:opacity .24s ease;transform-origin:0 0;will-change:transform}
+.dock{width:38px;height:38px;flex:0 0 38px}
+.co-editor.is-docked.present .character-bob{animation:none;transform:none}
 .co-editor.is-docked.present{opacity:1}
 .co-editor.is-docked:not(.present){opacity:0}
 .character-bob{animation:demo-float-soft 5.5s ease-in-out infinite}
