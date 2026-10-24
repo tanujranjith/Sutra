@@ -1119,10 +1119,31 @@ The [Assistant animation gallery](../prototypes/assistant-animation-gallery.html
 is a development-only preview. Run `node scripts/generate-assistant-motion-preview.cjs`
 from the repository root to regenerate its HTML, CSS, and JavaScript, then open
 `/docs/prototypes/assistant-animation-gallery.html` on the local static server.
-It copies the 21 Assistant keyframe definitions and their source timings; optional
-shared/theme families bring the inventory to 49. Sample shapes are illustrative,
-and hover/focus transitions remain in the named source styles. The gallery has
-no workspace access, app scripts, provider calls, or production deployment role.
+The gallery contains only Assistant motion. Its main interactive concept has a
+small co-editor character leave the chat dock, follow each passage, and animate
+inline suggestions while retaining the original wording. Grammar, spelling,
+rephrase, writing help, and general help share this entrance and chat surface;
+general help demonstrates reading and discussion without changing the note.
+Follow-up directions can replace an unaccepted pass. Pause, Stop, explicit
+accept/discard, exact single-pass Undo, error feedback, return-to-chat, light/dark,
+and reduced motion are available. Replies and edits are scripted examples;
+this choreography is not wired into the production editor yet.
+
+The collapsed existing-motion library copies 21 Assistant keyframe definitions
+and source timings from the full view and side panel. It excludes shared UI and
+optional-theme families. Hover/focus transitions remain in the named styles.
+Editable templates live under `scripts/templates/assistant-motion/`; regenerate
+the three output files after editing them. The gallery has no workspace access,
+app scripts, provider calls, or production deployment role.
+
+The Assistant-only co-editor follow-up was manually checked in Chrome for all
+five entry paths, inline suggestion completion, acceptance, exact Undo (including
+the spelling-specific source), discard, Stop, and mid-pass chat redirection.
+Read-only general help left the passage unchanged. Connection interruption
+feedback, light/dark, reduced motion, and a 390px stacked layout passed; the
+viewport override was reset and no console warnings/errors were observed.
+Targeted JavaScript syntax, generator `--check`, and link checks passed. No
+automated suites or provider requests were run for this prototype-only change.
 
 October 24 local validation: runtime integrity, the 1,181-assertion Intelligence
 Harness, architecture guardrails, shell, cache-stamp, persistence-health, syntax,
