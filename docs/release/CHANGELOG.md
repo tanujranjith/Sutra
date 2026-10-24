@@ -10,6 +10,8 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
   spreading from the left, rather than translating the workspace snapshots.
 - Extend the approved straight theme reveal to custom-theme activation and
   capture named preset choices before their existing application handlers.
+- Keep the theme wipe and timing while replacing its animated clip with a
+  cropped incoming surface and counter-transforms to reduce rendering work.
 
 These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
 

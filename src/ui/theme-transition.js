@@ -9,6 +9,7 @@
     }
     function cleanup() {
         doc.documentElement.classList.remove('sutra-theme-reveal');
+        doc.documentElement.classList.remove('sutra-theme-captured');
         doc.documentElement.style.removeProperty('--sutra-theme-backdrop');
     }
     function enabled() {
@@ -25,6 +26,9 @@
         try {
             transition = doc.startViewTransition(function () {
                 applied = true; apply();
+                // Capture the new-only surface for an equal-and-opposite
+                // transform reveal, without animating a viewport-size mask.
+                doc.documentElement.classList.add('sutra-theme-captured');
                 // Let canonical theme/identity observers finish, then flush final
                 // colors while element-level transitions are suppressed.
                 return Promise.resolve().then(backdrop);

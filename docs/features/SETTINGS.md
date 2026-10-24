@@ -11,7 +11,10 @@ During the reveal, control-level color transitions are suppressed so snapshots
 contain the final palette. A temporary theme-colored backdrop covers transparent
 areas; both overrides are removed when the reveal finishes or fails.
 Background CSS animations pause during the reveal, then resume, reducing
-competing rendering work. The reveal uses no curved masks or animated paths.
+competing rendering work. The incoming body is captured separately after theme
+application. A translated cropping group and equally counter-translated image
+reveal it over the old root: their motion cancels, keeping the workspace still.
+Only transforms animate; there is no per-frame clip-path/mask interpolation.
 This includes Dune, Blueprint, Paper, Arcade, and saved custom-theme cards
 (click, Enter, or Space), their Apply button, and custom dropdown changes when
 a custom theme is already active. Choosing a custom theme for later application
