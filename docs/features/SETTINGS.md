@@ -1,5 +1,11 @@
 # Settings
 
+Explicit preset and light/dark theme choices use a 520ms slide: the new theme
+enters from the left while the previous theme exits right. The animation wraps
+the existing theme handlers; it adds no preferences, storage, or network use.
+Reduced/off motion, forced colors, background tabs, and browsers without View
+Transitions apply themes immediately. Rapid choices finish on the latest choice.
+
 Settings uses a compact, integrated category rail on desktop, with the title and
 search above grouped Personalization, Productivity, and Services links. All 16
 categories remain available; Business, Advanced, and Customization are under

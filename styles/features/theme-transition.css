@@ -1,0 +1,20 @@
+/* View snapshots move; live editor layout, selection, and scroll stay intact. */
+html.sutra-theme-slide::view-transition { pointer-events: none; }
+html.sutra-theme-slide::view-transition-group(root) { animation-duration: 520ms; overflow: clip; }
+html.sutra-theme-slide::view-transition-image-pair(root) { isolation: isolate; }
+html.sutra-theme-slide::view-transition-old(root),
+html.sutra-theme-slide::view-transition-new(root) {
+    animation-duration: 520ms;
+    animation-timing-function: cubic-bezier(.22,.68,.25,1);
+    animation-fill-mode: both;
+    mix-blend-mode: normal;
+}
+html.sutra-theme-slide::view-transition-old(root) { animation-name: sutra-theme-leave-right; }
+html.sutra-theme-slide::view-transition-new(root) { animation-name: sutra-theme-enter-left; }
+@keyframes sutra-theme-leave-right { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes sutra-theme-enter-left { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+    html.sutra-theme-slide::view-transition-group(root),
+    html.sutra-theme-slide::view-transition-old(root),
+    html.sutra-theme-slide::view-transition-new(root) { animation: none !important; }
+}

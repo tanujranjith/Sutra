@@ -547,6 +547,10 @@
     "stamp": "20261002-task-dust-reliable1",
     "hash": "fec715a38e757d7f"
   },
+  "src/ui/theme-transition.js": {
+    "stamp": "20261024-theme-slide1",
+    "hash": "50c7c6cd0a5e4e7f"
+  },
   "styles/base/contracts.css": {
     "stamp": "20260905-updatelayer1",
     "hash": "adba6b437cec1b36"
@@ -690,6 +694,10 @@
   "styles/features/task-completion-effects.css": {
     "stamp": "20261001-task-dust-hold3",
     "hash": "797fa2b7dc9bdc73"
+  },
+  "styles/features/theme-transition.css": {
+    "stamp": "20261024-theme-slide1",
+    "hash": "a76e770b020b1296"
   },
   "styles/features/workspace-lock.css": {
     "stamp": "20261017-pin-fields2",
