@@ -6,6 +6,9 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
 These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
 
+- Dock Assistant below navigation as a full-height sidebar; move floating
+  workspace controls alongside it and preview Modern Notes writing corrections
+  at changed words before guarded Apply. This local follow-up awaits user QA.
 - Default new Assistant workspaces to Everyday: bounded workspace retrieval,
   recent conversation context, and reviewed changes with Apply and Undo.
   Add Private and Advanced controls without upgrading existing restrictions;

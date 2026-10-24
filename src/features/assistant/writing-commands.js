@@ -4,7 +4,8 @@
     var commands = {
         grammar: { title: 'Grammar suggestions', instruction: 'Correct grammar while preserving meaning, facts, and voice.' },
         spelling: { title: 'Spelling suggestions', instruction: 'Correct spelling and typographical mistakes. Preserve meaning and wording otherwise.' },
-        rephrase: { title: 'Rephrase', instruction: 'Rephrase for clarity while preserving meaning, facts, and voice.' }
+        rephrase: { title: 'Rephrase', instruction: 'Rephrase for clarity while preserving meaning, facts, and voice.' },
+        writing: { title: 'Writing help', instruction: 'Improve clarity while preserving my meaning, facts, and voice.' }
     };
     function parse(text) {
         var match = /^\/(grammar|spelling|rephrase)(?:\s+([\s\S]*))?$/i.exec(String(text || '').trim());
@@ -71,6 +72,7 @@
         };
         if (typeof options.validateDraft === 'function') workbench.validateDraft = options.validateDraft;
         if (options.scopeLabel) workbench.scopeLabel = options.scopeLabel;
+        if (typeof options.previewDraft === 'function') workbench.previewDraft = options.previewDraft;
         return ui.open(workbench);
     }
     global.SutraWritingCommands = { parse: parse, open: open, splitDraft: splitDraft, captureClassicNote: captureClassicNote };

@@ -1113,6 +1113,21 @@ prompt was cache-eligible; Gemini reports `cachedContentTokenCount` only when a
 `include_usage` support; where a provider omits usage entirely, the chip shows
 latency alone.
 
+### Docked sidebar and writing previews
+
+The live Assistant panel is a full-height right sidebar below the main
+navigation. Desktop views reserve its width; floating Focus, Feedback, and
+storage controls move beside it and return when it closes. Narrow screens use
+an overlay, with a full-width sidebar on phones. Existing provider, model,
+thinking, permissions, and conversation controls remain canonical.
+
+In Modern Notes, writing commands preview exact changed spans without saving
+suggestions into the document. The existing Sutra logo with small eyes glides
+above visible changed words; reduced motion skips that travel. Apply uses the
+owning editor's transaction/save path, while Cancel removes the preview.
+Classic Notes and chat retain an editable full-draft review. See
+[Modern Notes Editor](MODERN_NOTES_EDITOR.md) for scope and stale-source guards.
+
 ### Local motion inventory
 
 The [Assistant animation gallery](../prototypes/assistant-animation-gallery.html)
@@ -1127,7 +1142,9 @@ general help demonstrates reading and discussion without changing the note.
 Follow-up directions can replace an unaccepted pass. Pause, Stop, explicit
 accept/discard, exact single-pass Undo, error feedback, return-to-chat, light/dark,
 and reduced motion are available. Replies and edits are scripted examples;
-this choreography is not wired into the production editor yet.
+the gallery remains scripted. The live sidebar and Modern Notes changed-word
+preview now implement the related interaction; gallery playback controls and
+scripted scenarios remain development-only.
 
 The character uses Sutra's existing Assistant logo with small cyan/purple eyes
 integrated into the mark's lower dots and subtle glances, without a mouth; the

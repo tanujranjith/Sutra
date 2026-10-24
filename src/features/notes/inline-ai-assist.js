@@ -46,6 +46,23 @@
     function setStatus(session, message) {
         session.status.textContent = safeText(message);
     }
+    function clearPreview(session) {
+        global.clearTimeout(session.previewTimer);
+        if (session.previewCleanup) session.previewCleanup();
+        session.previewCleanup = null;
+    }
+    function refreshPreview(session) {
+        clearPreview(session);
+        if (session.closed || session.stale || !session.hasDraft || !ownerIsCurrent(session) || !session.options.previewDraft) return;
+        if (session.options.validateDraft && session.options.validateDraft(session.preview.value)) return;
+        try { session.previewCleanup = session.options.previewDraft(session.preview.value); }
+        catch (error) { if (global.reportError) global.reportError(error, { feature: 'note-writing-preview' }); }
+    }
+    function appendTurn(session, role, text) {
+        var turn = element('p', 'sutra-inline-ai-turn ' + role, text);
+        session.transcript.appendChild(turn);
+        turn.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    }
 
     function setPending(session, pending) {
         session.pending = pending;
@@ -104,6 +121,7 @@
 
     function closeSession(session, result) {
         if (!session || session.closed) return;
+        clearPreview(session);
         session.closed = true;
         session.requestSequence += 1;
         if (session.controller && !session.controller.signal.aborted) {
@@ -149,6 +167,7 @@
 
     function requestDraft(session) {
         if (session.closed || session.pending || session.stale) return;
+        clearPreview(session);
         if (session.sourceInput) {
             session.contextText = session.sourceInput.value;
             if (!session.contextText.trim()) { setError(session, 'Enter the passage you want to change.'); session.sourceInput.focus(); return; }
@@ -177,6 +196,7 @@
         setError(session, '');
         setStatus(session, 'Preparing a draft with the configured Assistant provider…');
         setPending(session, true);
+        appendTurn(session, 'user', instruction);
 
         Promise.resolve().then(function () {
             return session.options.request({
@@ -209,8 +229,11 @@
             session.insert.disabled = false;
             session.replace.hidden = session.options.command;
             session.insert.hidden = false;
-            setStatus(session, 'Draft ready. Review or edit it, then choose how to use it.');
-            session.preview.focus();
+            setStatus(session, 'Draft ready. Review the suggestions, then Apply or Cancel.');
+            var count = global.SutraAssistantSidebar ? global.SutraAssistantSidebar.diff(session.selectedText || session.contextText, value).length : 0;
+            appendTurn(session, 'assistant', count ? count + ' suggested changes. Your note is unchanged until you approve them.' : 'The draft is ready for your review.');
+            refreshPreview(session);
+            if (session.previewWrap.open) session.preview.focus();
         }).catch(function (error) {
             if (session.closed || sequence !== session.requestSequence) return;
             var wasAborted = controller.signal.aborted || (error && error.name === 'AbortError');
@@ -258,7 +281,7 @@
         instruction.setAttribute('spellcheck', 'true');
 
         var contextDetails = element('details', 'sutra-inline-ai-context');
-        contextDetails.open = true;
+        contextDetails.open = false;
         var contextSummary = element('summary', '', options.scopeLabel || (options.command ? 'Passage to edit — only this text is sent' : 'Note passage included'));
         var sourceInput = options.command ? element('textarea', 'sutra-inline-ai-textarea sutra-inline-ai-source') : null;
         if (sourceInput) {
@@ -285,8 +308,10 @@
         error.setAttribute('role', 'alert');
         error.hidden = true;
 
-        var previewWrap = element('div', 'sutra-inline-ai-preview-wrap');
+        var previewWrap = element('details', 'sutra-inline-ai-preview-wrap');
         previewWrap.hidden = true;
+        previewWrap.open = !options.previewDraft;
+        previewWrap.appendChild(element('summary', '', 'View or edit full draft'));
         var previewLabel = element('label', 'sutra-inline-ai-label', 'Assistant draft — edit before accepting');
         previewLabel.htmlFor = 'sutraInlineAiPreview_' + id;
         var preview = element('textarea', 'sutra-inline-ai-textarea sutra-inline-ai-preview');
@@ -298,10 +323,10 @@
         previewWrap.appendChild(preview);
 
         body.appendChild(disclosure);
-        body.appendChild(instructionLabel);
-        body.appendChild(instruction);
         body.appendChild(contextDetails);
         if (!options.command) body.appendChild(selectionDetails);
+        var transcript = element('div', 'sutra-inline-ai-transcript'); transcript.setAttribute('role', 'log'); transcript.setAttribute('aria-live', 'polite');
+        body.appendChild(transcript);
         body.appendChild(status);
         body.appendChild(error);
         body.appendChild(previewWrap);
@@ -312,6 +337,8 @@
         cancelRequest.hidden = true;
         var generate = element('button', 'sutra-inline-ai-button sutra-inline-ai-primary', 'Generate draft');
         generate.type = 'button';
+        generate.setAttribute('aria-label', 'Generate draft'); generate.title = 'Generate draft';
+        generate.appendChild(element('i', 'fas fa-arrow-up'));
         var replace = element('button', 'sutra-inline-ai-button sutra-inline-ai-primary', 'Replace selected text');
         replace.type = 'button';
         replace.disabled = true;
@@ -321,9 +348,13 @@
         insert.disabled = true;
         insert.hidden = true;
         footer.appendChild(cancelRequest);
-        footer.appendChild(generate);
         footer.appendChild(replace);
         footer.appendChild(insert);
+        var composer = element('div', 'sutra-inline-ai-composer');
+        instructionLabel.classList.add('sutra-inline-ai-instruction-label');
+        instruction.rows = 2;
+        composer.appendChild(instructionLabel); composer.appendChild(instruction); composer.appendChild(generate);
+        footer.appendChild(composer);
 
         root.appendChild(header);
         root.appendChild(body);
@@ -340,7 +371,8 @@
             preview: preview,
             previewWrap: previewWrap,
             status: status,
-            error: error
+            error: error,
+            transcript: transcript
         };
     }
 
@@ -385,6 +417,7 @@
             contextText: safeText(options.contextText),
             scopeLabel: safeText(options.scopeLabel).slice(0, 240),
             validateDraft: typeof options.validateDraft === 'function' ? options.validateDraft : null,
+            previewDraft: typeof options.previewDraft === 'function' ? options.previewDraft : null,
             selectedText: typeof options.selectedText === 'string' && options.selectedText.length ? options.selectedText : null,
             request: options.request,
             isCurrent: options.isCurrent
@@ -422,6 +455,9 @@
             previewWrap: ui.previewWrap,
             status: ui.status,
             error: ui.error,
+            transcript: ui.transcript,
+            previewCleanup: null,
+            previewTimer: null,
             controller: null,
             requestSequence: 0,
             pending: false,
@@ -464,6 +500,7 @@
         };
         session.onInput = function (event) {
             if (event.target === session.instruction || event.target === session.sourceInput) {
+                clearPreview(session);
                 if (session.hasDraft) {
                     session.hasDraft = false;
                     session.preview.value = '';
@@ -477,6 +514,8 @@
                 setError(session, '');
                 session.generate.disabled = session.pending || session.stale || !session.instruction.value.trim() || (session.sourceInput && !session.sourceInput.value.trim());
             } else if (event.target === session.preview && !session.stale) {
+                clearPreview(session);
+                session.previewTimer = global.setTimeout(function () { refreshPreview(session); }, 160);
                 session.replace.disabled = !session.hasDraft || !session.selectedText || !session.selectedText.trim() || !session.preview.value.trim();
                 session.insert.disabled = !session.hasDraft || !session.preview.value.trim();
             }

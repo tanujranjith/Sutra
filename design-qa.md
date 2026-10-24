@@ -1,4 +1,25 @@
-# Settings option 3 — design QA
+# Assistant sidebar — October 24 local follow-up
+
+Final result for this follow-up: pending user browser validation.
+
+Reference: the approved Assistant sidebar mockup in this conversation. The
+implementation docks the existing chat below navigation, reserves desktop
+workspace width, and moves the floating Focus, Feedback, and storage controls
+alongside it. Modern Notes uses temporary changed-word decorations and the
+existing Sutra logo with eyes, no mouth or floating status badge.
+
+An initial disposable Chrome check observed a 390px sidebar flush to the right
+and workspace reservation below the 64px navigation. Floating-control movement
+was added afterward. The user requested implementation only and will test it;
+final theme/responsive comparison, generated edits, Apply/Undo, and the final
+button movement have not been browser-verified. No provider generation request
+was made. Temporary local provider settings were cleared and its process stopped.
+Syntax, architecture guardrails, app-shell, generated assets, cache stamps,
+local links, and whitespace checks passed. New unit/E2E regressions await CI.
+
+---
+
+# Settings option 3 — design QA (previous work)
 
 final result: passed
 

@@ -21,6 +21,41 @@ async function selectEditorTextAndWait(page, editor, text) {
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(text);
 }
 
+test('Assistant sidebar reserves editor space and moves workspace controls with it', async ({page}) => {
+  await openApp(page); await openNotesView(page); await stageWritingProvider(page);
+  await page.locator('#chatbotBtn').click();
+  await expect(page.locator('body')).toHaveClass(/sutra-assistant-sidebar-open/);
+  await expect.poll(()=>page.evaluate(()=>{
+    const panel=document.querySelector('#chatbotPanel').getBoundingClientRect();
+    const view=document.querySelector('#view-notes').getBoundingClientRect();
+    return Math.abs(panel.right-innerWidth)<2 && view.right<=panel.left+2;
+  })).toBe(true);
+  for(const id of ['feedbackFabBtn','focusModeQuickToggle','storageOptions']) {
+    await expect.poll(()=>page.evaluate(id=>{
+      const control=document.getElementById(id),panel=document.querySelector('#chatbotPanel').getBoundingClientRect();
+      return !control || getComputedStyle(control).display==='none' || control.getBoundingClientRect().right<=panel.left;
+    },id)).toBe(true);
+  }
+  await page.locator('#chatInput').press('Escape');
+  await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
+  await expect(page.locator('#chatbotPanel')).toBeHidden();
+});
+
+test('inline correction decorations never enter saved note content and clear on Cancel', async ({page}) => {
+  await openApp(page); await openNotesView(page); await createBlankNote(page,'QA inline preview'); await enableEditorV2(page);
+  await stageWritingProvider(page);
+  await page.evaluate(()=>{window.SutraIntelligenceBridge.generateText=async()=>({ok:true,text:'This is a sentence.'});});
+  const editor=page.locator('#editorV2Host .ProseMirror');
+  const before='This are a sentence.'; await editor.fill(before); await selectEditorTextAndWait(page,editor,before);
+  await editor.press('/'); await page.locator('.editor-v2-slash-item').filter({hasText:'/grammar'}).click();
+  const review=page.locator('.sutra-inline-ai-workbench'); await review.getByRole('button',{name:'Generate draft',exact:true}).click();
+  await expect(editor.locator('.sutra-ai-change-new')).toHaveText('is');
+  const html=await page.evaluate(()=>window.SutraNotesEditorV2.getStorageHtml());
+  expect(html).toContain(before); expect(html).not.toContain('sutra-ai-change'); expect(html).not.toContain('This is a sentence.');
+  await review.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(editor.locator('.sutra-ai-change-new')).toHaveCount(0); await expect(editor).toHaveText(before);
+});
+
 test('passage writing command reviews, cancels, applies edited text, and supports Undo', async ({ page }) => {
   await openApp(page);
   await openNotesView(page);
@@ -46,6 +81,7 @@ test('passage writing command reviews, cancels, applies edited text, and support
   await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
   await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
   await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+  await review.getByText('View or edit full draft', {exact:true}).click();
   await review.getByLabel('Assistant draft — edit before accepting').fill('This is my reviewed sentence.');
   const request = await page.evaluate(() => window.__qaWritingRequests[0]);
   expect(JSON.parse(request.userText).passage).toBe(original);
@@ -90,6 +126,7 @@ test('caret grammar command preloads note text and applies reviewed blocks witho
   await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
   await review.getByRole('button', {name:'Apply',exact:true}).click();
   await expect(review).toContainText('Keep 2 paragraphs');
+  await review.getByText('View or edit full draft', {exact:true}).click();
   await review.getByLabel('Assistant draft — edit before accepting').fill('This is first.\n\nThis is second.');
   await review.getByRole('button', {name:'Apply',exact:true}).click();
   await expect(editor.locator('p').nth(0)).toHaveText('This is first.');

@@ -20,6 +20,20 @@ An invalid draft stays open for correction. Edits, navigation, locking or remote
 replacement invalidate the source; accepted changes use the owning editor's
 normal history/save path and support Undo.
 
+The Assistant now opens as a full-height right sidebar below navigation. On
+desktop the editor makes room for it and floating Focus, Feedback, and storage
+controls move left with it. On phones it covers the workspace and hides those
+controls until closed. The provider and thinking controls use the existing
+Assistant configuration.
+
+Modern Editor writing reviews show only changed words as temporary inline
+suggestions. These are editor decorations, excluded from saved note HTML,
+exports, and Sync. **View or edit full draft** expands the complete draft.
+Apply commits exact changed spans through the owning editor; Cancel clears the
+preview. Writing help uses this same review flow. The Sutra logo glides above
+visible affected words; reduced motion and narrow layouts show suggestions
+without the travelling character. Classic Notes retains its draft review.
+
 ## HTML embeds and drawings
 
 Insert an HTML embed or handwriting block at the caret. Each appears as a live
