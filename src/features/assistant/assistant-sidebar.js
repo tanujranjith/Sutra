@@ -54,14 +54,18 @@
     function reduced() {
         return doc.body.classList.contains('motion-off') || global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
+    function createEyes() {
+        var face = doc.createElement('span'); face.className = 'sutra-editing-eyes';
+        face.setAttribute('aria-hidden', 'true');
+        face.appendChild(doc.createElement('i')); face.appendChild(doc.createElement('i'));
+        return face;
+    }
     function createAvatar() {
         if (avatar) return avatar;
         avatar = doc.createElement('div'); avatar.className = 'sutra-editing-presence'; avatar.hidden = true;
         avatar.setAttribute('aria-hidden', 'true');
         var image = doc.createElement('img'); image.src = 'assets/brand/sutra/generated/sutra-assistant-icon-128.png'; image.alt = '';
-        var face = doc.createElement('span'); face.className = 'sutra-editing-eyes';
-        face.appendChild(doc.createElement('i')); face.appendChild(doc.createElement('i'));
-        avatar.appendChild(image); avatar.appendChild(face); doc.body.appendChild(avatar); return avatar;
+        avatar.appendChild(image); avatar.appendChild(createEyes()); doc.body.appendChild(avatar); return avatar;
     }
     function stopPreview() {
         if (previewController) previewController.abort(); previewController = null;
@@ -163,6 +167,15 @@
         panel = doc.getElementById('chatbotPanel'); if (!panel) return;
         var context = doc.createElement('div'); context.id = 'sutraSidebarContext'; context.className = 'sutra-sidebar-context';
         var header = panel.querySelector('.chatbot-header'); header.after(context);
+        var logo = header.querySelector('.chatbot-mascot');
+        if (logo && !logo.closest('.sutra-sidebar-avatar')) {
+            var dockedAvatar = doc.createElement('span');
+            dockedAvatar.className = 'sutra-sidebar-avatar';
+            dockedAvatar.setAttribute('aria-hidden', 'true');
+            logo.before(dockedAvatar);
+            dockedAvatar.appendChild(logo);
+            dockedAvatar.appendChild(createEyes());
+        }
         new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['style', 'class'] });
         new MutationObserver(sync).observe(doc.body, { attributes: true, attributeFilter: ['data-view'] });
         var nav = doc.querySelector('.top-nav'); if (nav) new ResizeObserver(sync).observe(nav);

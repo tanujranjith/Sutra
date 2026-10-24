@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/assistant-sidebar.js": {
-    "stamp": "20261024-sidebar5",
-    "hash": "a54df3d09f16d776"
+    "stamp": "20261024-sidebar6",
+    "hash": "f420acce3cc3ce82"
   },
   "src/features/assistant/flow-assistant.js": {
     "stamp": "20261024-sidebar5",
@@ -572,8 +572,8 @@
     "hash": "471e4b2f094dc3c4"
   },
   "styles/features/assistant-sidebar.css": {
-    "stamp": "20261024-sidebar5",
-    "hash": "7869aafa31924e95"
+    "stamp": "20261024-sidebar6",
+    "hash": "e4d59b787c450376"
   },
   "styles/features/backup-progress.css": {
     "stamp": "20261001-backup-progress1",

@@ -1156,6 +1156,9 @@ owning editor's transaction/save path, while Cancel removes the preview.
 Classic Notes and chat retain an editable full-draft review. See
 [Modern Notes Editor](MODERN_NOTES_EDITOR.md) for scope and stale-source guards.
 
+The docked sidebar header uses the same cyan/purple eye overlay as the moving
+logo, with a gentle blink and no mouth. Reduced motion keeps the eyes still.
+
 ### Local motion inventory
 
 The [Assistant animation gallery](../prototypes/assistant-animation-gallery.html)
