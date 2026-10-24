@@ -4,6 +4,9 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
 ## Unreleased — local reliability and cleanup work
 
+- Group landing-page screenshots under `assets/marketing/screenshots`, update
+  capture/deployment consumers, and document asset ownership and legacy paths.
+
 - Animate explicit theme choices from left to right, with reduced/off-motion
   and unsupported-browser fallbacks; preserve the canonical apply/save path.
 - Refine theme motion into a stationary workspace with an organic color front

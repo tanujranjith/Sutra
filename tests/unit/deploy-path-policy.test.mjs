@@ -21,7 +21,7 @@ function fixture(t) {
 
 test('deployment policy keeps runtime assets and vendor licenses', () => {
   for (const path of ['Sutra.html', 'oauth-callback.html', 'LICENSE', 'src/config/asset-manifest.generated.json',
-    'src/core/app.js', 'styles/base/styles.css', 'assets/brand/sutra/generated/favicon.ico', 'assets/screenshots/home.png',
+    'src/core/app.js', 'styles/base/styles.css', 'assets/brand/sutra/generated/favicon.ico', 'assets/marketing/screenshots/home.png',
     'assets/vendor/pdfjs/build/pdf.min.mjs', 'assets/vendor/pdfjs/cmaps/78-EUC-H.bcmap', 'assets/vendor/fonts/FoxitSerif.pfb',
     'assets/vendor/fonts/local.woff2', 'assets/vendor/editor/LICENSE.md', 'assets/vendor/office/LICENSE.mammoth',
     'assets/vendor/office/LICENSE.sheetjs', 'assets/vendor/pdfjs/LICENSE_FOXIT']) assert.equal(getDeployPathProblem(path), null, path);

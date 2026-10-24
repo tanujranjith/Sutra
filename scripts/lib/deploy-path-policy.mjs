@@ -4,7 +4,7 @@ const entries = new Set([
   'index.html', 'homepage.html', 'sutra.html', '404.html', 'oauth-callback.html',
   'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js', 'license'
 ]);
-const trees = ['styles', 'src', 'assets/brand/sutra/generated', 'assets/vendor', 'assets/screenshots'];
+const trees = ['styles', 'src', 'assets/brand/sutra/generated', 'assets/vendor', 'assets/marketing/screenshots'];
 const developmentDirectories = new Set([
   'node_modules', 'tests', '__tests__', '__mocks__', '__fixtures__', 'fixtures',
   'scripts', 'docs', 'examples', 'test-results', 'noteflow-classic'

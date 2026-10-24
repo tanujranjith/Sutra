@@ -88,7 +88,7 @@ const DIRS = [
   { path: 'src', excludeReadmes: true }, // runtime JS + generated data modules, not contributor docs
   { path: 'assets/brand/sutra/generated' }, // icons, favicon, social preview
   { path: 'assets/vendor', excludeReadmes: true }, // vendored runtime + licenses, not contributor docs
-  { path: 'assets/screenshots' } // marketing screenshots used by HomePage.html
+  { path: 'assets/marketing/screenshots' } // marketing screenshots used by HomePage.html
 ];
 
 /**

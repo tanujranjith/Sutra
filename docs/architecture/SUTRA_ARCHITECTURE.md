@@ -427,7 +427,7 @@ Sutra/
 ├─ tests/          e2e/ bench/ fixtures/                  # Playwright (see tests/README.md)
 ├─ docs/           architecture/ features/                # by topic (see docs/README.md)
 │                  privacy-security/ release/ archive/
-└─ assets/         brand/ vendor/ ss/
+└─ assets/         brand/ vendor/ marketing/ logos/ legacy/
 ```
 
 ## 12. Sutra.html load order (load-bearing)
