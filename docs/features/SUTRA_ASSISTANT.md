@@ -1130,7 +1130,7 @@ and reduced motion are available. Replies and edits are scripted examples;
 this choreography is not wired into the production editor yet.
 
 The character uses Sutra's existing Assistant logo with small cyan/purple eyes
-integrated into the mark's lower dots, subtle glances, and a small smile; the
+integrated into the mark's lower dots and subtle glances, without a mouth; the
 brand image itself is unchanged. Travel is a smooth glide with a quiet float
 and slight tilts, without squash/stretch, hopping, or sparkle bursts. A small
 pencil marks editing. The logo aligns above each affected word before typing
