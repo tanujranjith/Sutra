@@ -6,10 +6,11 @@ import test from 'node:test';
 const source = readFileSync(new URL('../../src/ui/theme-transition.js', import.meta.url), 'utf8');
 function setup({ supported = true, reduced = false } = {}) {
   let listener, snapshots = 0;
-  const applied = [], classes = new Set();
+  const applied = [], classes = new Set(), properties = new Map();
   const document = {
     body: { classList: { contains: () => false } }, hidden: false,
-    documentElement: { classList: { add: value => classes.add(value), remove: value => classes.delete(value) } },
+    documentElement: { classList: { add: value => classes.add(value), remove: value => classes.delete(value) },
+      style: { setProperty: (name, value) => properties.set(name, value), removeProperty: name => properties.delete(name) } },
     addEventListener: (_name, callback) => { listener = callback; }
   };
   if (supported) document.startViewTransition = callback => {
@@ -17,7 +18,10 @@ function setup({ supported = true, reduced = false } = {}) {
     const update = Promise.resolve().then(callback);
     return { ready: update, finished: update.then(() => {}), skipTransition() {} };
   };
-  vm.runInNewContext(source, { document, window: { matchMedia: () => ({ matches: reduced }) } });
+  vm.runInNewContext(source, { document, window: {
+    matchMedia: () => ({ matches: reduced }),
+    getComputedStyle: () => ({ getPropertyValue: () => applied.at(-1) === 'dark' ? '#101827' : '#faf9f6' })
+  } });
   function choice(name) {
     const control = { isConnected: true, classList: { contains: () => false }, getAttribute: () => null };
     control.click = () => {
@@ -28,7 +32,7 @@ function setup({ supported = true, reduced = false } = {}) {
     };
     return control;
   }
-  return { choice, applied, classes, snapshots: () => snapshots };
+  return { choice, applied, classes, properties, snapshots: () => snapshots };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -38,6 +42,7 @@ test('theme animation invokes the canonical click exactly once and clears its te
   assert.deepEqual(app.applied, ['ocean']);
   assert.equal(app.snapshots(), 1);
   assert.equal(app.classes.size, 0);
+  assert.equal(app.properties.size, 0, 'temporary backdrop must be removed');
 });
 test('reduced motion and unsupported browsers keep immediate normal theme clicks', () => {
   for (const options of [{ reduced: true }, { supported: false }]) {

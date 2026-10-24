@@ -5,6 +5,9 @@ enters from the left while the previous theme exits right. The animation wraps
 the existing theme handlers; it adds no preferences, storage, or network use.
 Reduced/off motion, forced colors, background tabs, and browsers without View
 Transitions apply themes immediately. Rapid choices finish on the latest choice.
+During the slide, control-level color transitions are suppressed so snapshots
+contain the final palette. A temporary theme-colored backdrop covers transparent
+areas; both overrides are removed when the slide finishes or fails.
 
 Settings uses a compact, integrated category rail on desktop, with the title and
 search above grouped Personalization, Productivity, and Services links. All 16

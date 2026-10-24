@@ -1,6 +1,10 @@
 /* View snapshots move; live editor layout, selection, and scroll stay intact. */
-html.sutra-theme-slide::view-transition { pointer-events: none; }
-html.sutra-theme-slide::view-transition-group(root) { animation-duration: 520ms; overflow: clip; }
+html.sutra-theme-slide { background-color: var(--sutra-theme-backdrop, var(--bg-primary)); }
+/* Capture finished colors, rather than the start of each control's own fade. */
+html.sutra-theme-slide, html.sutra-theme-slide *,
+html.sutra-theme-slide *::before, html.sutra-theme-slide *::after { transition: none !important; }
+html.sutra-theme-slide::view-transition { pointer-events: none; background: var(--sutra-theme-backdrop, var(--bg-primary)); }
+html.sutra-theme-slide::view-transition-group(root) { animation: none; overflow: clip; }
 html.sutra-theme-slide::view-transition-image-pair(root) { isolation: isolate; }
 html.sutra-theme-slide::view-transition-old(root),
 html.sutra-theme-slide::view-transition-new(root) {
@@ -8,6 +12,10 @@ html.sutra-theme-slide::view-transition-new(root) {
     animation-timing-function: cubic-bezier(.22,.68,.25,1);
     animation-fill-mode: both;
     mix-blend-mode: normal;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    backface-visibility: hidden;
 }
 html.sutra-theme-slide::view-transition-old(root) { animation-name: sutra-theme-leave-right; }
 html.sutra-theme-slide::view-transition-new(root) { animation-name: sutra-theme-enter-left; }

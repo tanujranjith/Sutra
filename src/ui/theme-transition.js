@@ -2,6 +2,15 @@
 (function (doc, win) {
     'use strict';
     var replaying = false, active = null, pending = null;
+    function backdrop() {
+        var style = win.getComputedStyle(doc.body);
+        var color = style.getPropertyValue('--bg-primary').trim() || style.backgroundColor;
+        if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') doc.documentElement.style.setProperty('--sutra-theme-backdrop', color);
+    }
+    function cleanup() {
+        doc.documentElement.classList.remove('sutra-theme-slide');
+        doc.documentElement.style.removeProperty('--sutra-theme-backdrop');
+    }
     function enabled() {
         return typeof doc.startViewTransition === 'function' && !doc.hidden && doc.body
             && !doc.body.classList.contains('motion-off') && !doc.body.classList.contains('safe-mode')
@@ -11,12 +20,18 @@
         if (!enabled()) { apply(); return; }
         if (active) { pending = apply; active.skipTransition(); return; }
         var applied = false, transition;
+        backdrop();
         doc.documentElement.classList.add('sutra-theme-slide');
         try {
-            transition = doc.startViewTransition(function () { applied = true; apply(); });
+            transition = doc.startViewTransition(function () {
+                applied = true; apply();
+                // Let canonical theme/identity observers finish, then flush final
+                // colors while element-level transitions are suppressed.
+                return Promise.resolve().then(backdrop);
+            });
             active = transition;
         } catch (_) {
-            doc.documentElement.classList.remove('sutra-theme-slide');
+            cleanup();
             if (!applied) apply();
             return;
         }
@@ -24,7 +39,7 @@
         transition.ready.catch(function () {});
         transition.finished.catch(function () {}).finally(function () {
             active = null;
-            doc.documentElement.classList.remove('sutra-theme-slide');
+            cleanup();
             var next = pending; pending = null;
             if (next) run(next);
         });
