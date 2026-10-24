@@ -135,7 +135,7 @@ test('empty writing slash command requires an explicit passage and Cancel preser
   await expect(review.getByRole('button', { name: 'Generate draft', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
   await review.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(editor).toHaveText('/spelling');
+  await expect(editor).toHaveText('');
 });
 
 test('caret grammar command preloads note text and applies reviewed blocks without losing paragraph structure', async ({ page }) => {
@@ -149,6 +149,7 @@ test('caret grammar command preloads note text and applies reviewed blocks witho
   await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
   const review = page.locator('.sutra-inline-ai-workbench');
   await expect(review.getByLabel('Passage to edit')).toHaveValue('This are first.\n\nThese is second.');
+  await expect(editor).not.toContainText('/grammar');
   await expect(review.getByRole('button', {name:'Generate draft',exact:true})).toBeEnabled();
   expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
   await review.getByRole('button', {name:'Generate draft',exact:true}).click();
@@ -289,7 +290,37 @@ test('editing the original note while a writing review is open prevents Apply', 
   await editor.fill(newerText);
   await review.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(editor).toHaveText(newerText);
-  await expect(review).toBeHidden();
+  await expect(review).toBeVisible();
+  await expect(review).toContainText('The source note changed');
+  await expect(review.getByRole('button', { name: 'Apply', exact: true })).toBeHidden();
+});
+
+test('Enter consumes grammar immediately and same-note refresh keeps a pending writing request open', async ({ page }) => {
+  await openApp(page); await openNotesView(page); await createBlankNote(page, 'QA grammar refresh'); await enableEditorV2(page);
+  await stageWritingProvider(page);
+  await page.evaluate(() => {
+    window.SutraIntelligenceBridge.generateText = () => new Promise(resolve => { window.__qaResolveGrammar = resolve; });
+  });
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('This are a sentence.'); await editor.press('End'); await editor.press('Enter');
+  await editor.pressSequentially('/grammar');
+  await expect(page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' })).toBeVisible();
+  await editor.press('Enter');
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review).toBeVisible(); await expect(editor).not.toContainText('/grammar');
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__qaResolveGrammar)).toBe('function');
+  await page.evaluate(() => {
+    const api = window.SutraNotesEditorV2;
+    api.setContent(api.getStorageHtml());
+    window.dispatchEvent(new CustomEvent('noteflow:view-changed', { detail: { view: 'notes' } }));
+    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', { detail: { pageId: window.flowAtelier.currentPageId } }));
+    window.__qaResolveGrammar({ ok: true, text: 'This is a sentence.' });
+  });
+  await expect(review).toBeVisible();
+  await expect(review.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toContainText('This are a sentence.'); await expect(editor).not.toContainText('/grammar');
 });
 
 // Modern Notes Editor (TipTap engine, shipped 2026-07-07; enabled by default

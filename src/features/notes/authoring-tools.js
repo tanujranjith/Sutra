@@ -21,7 +21,8 @@
         }
         function current(token) {
             return !!(token && canWrite() && token.editor === editor()
-                && token.page === owner.getPage() && token.doc === editor().state.doc);
+                && token.page === owner.getPage() && (token.doc === editor().state.doc
+                    || (typeof token.doc.eq === 'function' && token.doc.eq(editor().state.doc))));
         }
         function captureSlash(range) {
             var token = capture();
@@ -313,20 +314,23 @@
             var writing = global.SutraWritingCommands;
             if (!token || !writing) return false;
             var ed = editor();
+            // Consuming a command is an immediate editor action, independent
+            // of whether a generated draft is later accepted or cancelled.
+            if (range && !range.selection) {
+                if (!commit(ed.state.tr.delete(token.from, token.to), { focus: false })) return false;
+                token = capture();
+                if (!token) return false;
+            }
             // With a caret command, review the note's eligible text blocks.
             // Keep original block nodes/attributes and consistent inline marks.
             if ((range && !range.selection) || (!range && token.from === token.to)) {
-                var blocks = [], covered = false;
+                var blocks = [];
                 token.doc.descendants(function (node, pos) {
                     if (!node.isTextblock || node.type.name === 'codeBlock') return;
                     var from = pos + 1, to = from + node.content.size;
                     var blockMarks = writingSelectionMarks({ doc: token.doc, from: from, to: to });
                     if (!blockMarks) return false;
                     var text = token.doc.textBetween(from, to, '\n');
-                    if (token.from >= from && token.to <= to) {
-                        text = text.slice(0, token.from - from) + text.slice(token.to - from);
-                        if (text.trim()) covered = true;
-                    }
                     if (text.trim()) blocks.push({ from: from, to: to, text: text, marks: blockMarks });
                     return false;
                 });
@@ -334,6 +338,7 @@
                     var result = await writing.open(command, {
                         text: blocks.map(function (block) { return block.text; }).join('\n\n'),
                         scopeLabel: 'Current note: ' + blocks.length + ' text blocks; links, code and mixed formatting stay unchanged',
+                        sourcePageId: token.page.id,
                         isCurrent: function () { return current(token); },
                         previewDraft: function (text) {
                             var parts = writing.splitDraft(text, blocks.length);
@@ -344,7 +349,7 @@
                     if (!result || !current(token)) return false;
                     var parts = writing.splitDraft(result.text, blocks.length);
                     if (!parts) return false;
-                    return applyWritingChanges(token, blocks, parts, covered ? [] : [{ from: token.from, to: token.to, after: '', marks: [] }]);
+                    return applyWritingChanges(token, blocks, parts);
                 }
             }
             var marks = writingSelectionMarks(token);
@@ -352,6 +357,7 @@
             var selectedText = !range || range.selection ? ed.state.doc.textBetween(token.from, token.to, '\n') : '';
             var selectionBlocks = [{ from: token.from, to: token.to, marks: marks }];
             var result = await writing.open(command, { text: selectedText, isCurrent: function () { return current(token); },
+                sourcePageId: token.page.id,
                 previewDraft: function (text) { return previewWriting(token, selectionBlocks, [text]); } });
             if (!result || !current(token)) return false;
             return applyWritingChanges(token, selectionBlocks, [result.text.replace(/\r\n?/g, '\n')]);

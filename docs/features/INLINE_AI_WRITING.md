@@ -10,6 +10,14 @@ the scope identifies included blocks. Links, code, embeds, and mixed-format
 blocks stay untouched. In chat, enter `/grammar your passage`
 (or the other commands), then Send to open the review.
 
+Modern Notes removes a typed slash query immediately when its command is
+activated by Enter or click. Cancel leaves the passage unchanged and does not
+restore the consumed command; normal editor Undo remains available. A selected
+passage is not removed. Equivalent same-note reloads and repeated Notes-view
+notifications keep the writing review open. Actual source changes pause the
+review with an explicit warning and disable Apply; navigation, locking, and
+remote replacement still close it. Send remains inside the writing workflow.
+
 Edit the passage and instruction, then choose **Generate draft**. This sends
 only that passage and instruction through the configured provider. It excludes
 chat history, workspace retrieval, and attachments. The limit is 8,000 passage

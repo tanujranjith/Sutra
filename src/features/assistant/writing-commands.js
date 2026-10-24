@@ -54,6 +54,7 @@
             title: definition.title,
             instruction: definition.instruction,
             contextText: typeof options.text === 'string' ? options.text : '',
+            sourcePageId: options.sourcePageId,
             isCurrent: options.isCurrent,
             request: async function (request) {
                 var passage = String(request.contextText || '');

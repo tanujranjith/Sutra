@@ -240,8 +240,8 @@
     "hash": "90689f9cbbabdfd8"
   },
   "src/features/assistant/writing-commands.js": {
-    "stamp": "20261024-sidebar3",
-    "hash": "cff7d01a1a16488a"
+    "stamp": "20261024-writing-session1",
+    "hash": "a2923eda7effd7a3"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -256,16 +256,16 @@
     "hash": "4619be4ddf2e90f2"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261024-sidebar3",
-    "hash": "35fd82e54a51a9fa"
+    "stamp": "20261024-writing-session1",
+    "hash": "8c4231378e6a876a"
   },
   "src/features/notes/editor-v2.js": {
     "stamp": "20261016-ci-page-flow2",
     "hash": "2251acb689897110"
   },
   "src/features/notes/inline-ai-assist.js": {
-    "stamp": "20261024-sidebar3",
-    "hash": "9c4d17eae764102e"
+    "stamp": "20261024-writing-session1",
+    "hash": "974479db590994e6"
   },
   "src/features/notes/rich-links.js": {
     "stamp": "20261003-create-review5",

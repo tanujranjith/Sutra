@@ -82,13 +82,25 @@
         session.preview.disabled = true;
         session.previewWrap.hidden = true;
     }
+    function invalidateSession(session) {
+        if (session.closed || session.stale) return;
+        clearPreview(session);
+        session.stale = true;
+        session.requestSequence += 1;
+        if (session.controller) session.controller.abort();
+        session.controller = null;
+        setPending(session, false);
+        disableApproval(session);
+        setError(session, 'The source note changed. Cancel this review and run the command again.');
+        setStatus(session, 'Review paused. Your newer text has not been changed.');
+    }
 
     function removeSessionListeners(session) {
         global.removeEventListener('noteflow:view-changed', session.onViewChanged, true);
         global.removeEventListener('sutra:note-page-loaded', session.onPageLoaded, true);
         global.removeEventListener('sutra:workspace-lock-changed', session.onWorkspaceLock, true);
-        global.removeEventListener('sutra:note-page-locked', session.onPageLoaded, true);
-        global.removeEventListener('sutra:workspace-remote-commit', session.onPageLoaded, true);
+        global.removeEventListener('sutra:note-page-locked', session.onSourceReset, true);
+        global.removeEventListener('sutra:workspace-remote-commit', session.onSourceReset, true);
         global.removeEventListener('pagehide', session.onNavigate, true);
         global.removeEventListener('popstate', session.onNavigate, true);
         global.removeEventListener('hashchange', session.onNavigate, true);
@@ -151,7 +163,7 @@
     function applyChoice(session, action) {
         if (session.closed || session.stale || !session.hasDraft) return;
         if (!ownerIsCurrent(session)) {
-            closeSession(session, null);
+            invalidateSession(session);
             return;
         }
         var text = session.preview.value;
@@ -180,7 +192,7 @@
             return;
         }
         if (!ownerIsCurrent(session)) {
-            closeSession(session, null);
+            invalidateSession(session);
             return;
         }
 
@@ -211,7 +223,7 @@
             session.controller = null;
             setPending(session, false);
             if (!ownerIsCurrent(session)) {
-                closeSession(session, null);
+                invalidateSession(session);
                 return;
             }
             if (typeof value !== 'string') {
@@ -418,6 +430,7 @@
             instruction: safeText(options.instruction).slice(0, 2000),
             contextText: safeText(options.contextText),
             scopeLabel: safeText(options.scopeLabel).slice(0, 240),
+            sourcePageId: safeText(options.sourcePageId),
             validateDraft: typeof options.validateDraft === 'function' ? options.validateDraft : null,
             previewDraft: typeof options.previewDraft === 'function' ? options.previewDraft : null,
             selectedText: typeof options.selectedText === 'string' && options.selectedText.length ? options.selectedText : null,
@@ -471,8 +484,21 @@
         };
         var promise = new Promise(function (resolve) { session.resolve = resolve; });
 
-        session.onViewChanged = function () { closeSession(session, null); };
-        session.onPageLoaded = function () { closeSession(session, null); };
+        session.sourceViewId = (doc.querySelector('#mainContent > .view.active') || {}).id || '';
+        session.onViewChanged = function (event) {
+            var next = event && event.detail && event.detail.view;
+            if (next && 'view-' + next === session.sourceViewId) return;
+            closeSession(session, null);
+        };
+        session.onPageLoaded = function (event) {
+            var pageId = event && event.detail && event.detail.pageId;
+            if (session.options.sourcePageId && String(pageId) === session.options.sourcePageId) {
+                if (!ownerIsCurrent(session)) invalidateSession(session);
+                return;
+            }
+            closeSession(session, null);
+        };
+        session.onSourceReset = function () { closeSession(session, null); };
         session.onWorkspaceLock = function (event) {
             if (!event || !event.detail || event.detail.locked !== false) closeSession(session, null);
         };
@@ -497,12 +523,14 @@
         session.onGenerate = function (event) {
             if (event.target === session.generate || session.generate.contains(event.target)) {
                 event.preventDefault();
+                event.stopPropagation();
                 requestDraft(session);
             }
         };
         session.onInstructionKey = function (event) {
             if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
                 event.preventDefault();
+                event.stopPropagation();
                 if (!session.generate.disabled) requestDraft(session);
             }
         };
@@ -552,8 +580,8 @@
         global.addEventListener('noteflow:view-changed', session.onViewChanged, true);
         global.addEventListener('sutra:note-page-loaded', session.onPageLoaded, true);
         global.addEventListener('sutra:workspace-lock-changed', session.onWorkspaceLock, true);
-        global.addEventListener('sutra:note-page-locked', session.onPageLoaded, true);
-        global.addEventListener('sutra:workspace-remote-commit', session.onPageLoaded, true);
+        global.addEventListener('sutra:note-page-locked', session.onSourceReset, true);
+        global.addEventListener('sutra:workspace-remote-commit', session.onSourceReset, true);
         global.addEventListener('pagehide', session.onNavigate, true);
         global.addEventListener('popstate', session.onNavigate, true);
         global.addEventListener('hashchange', session.onNavigate, true);

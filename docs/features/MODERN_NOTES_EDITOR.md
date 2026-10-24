@@ -8,6 +8,7 @@ read and save the same note content and structured block records.
 
 At a caret, `/grammar`, `/spelling` and `/rephrase` preload eligible text from
 the current note into the writing review instead of opening an empty passage.
+The slash query is consumed immediately on activation, including with Enter.
 Selecting text first limits the command to that selection. The visible scope
 identifies the included blocks: links, code, embeds and mixed-format blocks stay
 unchanged. Classic whole-note fallback includes plain-text blocks only.
@@ -16,8 +17,9 @@ instruction are sent; chat history and other workspace data are excluded.
 Review or edit the draft and choose **Apply**, or Cancel without changing the
 note. Whole-note drafts must retain the number/order of paragraphs (blank-line
 separators), so applying preserves existing block structure and attributes.
-An invalid draft stays open for correction. Edits, navigation, locking or remote
-replacement invalidate the source; accepted changes use the owning editor's
+An invalid draft stays open for correction. Source edits pause the review with
+a warning; navigation, locking or remote replacement close it. Equivalent
+same-note refreshes keep the session open. Accepted changes use the owning editor's
 normal history/save path and support Undo.
 
 The Assistant now opens as a full-height right sidebar below navigation. On
