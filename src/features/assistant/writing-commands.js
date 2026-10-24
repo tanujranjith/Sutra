@@ -10,16 +10,48 @@
         var match = /^\/(grammar|spelling|rephrase)(?:\s+([\s\S]*))?$/i.exec(String(text || '').trim());
         return match ? { command: match[1].toLowerCase(), text: match[2] || '' } : null;
     }
+    function splitDraft(text, count) {
+        var parts = String(text || '').replace(/\r\n?/g, '\n').trim().split(/\n[ \t]*\n+/);
+        return parts.length === count ? parts : null;
+    }
+    function captureClassicNote(editor, slash) {
+        var blocks = [], covered = false;
+        var candidates = Array.from(editor.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,div'));
+        if (!candidates.length) candidates = [editor];
+        candidates.forEach(function (block) {
+            if (block.querySelector('*') || block.closest('a,code,pre,[contenteditable="false"]')) return;
+            var range = editor.ownerDocument.createRange(); range.selectNodeContents(block);
+            var text = range.toString();
+            if (block.contains(slash.startContainer) && block.contains(slash.endContainer)) {
+                var prefix = range.cloneRange(); prefix.setEnd(slash.startContainer, slash.startOffset);
+                var offset = prefix.toString().length;
+                text = text.slice(0, offset) + text.slice(offset + slash.toString().length);
+                if (text.trim()) covered = true;
+            }
+            if (text.trim()) blocks.push({ range: range, text: text });
+        });
+        return blocks.length ? {
+            text: blocks.map(function (block) { return block.text; }).join('\n\n'),
+            scopeLabel: 'Current note: ' + blocks.length + ' plain-text blocks; formatted and embedded content stays unchanged',
+            validateDraft: function (text) { return splitDraft(text, blocks.length) ? '' : 'Keep ' + blocks.length + ' paragraphs separated by blank lines so existing note structure is preserved.'; },
+            replacements: function (text) {
+                var parts = splitDraft(text, blocks.length); if (!parts) return [];
+                var changes = blocks.map(function (block, index) { return { range: block.range, text: parts[index] }; });
+                if (!covered) changes.push({ range: slash, text: '' });
+                return changes.sort(function (a, b) { return b.range.compareBoundaryPoints(0, a.range); });
+            }
+        } : null;
+    }
     function open(command, options) {
         var definition = commands[command];
         options = options || {};
         var ui = global.SutraInlineAIAssist;
         var bridge = global.SutraIntelligenceBridge;
         if (!definition || !ui || !bridge || typeof bridge.generateText !== 'function') return Promise.resolve(null);
-        return ui.open({
+        var workbench = {
             command: true,
             title: definition.title,
-            instruction: definition.instruction,
+            instruction: definition.instruction + (options.validateDraft ? ' Preserve the number and order of paragraphs, separated by blank lines.' : ''),
             contextText: typeof options.text === 'string' ? options.text : '',
             isCurrent: options.isCurrent,
             request: async function (request) {
@@ -36,7 +68,10 @@
                 if (!response || !response.ok) throw new Error(response && response.errorMessage || 'The request failed. Nothing was changed.');
                 return response.text;
             }
-        });
+        };
+        if (typeof options.validateDraft === 'function') workbench.validateDraft = options.validateDraft;
+        if (options.scopeLabel) workbench.scopeLabel = options.scopeLabel;
+        return ui.open(workbench);
     }
-    global.SutraWritingCommands = { parse: parse, open: open };
+    global.SutraWritingCommands = { parse: parse, open: open, splitDraft: splitDraft, captureClassicNote: captureClassicNote };
 })(typeof window !== 'undefined' ? window : globalThis);

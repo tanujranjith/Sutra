@@ -140,6 +140,10 @@
             setError(session, 'The draft is empty. Add text before applying it.');
             return;
         }
+        if (typeof session.options.validateDraft === 'function') {
+            var issue = session.options.validateDraft(text);
+            if (issue) { setError(session, issue); return; }
+        }
         closeSession(session, { action: action, text: text });
     }
 
@@ -255,7 +259,7 @@
 
         var contextDetails = element('details', 'sutra-inline-ai-context');
         contextDetails.open = true;
-        var contextSummary = element('summary', '', options.command ? 'Passage to edit — only this text is sent' : 'Note passage included');
+        var contextSummary = element('summary', '', options.scopeLabel || (options.command ? 'Passage to edit — only this text is sent' : 'Note passage included'));
         var sourceInput = options.command ? element('textarea', 'sutra-inline-ai-textarea sutra-inline-ai-source') : null;
         if (sourceInput) {
             sourceInput.rows = 5; sourceInput.maxLength = 8000;
@@ -379,6 +383,8 @@
             title: safeText(options.title).slice(0, 120),
             instruction: safeText(options.instruction).slice(0, 2000),
             contextText: safeText(options.contextText),
+            scopeLabel: safeText(options.scopeLabel).slice(0, 240),
+            validateDraft: typeof options.validateDraft === 'function' ? options.validateDraft : null,
             selectedText: typeof options.selectedText === 'string' && options.selectedText.length ? options.selectedText : null,
             request: options.request,
             isCurrent: options.isCurrent

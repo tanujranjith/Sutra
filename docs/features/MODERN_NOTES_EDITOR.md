@@ -4,6 +4,22 @@ The Modern Editor is the default rich-text surface for Create notes. The classic
 editor remains available in Settings as a compatibility choice. Both surfaces
 read and save the same note content and structured block records.
 
+### Grammar, spelling and rephrasing
+
+At a caret, `/grammar`, `/spelling` and `/rephrase` preload eligible text from
+the current note into the writing review instead of opening an empty passage.
+Selecting text first limits the command to that selection. The visible scope
+identifies the included blocks: links, code, embeds and mixed-format blocks stay
+unchanged. Classic whole-note fallback includes plain-text blocks only.
+Nothing is sent before **Generate draft**. Only the displayed passage and
+instruction are sent; chat history and other workspace data are excluded.
+Review or edit the draft and choose **Apply**, or Cancel without changing the
+note. Whole-note drafts must retain the number/order of paragraphs (blank-line
+separators), so applying preserves existing block structure and attributes.
+An invalid draft stays open for correction. Edits, navigation, locking or remote
+replacement invalidate the source; accepted changes use the owning editor's
+normal history/save path and support Undo.
+
 ## HTML embeds and drawings
 
 Insert an HTML embed or handwriting block at the caret. Each appears as a live

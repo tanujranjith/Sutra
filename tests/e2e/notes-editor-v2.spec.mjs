@@ -73,6 +73,33 @@ test('empty writing slash command requires an explicit passage and Cancel preser
   await expect(editor).toHaveText('/spelling');
 });
 
+test('caret grammar command preloads note text and applies reviewed blocks without losing paragraph structure', async ({ page }) => {
+  await openApp(page); await openNotesView(page);
+  await createBlankNote(page, 'QA whole-note grammar'); await enableEditorV2(page);
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('This are first.'); await editor.press('End'); await editor.press('Enter');
+  await editor.pressSequentially('These is second.'); await editor.press('Enter');
+  await editor.pressSequentially('/grammar');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue('This are first.\n\nThese is second.');
+  await expect(review.getByRole('button', {name:'Generate draft',exact:true})).toBeEnabled();
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', {name:'Generate draft',exact:true}).click();
+  await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+  await review.getByRole('button', {name:'Apply',exact:true}).click();
+  await expect(review).toContainText('Keep 2 paragraphs');
+  await review.getByLabel('Assistant draft — edit before accepting').fill('This is first.\n\nThis is second.');
+  await review.getByRole('button', {name:'Apply',exact:true}).click();
+  await expect(editor.locator('p').nth(0)).toHaveText('This is first.');
+  await expect(editor.locator('p').nth(1)).toHaveText('This is second.');
+  await expect(editor).not.toContainText('/grammar');
+  await editor.press('ControlOrMeta+z');
+  await expect(editor).toContainText('This are first.');
+  await expect(editor).toContainText('These is second.');
+});
+
 test('Classic Notes writing command cancels, applies through undo, and persists the undone text after reload', async ({ page }) => {
   await openApp(page);
   await openNotesView(page);

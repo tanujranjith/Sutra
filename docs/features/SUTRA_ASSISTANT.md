@@ -222,6 +222,16 @@ labeling them as excerpts that newer messages supersede. This is a local
 extractive recap of the current chat, with no additional AI call or saved summary.
 The same request budget may remove older turns; Stateless sends no recap.
 
+Recent conversation receives priority over ambient workspace matches. Questions
+about this chat's history use Minimal workspace context instead of unrelated
+notes. Adding a note in the full Assistant binds its canonical note ID into the
+existing conversation scope after send consent; later follow-ups re-read that
+same note under current permissions. Older label-only chips can recover a scope
+only from a unique exact canonical title match. Locked content still needs a new
+page-scoped consent flow. Natural edit requests such as “revise it and put it in
+there” expose the canonical anchored-note action schema and produce reviewed
+proposals; permissions never imply that model prose has actually edited a note.
+
 Visible conversations are saved locally by default so both the docked panel and
 full Assistant view share the same chats. You can disable **Save chat history**
 or clear chats at any time. Saved chats are included in encrypted Sutra backups
@@ -1102,3 +1112,26 @@ prompt was cache-eligible; Gemini reports `cachedContentTokenCount` only when a
 `cache_control` breakpoint hit). Streamed OpenAI-compatible usage requires
 `include_usage` support; where a provider omits usage entirely, the chip shows
 latency alone.
+
+### Local motion inventory
+
+The [Assistant animation gallery](../prototypes/assistant-animation-gallery.html)
+is a development-only preview. Run `node scripts/generate-assistant-motion-preview.cjs`
+from the repository root to regenerate its HTML, CSS, and JavaScript, then open
+`/docs/prototypes/assistant-animation-gallery.html` on the local static server.
+It copies the 21 Assistant keyframe definitions and their source timings; optional
+shared/theme families bring the inventory to 49. Sample shapes are illustrative,
+and hover/focus transitions remain in the named source styles. The gallery has
+no workspace access, app scripts, provider calls, or production deployment role.
+
+October 24 local validation: runtime integrity, the 1,181-assertion Intelligence
+Harness, architecture guardrails, shell, cache-stamp, persistence-health, syntax,
+and link checks passed. Manual Chrome QA on disposable `localhost:5298` confirmed
+that a caret `/grammar` preloads two paragraphs, excludes its slash query, shows
+the block-scope disclosure, enables Generate, and preserves the original note on
+Cancel and reload. Gallery filtering, light/dark, pause/resume, and reduced motion
+were exercised; it showed no document-wide horizontal overflow. Provider usage
+was zero. New unit/E2E regressions are prepared for CI, not run locally. Successful
+live Stateful follow-ups and reviewed provider-generated edits remain unverified
+for this revision. No new durable fields were introduced; note identity uses the
+existing conversation scope. Existing permissions, PIN gates, and Apply remain.

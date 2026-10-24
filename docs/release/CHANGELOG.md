@@ -12,6 +12,11 @@ These changes are on `codex/student-workflow-batch`, which has been uploaded for
   missing older permission fields stay Off on load/import.
 - Offer Everyday setup alongside blocked proposals, without applying the
   proposal when configuration is enabled or overwriting unsaved Settings drafts.
+- Keep recent Stateful turns ahead of incidental workspace matches, retain an
+  attached note's canonical target across follow-ups, and expose anchored edit
+  proposals for requests such as “revise it and put it back.”
+- Preload eligible current-note blocks for caret writing commands, preserving
+  paragraph structure and requiring review before applying a draft.
 - Pause Sync on unauthenticated or inconsistent records while preserving local
   data, pending changes, and the existing vault key.
 - Add bounded automatic-backup retry delays and report incomplete attachment

@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261022-everyday2",
-    "hash": "6cefcebbe91f05ce"
+    "stamp": "20261024-writing-followup1",
+    "hash": "5b58213d73d4bece"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261022-everyday2",
-    "hash": "378ba9a738bd227b"
+    "stamp": "20261024-writing-followup2",
+    "hash": "48387b36ec87e3cf"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261022-everyday2",
-    "hash": "1853bb6b7d72eb28"
+    "stamp": "20261024-writing-followup1",
+    "hash": "af7b2e75b20159a3"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -236,8 +236,8 @@
     "hash": "90689f9cbbabdfd8"
   },
   "src/features/assistant/writing-commands.js": {
-    "stamp": "20261015-writing1",
-    "hash": "7e2abfa02918290c"
+    "stamp": "20261024-writing-followup2",
+    "hash": "b64ef9e166c32d22"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -252,16 +252,16 @@
     "hash": "4619be4ddf2e90f2"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261015-writing1",
-    "hash": "7c3eaf564274f6b8"
+    "stamp": "20261024-writing-followup1",
+    "hash": "7015cb39fbe80042"
   },
   "src/features/notes/editor-v2.js": {
     "stamp": "20261016-ci-page-flow2",
     "hash": "2251acb689897110"
   },
   "src/features/notes/inline-ai-assist.js": {
-    "stamp": "20261015-writing2",
-    "hash": "b736c6e09b155799"
+    "stamp": "20261024-writing-followup2",
+    "hash": "7590df2a6dc08fc6"
   },
   "src/features/notes/rich-links.js": {
     "stamp": "20261003-create-review5",

@@ -44061,7 +44061,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Slides</strong> has a thumbnail rail, compact Insert / History / Slide menus, Fit and zoom controls, object formatting, speaker notes, and presentation mode. Sheets keeps its formula bar and main formatting actions near the grid, with more tools in Format / Data / Structure / File.</li>
   <li><strong>Custom timelines</strong> can be inserted from the toolbar in Notes, Canvas, and Slides (under Insert). They belong to that page and do not create schedule events. Sheets does not offer timelines.</li>
   <li>Click a note link to copy, edit, or remove its link formatting while keeping the text. Arrow keys keep the selected slash command visible. <strong>AI writing help</strong> opens in the right Assistant panel and only changes the note after you approve a draft.</li>
-  <li><strong>/grammar, /spelling, /rephrase:</strong> select ordinary text within one paragraph and press /, or type a command at the caret and enter a passage explicitly. In Assistant chat, enter the command followed by your passage. Opening the review sends nothing. Generate sends only the displayed passage and instruction; review or edit the draft, then Apply or Cancel. Note changes support Undo; chat changes return to the composer without sending another message.</li>
+  <li><strong>/grammar, /spelling, /rephrase:</strong> select text first, or type a command at the caret to preload eligible text blocks from this note. In Assistant chat, enter the command followed by your passage. Opening the review sends nothing. Generate sends only the displayed passage and instruction; review or edit the draft, then Apply or Cancel. Note changes support Undo; chat changes return to the composer without sending another message.</li>
   <li>Canvas text and sticky notes keep their edits when resized or zoomed. Linked note cards show a readable opening excerpt; locked note contents remain protected. HTML pages keep secondary actions in the three-dot menu.</li>
 </ul>
                     `
@@ -71258,19 +71258,25 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 showToast('Select ordinary text within one paragraph, without links, code, or embedded items.'); return;
             }
             if (!selected && !/^\/[a-z]*$/i.test(original)) return;
+            const scope = selected ? null : writing.captureClassicNote(editor, range);
             const isCurrent = () => currentPageId === pageId && pages.find(item => item.id === pageId) === page
                 && editor === document.getElementById('editor') && editor.isContentEditable && !workspaceImportInProgress
                 && canWritePageContent(page) && baseline === editor.innerHTML
                 && editor.contains(range.startContainer) && editor.contains(range.endContainer) && range.toString() === original;
-            const result = await writing.open(command, { text: selected ? original : '', isCurrent });
+            const result = await writing.open(command, { text: selected ? original : (scope?.text || ''), isCurrent, scopeLabel: scope?.scopeLabel, validateDraft: scope?.validateDraft });
             if (!result || !isCurrent()) return;
             noteUndoManager.cancelPendingPushes();
             noteUndoManager.push(editor);
             editor.focus();
             const selection = window.getSelection();
-            selection.removeAllRanges(); selection.addRange(range);
-            if (!document.execCommand('insertText', false, result.text)) { showToast('Could not apply the draft. Your original text is unchanged.'); return; }
+            const changes = scope ? scope.replacements(result.text) : [{ range, text: result.text }];
+            let applied = true;
+            for (const change of changes) {
+                selection.removeAllRanges(); selection.addRange(change.range);
+                if (!document.execCommand('insertText', false, change.text)) { applied = false; break; }
+            }
             noteUndoManager.push(editor);
+            if (!applied) { if (editor.innerHTML !== baseline) noteUndoManager.undo(editor); showToast('Could not apply the draft. Restored the original text.'); return; }
             queueSaveForEditor(editor);
             updateWordCount();
         }
@@ -80294,7 +80300,7 @@ ${cspMeta}
                 const label = currentPage ? (currentPage.title || 'Current note') : 'Current note';
                 const content = (currentPage ? 'Note: ' + label + '\n\n' : '') + (noteText || '(empty note)');
                 asstPendingContext = asstPendingContext.filter(c => c.id !== 'current-note');
-                asstPendingContext.push({ id: 'current-note', icon: 'fa-file-lines', label, content });
+                asstPendingContext.push({ id: 'current-note', noteId: currentPage?.id, icon: 'fa-file-lines', label, content });
                 asstRenderContextBar();
             }));
 
@@ -80458,7 +80464,7 @@ ${cspMeta}
             }
             const id = 'note-' + page.id;
             asstPendingContext = asstPendingContext.filter(c => c.id !== id);
-            asstPendingContext.push({ id, icon: 'fa-file-lines', label, content: 'Note: ' + label + '\n\n' + (text || '(empty note)') });
+            asstPendingContext.push({ id, noteId: page.id, icon: 'fa-file-lines', label, content: 'Note: ' + label + '\n\n' + (text || '(empty note)') });
             asstRenderContextBar();
         }
 
@@ -80625,6 +80631,7 @@ ${cspMeta}
             // Snapshot the chips for display in the sent bubble — asstClearContext()
             // below wipes asstPendingContext, so this must be captured first.
             const contextTags = asstPendingContext.map(c => ({ icon: c.icon, label: c.label }));
+            const contextNoteId = asstPendingContext.find(c => c.noteId)?.noteId;
             asstClearContext(); // clear chips immediately for responsiveness
 
             // Optimistically show the user's turn (ephemeral until gates pass).
@@ -80669,7 +80676,7 @@ ${cspMeta}
                 }
             } catch (e) { /* fall through to model */ }
 
-            await asstSendCore(text, sendText, { pushUser: true, contextTags, lockedAccessChecked: true, lockedPageAccessTicket: lockedPageAccess.ticket });
+            await asstSendCore(text, sendText, { pushUser: true, contextTags, contextNoteId, lockedAccessChecked: true, lockedPageAccessTicket: lockedPageAccess.ticket });
         }
 
         // Shared send pipeline. `displayText` is what the user sees/persists,
@@ -80746,7 +80753,7 @@ ${cspMeta}
                 sources: [], attachments: [],
                 context: { depth: 'none', accessReport: { areasRead: [] }, memoryUsedIds: [] }
             } : (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
-                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
+                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: opts.contextNoteId ? { ...ensureCurrentConversation().scope, type: 'note', noteId: String(opts.contextNoteId) } : ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
             try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
             const preSendReceipt = buildAssistantResponseReceipt(flowEnrichment, {
@@ -80763,6 +80770,7 @@ ${cspMeta}
 
             // Gates passed — persist the user turn (just what user typed), then re-render.
             if (opts.pushUser) {
+                if (opts.contextNoteId) ensureCurrentConversation().scope = { ...ensureCurrentConversation().scope, type: 'note', noteId: String(opts.contextNoteId) };
                 convo.push({ role: 'user', content: displayText, contextTags: (opts.contextTags && opts.contextTags.length) ? opts.contextTags : undefined });
                 saveConvo();
                 asstRenderAll();

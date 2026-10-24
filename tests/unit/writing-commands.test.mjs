@@ -43,6 +43,24 @@ test('parser recognizes only the three explicit writing commands', () => {
   }
 });
 
+test('whole-note drafts preserve the expected paragraph boundaries', () => {
+  const { commands } = createHarness();
+  assert.deepEqual(Array.from(commands.splitDraft('First.\n\nSecond.', 2)), ['First.', 'Second.']);
+  assert.equal(commands.splitDraft('Merged paragraphs', 2), null);
+  assert.deepEqual(Array.from(commands.splitDraft('Line one\nline two', 1)), ['Line one\nline two']);
+});
+
+test('whole-note review forwards its visible scope and validates before application without an extra call', async () => {
+  const { commands, state } = createHarness();
+  const validateDraft = text => commands.splitDraft(text, 2) ? '' : 'Keep two paragraphs';
+  await commands.open('grammar', { text: 'First.\n\nSecond.', isCurrent: () => true, scopeLabel: 'Current note: 2 text blocks', validateDraft });
+  assert.equal(state.openOptions.contextText, 'First.\n\nSecond.');
+  assert.equal(state.openOptions.scopeLabel, 'Current note: 2 text blocks');
+  assert.equal(state.openOptions.validateDraft('Merged'), 'Keep two paragraphs');
+  assert.match(state.openOptions.instruction, /Preserve the number and order/);
+  assert.equal(state.providerCalls.length, 0);
+});
+
 test('opening a writing review does not call the provider or forward ambient workspace data', async () => {
   const { commands, state } = createHarness();
   const openResult = await commands.open('grammar', {

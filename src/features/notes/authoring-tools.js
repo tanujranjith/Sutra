@@ -294,6 +294,47 @@
             var writing = global.SutraWritingCommands;
             if (!token || !writing) return false;
             var ed = editor();
+            // With a caret command, review the note's eligible text blocks.
+            // Keep original block nodes/attributes and consistent inline marks.
+            if (range && !range.selection) {
+                var blocks = [], covered = false;
+                token.doc.descendants(function (node, pos) {
+                    if (!node.isTextblock || node.type.name === 'codeBlock') return;
+                    var from = pos + 1, to = from + node.content.size;
+                    var blockMarks = writingSelectionMarks({ doc: token.doc, from: from, to: to });
+                    if (!blockMarks) return false;
+                    var text = token.doc.textBetween(from, to, '\n');
+                    if (token.from >= from && token.to <= to) {
+                        text = text.slice(0, token.from - from) + text.slice(token.to - from);
+                        if (text.trim()) covered = true;
+                    }
+                    if (text.trim()) blocks.push({ from: from, to: to, text: text, marks: blockMarks });
+                    return false;
+                });
+                if (blocks.length) {
+                    var result = await writing.open(command, {
+                        text: blocks.map(function (block) { return block.text; }).join('\n\n'),
+                        scopeLabel: 'Current note: ' + blocks.length + ' text blocks; links, code and mixed formatting stay unchanged',
+                        isCurrent: function () { return current(token); },
+                        validateDraft: function (text) { return writing.splitDraft(text, blocks.length) ? '' : 'Keep ' + blocks.length + ' paragraphs separated by blank lines so existing note structure is preserved.'; }
+                    });
+                    if (!result || !current(token)) return false;
+                    var parts = writing.splitDraft(result.text, blocks.length);
+                    if (!parts) return false;
+                    var changes = blocks.map(function (block, index) { return Object.assign({}, block, { text: parts[index] }); });
+                    if (!covered) changes.push({ from: token.from, to: token.to, text: '', marks: [] });
+                    var tr = ed.state.tr;
+                    changes.sort(function (a, b) { return b.from - a.from; }).forEach(function (block) {
+                        var nodes = [];
+                        block.text.split('\n').forEach(function (line, index) {
+                            if (index) nodes.push(ed.state.schema.nodes.hardBreak.create());
+                            if (line) nodes.push(ed.state.schema.text(line, block.marks));
+                        });
+                        tr.replaceWith(block.from, block.to, nodes);
+                    });
+                    return commit(tr);
+                }
+            }
             var marks = writingSelectionMarks(token);
             if (!marks) { report('Select text with consistent formatting within one paragraph, without links, code, or embedded items.'); return false; }
             var selectedText = !range || range.selection ? ed.state.doc.textBetween(token.from, token.to, '\n') : '';

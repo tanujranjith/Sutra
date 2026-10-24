@@ -77,12 +77,15 @@ function createEnrichment({
     SutraProductKnowledge: { search: () => [] }
   };
   const enrich = compileFunction('buildRequestEnrichment', [
+    'isConversationHistoryQuestion', 'resolveRequestScope',
     'shouldInvestigateWorkspace', 'getPref', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
     'applyRelevantWorkspaceContext', 'getFlowAssistantContext', 'memStore', 'getActiveViewName',
     'retrieveNoteSources', 'window', 'getChatMemoryMode', 'buildConversationMessages',
     'getAttachments', 'buildSystemPromptParts', 'filterAssistantContext',
     'getActiveTutoringContract', 'getVisionCapability', 'consumeLockedPageAccess'
   ], [
+    compileFunction('isConversationHistoryQuestion'),
+    options => options.conversationScope || options.scope || {},
     () => false,
     (_key, fallback) => fallback,
     options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket : null,
@@ -119,6 +122,44 @@ test('generic prompts omit the action catalog while preserving the core safety r
   assert.ok(action.static.includes('ACTIONS AVAILABLE FOR THIS REQUEST'));
   assert.ok(action.static.includes('create_task:'));
   assert.ok(action.static.length > generic.static.length);
+});
+
+test('natural revise-and-put-back requests include the canonical anchored note edit action', () => {
+  for (const prompt of ['revise it and then put it in there', 'Improve the writing in my current note while keeping my voice', 'rephrase this essay']) {
+    const selected = selectPromptActionBank(prompt);
+    assert.ok(selected.domains.flatMap(domain => domain.actions).some(action => action.type === 'edit_note_patch'), prompt);
+    assert.ok(selected.totalActions <= 12);
+  }
+});
+
+test('chat-history questions use Minimal context instead of unrelated note retrieval', () => {
+  let notesRead = 0;
+  const turns = [{ role: 'user', content: 'Please revise my Orchid essay' }, { role: 'assistant', content: 'I can propose an edit' }];
+  const result = createEnrichment({ depth: 'workspace', chatMemoryMode: 'stateful', conversationMessages: turns, onNotesRead: () => notesRead++ })('what has this chat been talking about', 'openai');
+  assert.equal(result.context.depth, 'minimal');
+  assert.equal(notesRead, 0);
+  assert.ok(result.requestMessages.some(message => message.content.includes('Orchid essay')));
+});
+
+test('recent conversation wins over ambient workspace evidence under the context budget', () => {
+  const turns = [{ role: 'user', content: 'Our topic is the Orchid essay' }, { role: 'assistant', content: 'The Orchid essay needs revision' }];
+  const result = createEnrichment({ depth: 'workspace', chatMemoryMode: 'stateful', conversationMessages: turns,
+    contextOverrides: { tasks: Array.from({length: 30}, (_, i) => ({id: 'task'+i, title: 'Unrelated '+i, notes: 'x'.repeat(1000)})) }
+  })('revise it and then put it in there', 'openai');
+  assert.ok(result.requestMessages.some(message => message.content.includes('Our topic is the Orchid essay')));
+  assert.ok(result.context.contextBudget.estimatedInputTokens <= result.context.contextBudget.inputLimitTokens);
+});
+
+test('legacy chip recovery uses an exact unique canonical note and respects Stateless mode', () => {
+  const pages = [{ id: 'orchid', title: 'Orchid essay' }];
+  let mode = 'stateful';
+  const resolve = compileFunction('resolveRequestScope', ['getChatMemoryMode', 'bridge'], [() => mode, () => ({pages})]);
+  const options = { conversationScope: {type: 'workspace'}, conversation: [{role:'user',content:'here',contextTags:[{icon:'fa-file-lines',label:'Orchid essay'}]}] };
+  assert.equal(resolve(options).noteId, 'orchid');
+  pages.push({id:'other',title:'Orchid essay'});
+  assert.equal(resolve(options).type, 'workspace');
+  pages.pop(); mode = 'stateless';
+  assert.equal(resolve(options).type, 'workspace');
 });
 
 test('prompt action selection includes create_task with its catalog fields and stays bounded across domains', () => {

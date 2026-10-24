@@ -482,9 +482,11 @@
         try {
             syncActiveV2NoteForContext();
             const b = bridge();
-            const pageId = b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null);
+            const scope = options && (options.scope || options.conversationScope) || {};
+            const pageId = scope.type === 'note' && scope.noteId ? scope.noteId : (b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null));
             const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
             if (!pageId) return null;
+            if ([...(scope.excludedNoteIds || []), ...(scope.excludedSourceIds || [])].some(id => String(id) === String(pageId) || String(id) === 'note:' + pageId)) return null;
             const page = pages.find(p => p && p.id === pageId);
             if (!page) return null;
             const assistantAccessIds = currentLockedPageAccessIds(options);
@@ -1307,14 +1309,16 @@
         const query = String(userText || '').toLowerCase().replace(/\bfinish\b|\bcheck off\b/g, 'complete').replace(/\blaunch\b/g, 'open');
         // The full catalog remains the local validation/help authority. Only
         // action requests need its schemas in the provider's prompt.
-        if (!/\b(?:add|create|make|write|draft|rewrite|edit|update|change|mark|complete|delete|remove|move|rename|organize|schedule|reschedule|plan|import|export|save|remember|generate|build|set|log|start|stop|archive|duplicate|insert|turn|convert|split|merge|group|arrange|connect|open|undo)\b/.test(query)) return { domains: [], totalActions: 0 };
+        if (!/\b(?:add|create|make|write|draft|rewrite|revise|rephrase|proofread|correct|fix|improve|replace|apply|put|edit|update|change|mark|complete|delete|remove|move|rename|organize|schedule|reschedule|plan|import|export|save|remember|generate|build|set|log|start|stop|archive|duplicate|insert|turn|convert|split|merge|group|arrange|connect|open|undo)\b/.test(query)) return { domains: [], totalActions: 0 };
+        const noteEdit = /\b(?:revise|rewrite|rephrase|proofread|correct|improve|replace|edit)\b/.test(query);
         const stop = new Set('a an the to for of in on my me i you can could please this that with and it some help'.split(' '));
         const terms = (query.match(/[a-z0-9]+/g) || []).filter(term => term.length > 2 && !stop.has(term));
         const bank = buildActionsBank();
         const ranked = bank.domains.flatMap(domain => domain.actions.map(action => {
             const type = action.type.replace(/_/g, ' ');
             const text = (type + ' ' + action.description).toLowerCase();
-            const score = terms.reduce((sum, term) => sum + (type.includes(term) ? 4 : text.includes(term) ? 1 : 0), 0);
+            const score = terms.reduce((sum, term) => sum + (type.includes(term) ? 4 : text.includes(term) ? 1 : 0), 0)
+                + (noteEdit && action.type === 'edit_note_patch' ? 120 : 0);
             return { action, domain, score };
         })).filter(row => row.score > 0).sort((a, b) => b.score - a.score).slice(0, 12);
         const domains = bank.domains.map(domain => ({ ...domain, actions: ranked.filter(row => row.domain === domain).map(row => row.action) })).filter(domain => domain.actions.length);
@@ -1329,6 +1333,7 @@
             ...HARD_AGENT_RULES,
             'Propose changes only when requested, using a single fenced flow-actions block containing a JSON array of at most eight actions. Each action needs type and a short label. Use ONLY the schemas below. The user must review and Apply; never claim a proposal changed anything.',
             'Copy existing IDs from evidence. Never guess target IDs, note offsets, versionId or baseHash. Anchored note edits require exact before text, start/end offsets, noteId, versionId and baseHash; ask for the note if it is not fully available.',
+            'When asked to revise a supplied note and put it back, propose edit_note_patch for that exact note, with reviewed hunks. Do not claim it is saved before Apply. Recent chat turns are conversation evidence; never substitute unrelated workspace notes when asked what this conversation discussed.',
             'Prefer a higher-level workflow action to many atomic edits. For ordered dependent actions, give stable planActionId and dependsOn referencing only earlier actions in the same reply.',
             'Canvas/Slides operations require the active board/deck and stable object IDs. Create only supported text/shapes/charts; never invent image URLs or data URLs. Keep at most 24 operations in one board/deck action.',
             'Dates use YYYY-MM-DD, times HH:MM. Import assignments as one import_assignments action. Deterministic grade math and schedule conflicts must use Sutra engines, not guessed calculations.',
@@ -5357,8 +5362,27 @@
         }
     }
 
+    function isConversationHistoryQuestion(text) {
+        return /\b(?:this|our|the)\s+(?:chat|conversation)\b.{0,55}\b(?:about|discuss|talk|said|saying|history|summari[sz])|\b(?:summari[sz]e|recap|remember)\b.{0,45}\b(?:this|our|the)\s+(?:chat|conversation)\b/i.test(String(text || ''));
+    }
+
+    function resolveRequestScope(options) {
+        const scope = options.scope || options.conversationScope || {};
+        if (scope.type === 'note' || getChatMemoryMode() !== 'stateful') return scope;
+        // Older chats saved chip labels without IDs. Recover only an exact,
+        // unique canonical note; never use a model-generated source identity.
+        const turn = [...(options.conversation || [])].reverse().find(row => row && row.role === 'user' && row.contextTags && row.contextTags.length);
+        const labels = new Set((turn && turn.contextTags || []).filter(tag => tag.icon === 'fa-file-lines').map(tag => tag.label));
+        const b = bridge(), pages = b && Array.isArray(b.pages) ? b.pages : [];
+        const matches = pages.filter(page => page && labels.has(page.title) && !page.isLocked && !page.locked);
+        return matches.length === 1 ? { ...scope, type: 'note', noteId: String(matches[0].id) } : scope;
+    }
+
     function buildRequestEnrichment(userText, providerType, options = {}) {
         if (getPref('assistant.enabled', true) === false) return null;
+        const historyQuestion = isConversationHistoryQuestion(userText);
+        options = { ...options, conversationScope: resolveRequestScope(options) };
+        if (historyQuestion) options = { ...options, depth: 'minimal', includeSelection: false, disableInvestigation: true };
         lastUserPrompt = String(userText || '');
         if (shouldInvestigateWorkspace(userText, options)) {
             const baseline = buildRequestEnrichment(userText, providerType, Object.assign({}, options, { depth: 'minimal', includeSelection: false, disableInvestigation: true }));
@@ -5459,7 +5483,7 @@
                 course: ctx.course ? [{ id: ctx.course.id || ctx.course.name, kind: 'course', title: ctx.course.name, value: ctx.course }] : [],
                 dueWork: [].concat(ctx.tasks || [], ctx.homework || [], ctx.derived && ctx.derived.overdue || []).map(item => ({ id: item.id, kind: 'due-work', title: item.title || item.name, value: item })),
                 memories: (ctx.memory || []).map((text, index) => ({ id: memoryIds[index] || ('memory-' + index), kind: 'memory', title: 'Relevant saved memory', value: text })),
-                conversation: budgetedConversation.map((message, index) => ({ id: 'turn-' + index, kind: 'conversation', title: 'Recent conversation', value: message })),
+                conversation: budgetedConversation.map((message, index) => ({ id: 'turn-' + index, kind: 'conversation', title: 'Recent conversation', value: message, priority: 99 + index / 1000 })),
                 includeConversation: true
             });
             const attachmentTokens = getAttachments().reduce((sum, attachment) => sum + safety.estimateTokens(attachment.extractedText || '') + Math.ceil((Number(attachment.sizeBytes) || 0) / 4096), 0);
