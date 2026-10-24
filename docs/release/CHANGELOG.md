@@ -8,6 +8,8 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
   and unsupported-browser fallbacks; preserve the canonical apply/save path.
 - Refine theme motion into a stationary workspace with an organic color front
   spreading from the left, rather than translating the workspace snapshots.
+- Extend the approved straight theme reveal to custom-theme activation and
+  capture named preset choices before their existing application handlers.
 
 These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
 

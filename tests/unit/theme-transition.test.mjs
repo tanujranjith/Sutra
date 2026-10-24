@@ -4,14 +4,15 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../../src/ui/theme-transition.js', import.meta.url), 'utf8');
-function setup({ supported = true, reduced = false } = {}) {
-  let listener, snapshots = 0;
+function setup({ supported = true, reduced = false, themeKey = 'default' } = {}) {
+  let snapshots = 0;
+  const listeners = {};
   const applied = [], classes = new Set(), properties = new Map();
   const document = {
-    body: { classList: { contains: () => false } }, hidden: false,
+    body: { classList: { contains: () => false }, getAttribute: () => themeKey }, hidden: false,
     documentElement: { classList: { add: value => classes.add(value), remove: value => classes.delete(value) },
       style: { setProperty: (name, value) => properties.set(name, value), removeProperty: name => properties.delete(name) } },
-    addEventListener: (_name, callback) => { listener = callback; }
+    addEventListener() {}
   };
   if (supported) document.startViewTransition = callback => {
     snapshots++;
@@ -20,19 +21,37 @@ function setup({ supported = true, reduced = false } = {}) {
   };
   vm.runInNewContext(source, { document, window: {
     matchMedia: () => ({ matches: reduced }),
+    addEventListener: (name, callback) => { listeners[name] = callback; },
+    Event: class { constructor(type) { this.type = type; } },
     getComputedStyle: () => ({ getPropertyValue: () => applied.at(-1) === 'dark' ? '#101827' : '#faf9f6' })
   } });
-  function choice(name) {
+  function dispatch(type, control, key) {
+    const event = { button: 0, key, defaultPrevented: false, target: control,
+      preventDefault() { this.defaultPrevented = true; }, stopImmediatePropagation() {} };
+    listeners[type](event);
+    if (!event.defaultPrevented) applied.push(nameFor(control));
+  }
+  function nameFor(control) { return control.name || control.value; }
+  function choice(name, kind = 'preset') {
     const control = { isConnected: true, classList: { contains: () => false }, getAttribute: () => null };
-    control.click = () => {
-      const event = { button: 0, defaultPrevented: false, target: { closest: () => control },
-        preventDefault() { this.defaultPrevented = true; }, stopImmediatePropagation() {} };
-      listener(event);
-      if (!event.defaultPrevented) applied.push(name);
+    control.name = name;
+    control.closest = selector => {
+      if (selector.startsWith('[data-custom-theme-action]')) return kind === 'edit' ? control : null;
+      if (selector.includes('#customThemeGrid') && kind === 'custom') return control;
+      if (selector.includes('.preset-card[data-theme]') && kind === 'preset') return control;
+      if (selector.includes('#applyCustomThemeBtn') && kind === 'apply') return control;
+      return null;
     };
+    control.click = () => dispatch('click', control);
+    control.key = key => dispatch('keydown', control, key);
     return control;
   }
-  return { choice, applied, classes, properties, snapshots: () => snapshots };
+  function select(value) {
+    const control = { id: 'customThemeSelect', value, isConnected: true };
+    control.dispatchEvent = () => dispatch('change', control);
+    control.dispatchEvent();
+  }
+  return { choice, select, applied, classes, properties, snapshots: () => snapshots };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -57,4 +76,24 @@ test('rapid clicks finish on the latest chosen theme without replaying intermedi
   await settle();
   assert.deepEqual(app.applied, ['dark', 'ocean']);
   assert.equal(app.classes.size, 0);
+});
+
+test('custom cards, keyboard activation, Apply, and active-custom selection share the reveal', async () => {
+  for (const action of [app => app.choice('custom', 'custom').click(),
+    app => app.choice('custom', 'custom').key('Enter'),
+    app => app.choice('custom', 'custom').key(' '),
+    app => app.choice('custom', 'apply').click(), app => app.select('custom')]) {
+    const app = setup({ themeKey: 'custom' }); action(app); await settle();
+    assert.deepEqual(app.applied, ['custom']); assert.equal(app.snapshots(), 1);
+  }
+});
+test('editing custom themes and staging a custom selection do not animate', () => {
+  const app = setup(); app.choice('edit', 'edit').click(); app.select('staged');
+  assert.deepEqual(app.applied, ['edit', 'staged']); assert.equal(app.snapshots(), 0);
+});
+test('Dune, Blueprint, Paper, and Arcade use the same preset capture path', async () => {
+  for (const name of ['dune', 'blueprint', 'paper', 'arcade']) {
+    const app = setup(); app.choice(name).click(); await settle();
+    assert.deepEqual(app.applied, [name]); assert.equal(app.snapshots(), 1);
+  }
 });

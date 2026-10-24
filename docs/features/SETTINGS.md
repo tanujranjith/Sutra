@@ -12,6 +12,10 @@ contain the final palette. A temporary theme-colored backdrop covers transparent
 areas; both overrides are removed when the reveal finishes or fails.
 Background CSS animations pause during the reveal, then resume, reducing
 competing rendering work. The reveal uses no curved masks or animated paths.
+This includes Dune, Blueprint, Paper, Arcade, and saved custom-theme cards
+(click, Enter, or Space), their Apply button, and custom dropdown changes when
+a custom theme is already active. Choosing a custom theme for later application
+and editing/duplicating/deleting themes retain their ordinary nonanimated flow.
 
 Settings uses a compact, integrated category rail on desktop, with the title and
 search above grouped Personalization, Productivity, and Services links. All 16
