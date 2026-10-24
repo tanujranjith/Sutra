@@ -1129,6 +1129,8 @@ The normal sidebar composer has a full-width text row with attachment,
 dictation (when available), and Send controls underneath. Opening the full
 Assistant tab hides the sidebar and releases its reserved workspace width;
 the existing conversation remains intact.
+Its width reservation is disabled in that view as well, including if an old
+panel-open class remains while navigation settles.
 
 Workspace retrieval retains the visible Notes target for indirect questions
 such as “do you like my supplement?” and for explicitly scoped note chats.
@@ -1141,6 +1143,10 @@ store, with review before Apply. Requests to add upcoming classroom tests also
 expose that schema; they are not limited to creating a cram session. Several
 distinct tasks can be proposed separately, and dates still require a clear
 interpretation from the current date or a clarification.
+In Stateful chats, short clarifications such as “separate” and “this Tuesday”
+retain the schemas from the recent user request. Only user turns retained in
+the request budget supply that intent; assistant capability claims do not.
+Cancel stops this carryover, and Stateless chats do not use previous turns.
 
 In Modern Notes, writing commands preview exact changed spans without saving
 suggestions into the document. The existing Sutra logo with small eyes glides

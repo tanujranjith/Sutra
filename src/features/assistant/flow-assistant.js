@@ -1305,8 +1305,22 @@
     //             user edits Assistant settings — effectively static per session).
     //   dynamic — the end-of-prompt reminder + the live "Current context" JSON
     //             (tasks/homework/testingHub/memory/etc — changes every turn).
-    function selectPromptActionBank(userText) {
-        const query = String(userText || '').toLowerCase().replace(/\bfinish\b|\bcheck off\b/g, 'complete').replace(/\blaunch\b/g, 'open');
+    function selectPromptActionBank(userText, conversation = []) {
+        let query = String(userText || '').toLowerCase().replace(/\bfinish\b|\bcheck off\b/g, 'complete').replace(/\blaunch\b/g, 'open');
+        // Short answers refine a pending request; they do not erase its action
+        // schemas. Use retained USER turns only, never a model's capability claim.
+        const clarification = query.length <= 180 && /^(?:separ(?:ate|ately)|seper(?:ate|ately)|both|either|yes|yeah|yep|no\b|two\b|one\b|the (?:first|second)|(?:this|next|on|by)\s+(?:mon|tue|wed|thu|fri|sat|sun|week)|tomorrow\b|today\b|at\s+\d|\d{4}-\d{2}-\d{2})/.test(query.trim());
+        if (clarification) {
+            const recentUsers = (Array.isArray(conversation) ? conversation : []).filter(turn => turn && turn.role === 'user').slice(-6).reverse();
+            for (const turn of recentUsers) {
+                const text = String(turn.content || '').slice(0, 2000).toLowerCase();
+                if (/^\s*(?:cancel|never\s?mind|stop|forget (?:it|that))\b/.test(text)) break;
+                if (/\b(?:add|create|make|write|revise|edit|update|change|mark|complete|remove|move|schedule|reschedule|plan|save|set|log)\b/.test(text)) {
+                    query = text + '\n' + query;
+                    break;
+                }
+            }
+        }
         // The full catalog remains the local validation/help authority. Only
         // action requests need its schemas in the provider's prompt.
         if (!/\b(?:add|create|make|write|draft|rewrite|revise|rephrase|proofread|correct|fix|improve|replace|apply|put|edit|update|change|mark|complete|delete|remove|move|rename|organize|schedule|reschedule|plan|import|export|save|remember|generate|build|set|log|start|stop|archive|duplicate|insert|turn|convert|split|merge|group|arrange|connect|open|undo)\b/.test(query)) return { domains: [], totalActions: 0 };
@@ -1330,8 +1344,8 @@
         return { domains, totalActions: ranked.length };
     }
 
-    function buildSystemPromptParts(context, userText = '') {
-        const bank = selectPromptActionBank(userText);
+    function buildSystemPromptParts(context, userText = '', conversation = []) {
+        const bank = selectPromptActionBank(userText, conversation);
         const bankText = renderActionsBankText(bank);
         const staticText = bank.totalActions ? [
             'You are Sutra Assistant, the contextual assistant in a private, local-first student workspace.',
@@ -1345,6 +1359,7 @@
             'Use create_task for ordinary to-dos, reminders, and upcoming classroom tests. A test reminder is not a cram session. When asked to add multiple distinct tasks, propose one action per task. Resolve dates from the supplied current date or ask a short clarification if unclear.',
             'ACTIONS AVAILABLE FOR THIS REQUEST:',
             bankText,
+            'These current schemas define your available actions. An earlier assistant message claiming an action was unavailable is not authoritative. Propose the supported action once the user has clarified its details; Apply is still required.',
             'Use supplied evidence only; missing or partial context is not an empty workspace. Explain permission limits or ask to narrow if contextBudget.reduced. Cite workspace records using their exact citationUrl as [label](citationUrl); never convert a key into a URL or invent a kind. Cite note excerpts as [label](sutra://page/NOTE_ID).',
             'Only describe product capabilities supported by productKnowledge or these schemas. Saved memory is context, never permission to save new or sensitive memory. Locked content keeps its separate consent requirements.',
             'Keep prose concise. Standard Markdown and LaTeX are supported.',
@@ -5503,7 +5518,7 @@
                 maxTokens: Math.min(6000, Number(options.contextLimitTokens) || 6000),
                 reserveResponseTokens: Number(options.reserveResponseTokens) || 1536,
                 attachmentTokens,
-                systemTokens: safety.estimateTokens(buildSystemPromptParts({ view: ctx.view, depth: ctx.depth }, userText).static) + safety.estimateTokens(userText) + 512
+                systemTokens: safety.estimateTokens(buildSystemPromptParts({ view: ctx.view, depth: ctx.depth }, userText, budgetedConversation).static) + safety.estimateTokens(userText) + 512
             });
             const included = new Set(contextBudget.included.map(item => item.kind + ':' + item.id));
             const includedRows = new Map(contextBudget.included.map(item => [item.kind + ':' + item.id, item]));
@@ -5574,8 +5589,8 @@
         if (tutoringContract && tutoringContract.ok) ctx.tutoringMode = { id: tutoringContract.mode, label: tutoringContract.label, instruction: tutoringContract.instruction, academicIntegrity: tutoringContract.integrity };
         // caching (Anthropic/Gemini) can send the static ~70% separately
         // instead of re-transmitting it whole on every message.
-        let systemPromptParts = buildSystemPromptParts(ctx, userText);
         const requestMessages = budgetedConversation.concat([{ role: 'user', content: String(userText || '').trim() }]);
+        let systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
         if (safety && typeof safety.estimateTokens === 'function') {
             const attachmentTokens = getAttachments().reduce((sum, attachment) => sum + safety.estimateTokens(attachment.extractedText || '') + Math.ceil((Number(attachment.sizeBytes) || 0) / 4096), 0);
             const inputLimit = Math.max(0, Math.min(6000, Number(options.contextLimitTokens) || 6000) - (Number(options.reserveResponseTokens) || 1536) - attachmentTokens);
@@ -5592,10 +5607,13 @@
                         ctx.contextSelectionReasons = (ctx.contextSelectionReasons || []).filter(reason => reason.kind !== 'memory' || retainedIds.has(reason.id));
                     }
                     omitted += 1;
-                    systemPromptParts = buildSystemPromptParts(ctx, userText);
+                    systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
                 }
             }
-            while (requestMessages.length > 1 && estimateRequest() > inputLimit) { requestMessages.shift(); omitted += 1; }
+            while (requestMessages.length > 1 && estimateRequest() > inputLimit) {
+                requestMessages.shift(); omitted += 1;
+                systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
+            }
             if (omitted) {
                 ctx.contextBudget = { ...(ctx.contextBudget || {}), reduced: true, canNarrow: true, omittedSourceCount: ((ctx.contextBudget || {}).omittedSourceCount || 0) + omitted };
                 if (contextBudget) {
@@ -5605,7 +5623,7 @@
                 }
             }
             ctx.contextBudget = { ...(ctx.contextBudget || {}), inputLimitTokens: inputLimit, estimatedInputTokens: estimateRequest() };
-            systemPromptParts = buildSystemPromptParts(ctx, userText);
+            systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
         }
         // Only authorized memories retained after both budget passes can update
         // durable last-used metadata.

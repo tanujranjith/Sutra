@@ -58,6 +58,9 @@ test('the full Assistant tab hides the docked sidebar and releases its space', a
   await expect(page.locator('#view-assistantview')).toHaveClass(/active/);
   await expect(page.locator('#chatbotPanel')).toBeHidden();
   await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
+  await expect.poll(() => page.locator('#view-assistantview').evaluate(view => {
+    return Math.abs(view.getBoundingClientRect().right - document.getElementById('mainContent').getBoundingClientRect().right);
+  })).toBeLessThan(2);
 });
 
 test('inline correction decorations never enter saved note content and clear on Cancel', async ({page}) => {

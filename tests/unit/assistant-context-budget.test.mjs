@@ -192,6 +192,26 @@ test('natural to-do and classroom test requests expose the real task-creation sc
     'can you add that i have a math and physics test on tesuday').static.includes('create_task:'));
 });
 
+test('task schemas survive short clarifications using retained user history only', () => {
+  const original = { role: 'user', content: 'can you add that i have a math and physics test on tesuday in my todos' };
+  const history = [original,
+    { role: 'assistant', content: 'Separate tests?' },
+    { role: 'user', content: 'seperate' },
+    { role: 'assistant', content: 'No todo action is available. Which Tuesday?' }
+  ];
+  for (const answer of ['separate', 'seperate', 'both', 'this tuesday', '2026-10-27']) {
+    assert.ok(selectPromptActionBank(answer, history).domains.flatMap(domain => domain.actions).some(action => action.type === 'create_task'), answer);
+  }
+  assert.equal(selectPromptActionBank('this tuesday').totalActions, 0, 'Stateless mode has no previous request');
+  assert.equal(selectPromptActionBank('this tuesday', [{ role: 'assistant', content: original.content }]).totalActions, 0);
+  assert.equal(selectPromptActionBank('this tuesday', [original, { role: 'user', content: 'cancel that' }]).totalActions, 0);
+  assert.equal(selectPromptActionBank('thanks', history).totalActions, 0);
+  const enrichment = createEnrichment({ chatMemoryMode: 'stateful', conversationMessages: history })('this tuesday', 'openai');
+  assert.ok(enrichment.systemPromptParts.static.includes('create_task:'));
+  const stateless = createEnrichment({ chatMemoryMode: 'stateless', conversationMessages: history })('this tuesday', 'openai');
+  assert.ok(!stateless.systemPromptParts.static.includes('create_task:'));
+});
+
 test('ordinary note retrieval excludes Help & Docs but an explicit Help & Docs request can retrieve it', () => {
   const pages = [
     {

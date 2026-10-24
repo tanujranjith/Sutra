@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261024-sidebar3",
-    "hash": "513e3ea93ec4cea1"
+    "stamp": "20261024-sidebar5",
+    "hash": "633411fa7cf9d4ab"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -196,12 +196,12 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/assistant-sidebar.js": {
-    "stamp": "20261024-sidebar3",
-    "hash": "f8141423136686ba"
+    "stamp": "20261024-sidebar5",
+    "hash": "a54df3d09f16d776"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261024-sidebar3",
-    "hash": "c4abd4eae4952971"
+    "stamp": "20261024-sidebar5",
+    "hash": "7a7b3168478e6798"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -572,8 +572,8 @@
     "hash": "471e4b2f094dc3c4"
   },
   "styles/features/assistant-sidebar.css": {
-    "stamp": "20261024-sidebar4",
-    "hash": "60405ec35254fd87"
+    "stamp": "20261024-sidebar5",
+    "hash": "7869aafa31924e95"
   },
   "styles/features/backup-progress.css": {
     "stamp": "20261001-backup-progress1",

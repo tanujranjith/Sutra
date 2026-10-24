@@ -132,7 +132,7 @@
         });
         return function () { controller.abort(); if (previewController === controller) stopPreview(); };
     }
-    function isOpen() { return !!(panel && panel.style.display === 'flex' && !panel.classList.contains('fullscreen') && global.getComputedStyle(panel).display !== 'none'); }
+    function isOpen() { return !!(panel && doc.body.dataset.view !== 'assistantview' && !doc.querySelector('#view-assistantview.active') && panel.style.display === 'flex' && !panel.classList.contains('fullscreen') && global.getComputedStyle(panel).display !== 'none'); }
     function sync() {
         if (!panel) return;
         var open = isOpen(), nav = doc.querySelector('.top-nav');
@@ -164,6 +164,7 @@
         var context = doc.createElement('div'); context.id = 'sutraSidebarContext'; context.className = 'sutra-sidebar-context';
         var header = panel.querySelector('.chatbot-header'); header.after(context);
         new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['style', 'class'] });
+        new MutationObserver(sync).observe(doc.body, { attributes: true, attributeFilter: ['data-view'] });
         var nav = doc.querySelector('.top-nav'); if (nav) new ResizeObserver(sync).observe(nav);
         global.addEventListener('resize', sync);
         ['noteflow:view-changed', 'sutra:note-page-loaded'].forEach(function (event) { global.addEventListener(event, sync); });
