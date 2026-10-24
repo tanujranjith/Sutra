@@ -13,6 +13,8 @@ These changes are on `codex/student-workflow-batch`, which has been uploaded for
   even punctuation corrections from the Assistant header to the original word.
   Retain visible note context for indirect writing requests and expose existing
   to-do creation proposals for natural classroom-test/reminder requests.
+- Correct sidebar grid sizing so the message textarea spans its full width;
+  hide the docked sidebar while the full Assistant tab is active.
 - Default new Assistant workspaces to Everyday: bounded workspace retrieval,
   recent conversation context, and reviewed changes with Apply and Undo.
   Add Private and Advanced controls without upgrading existing restrictions;

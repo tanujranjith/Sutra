@@ -1125,6 +1125,10 @@ The sidebar keeps tutoring modes and Workspace pulse collapsed until opened,
 and uses a compact provider/thinking/context footer. Writing commands have a
 visible **Send** button; Enter sends the instruction and Shift+Enter adds a
 line. Their source disclosure remains available above the review.
+The normal sidebar composer has a full-width text row with attachment,
+dictation (when available), and Send controls underneath. Opening the full
+Assistant tab hides the sidebar and releases its reserved workspace width;
+the existing conversation remains intact.
 
 Workspace retrieval retains the visible Notes target for indirect questions
 such as “do you like my supplement?” and for explicitly scoped note chats.

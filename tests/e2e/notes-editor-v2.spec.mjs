@@ -30,6 +30,15 @@ test('Assistant sidebar reserves editor space and moves workspace controls with 
     const view=document.querySelector('#view-notes').getBoundingClientRect();
     return Math.abs(panel.right-innerWidth)<2 && view.right<=panel.left+2;
   })).toBe(true);
+  const composer = page.locator('#chatbotPanel .chatbot-input');
+  const input = page.locator('#chatInput');
+  await expect.poll(() => input.evaluate(element => {
+    const field = element.getBoundingClientRect(), parent = element.parentElement.getBoundingClientRect();
+    return field.width > parent.width * .8 && field.left >= parent.left && field.right <= parent.right;
+  })).toBe(true);
+  await input.fill('This message should use the full composer width.');
+  await expect(input).toHaveValue('This message should use the full composer width.');
+  await expect(composer).toBeVisible();
   for(const id of ['feedbackFabBtn','focusModeQuickToggle','storageOptions']) {
     await expect.poll(()=>page.evaluate(id=>{
       const control=document.getElementById(id),panel=document.querySelector('#chatbotPanel').getBoundingClientRect();
@@ -39,6 +48,16 @@ test('Assistant sidebar reserves editor space and moves workspace controls with 
   await page.locator('#chatInput').press('Escape');
   await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
   await expect(page.locator('#chatbotPanel')).toBeHidden();
+});
+
+test('the full Assistant tab hides the docked sidebar and releases its space', async ({ page }) => {
+  await openApp(page); await openNotesView(page); await stageWritingProvider(page);
+  await page.locator('#chatbotBtn').click();
+  await expect(page.locator('#chatbotPanel')).toBeVisible();
+  await page.locator('#tabAssistantView').click();
+  await expect(page.locator('#view-assistantview')).toHaveClass(/active/);
+  await expect(page.locator('#chatbotPanel')).toBeHidden();
+  await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
 });
 
 test('inline correction decorations never enter saved note content and clear on Cancel', async ({page}) => {
