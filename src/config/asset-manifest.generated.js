@@ -356,7 +356,7 @@
     "./styles/features/startup-intro.css",
     "./styles/features/sutra-cloud.css?v=20261003-create-review5",
     "./styles/features/task-completion-effects.css?v=20261001-task-dust-hold3",
-    "./styles/features/theme-transition.css?v=20261024-theme-reveal1",
+    "./styles/features/theme-transition.css?v=20261024-theme-reveal2",
     "./styles/features/workspace-lock.css?v=20261017-pin-fields2",
     "./styles/features/workspace-startup.css?v=20260925-hydration1",
     "./styles/legacy/app-shell-base.css?v=20260616-cssextract1",

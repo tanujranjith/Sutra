@@ -1,7 +1,7 @@
 # Settings
 
-Explicit preset and light/dark theme choices use a 900ms organic reveal: new
-colors spread from the left along a flowing, uneven boundary. Both workspace
+Explicit preset and light/dark theme choices use a 420ms rounded reveal: new
+colors spread from the left through a single expanding circular clip. Both workspace
 snapshots stay stationary; text, panels, and controls do not slide. The animation wraps
 the existing theme handlers; it adds no preferences, storage, or network use.
 Reduced/off motion, forced colors, background tabs, and browsers without View
