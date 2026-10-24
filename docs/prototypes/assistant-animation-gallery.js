@@ -24,6 +24,7 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   ];
   const labels = {grammar:'/grammar',spelling:'/spelling',rephrase:'/rephrase',writing:'AI writing help',general:'AI general help'};
   let base = [...source], committed = null, undoState = null, suggestions = [], controller = null, paused = false, lastTarget = null, returnTimer = null;
+  let travel = null, travelMs = 0, reactionTimer = null;
   const reduced = () => $('reduce').checked || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const el = (tag, className, text) => { const e = document.createElement(tag); e.className = className || ''; if (text != null) e.textContent = text; return e; };
   const lines = () => [...$('passage').children];
@@ -31,6 +32,28 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   function activity(step, text) {
     document.querySelectorAll('[data-step]').forEach(e => e.classList.toggle('active',e.dataset.step === step));
     $('presence').textContent = text; $('line-status').textContent = text; announce(text);
+    mood(step==='reading'?'reading':step==='editing'?'writing':step==='review'?'pleased':'idle');
+  }
+  function mood(name) {
+    const replay=name==='pleased'&&$('character').classList.contains('is-pleased');
+    $('character').classList.remove('is-reading','is-writing','is-pleased','is-confused');
+    if(replay)void $('character').offsetWidth;
+    if(name!=='idle')$('character').classList.add('is-'+name);
+  }
+  function sparkle() {
+    if(reduced())return;
+    const character=$('character');character.querySelectorAll('.reaction-spark').forEach(e=>e.remove());
+    for(let i=0;i<3;i++) { const star=el('span','reaction-spark','✦');star.style.setProperty('--spark-index',i);character.append(star);star.addEventListener('animationend',()=>star.remove(),{once:true}); }
+  }
+  function holdTravel() {
+    if(!travel)return;
+    const pose=getComputedStyle($('character')).transform;
+    travel.cancel();travel=null;$('character').style.transform=pose;
+  }
+  function syncTravel() {
+    if(!travel)return;
+    if(reduced()){travel.finish();return;}
+    travel.playbackRate=Number($('speed').value);if(paused)travel.pause();else travel.play();
   }
   function message(role, text, error = false) {
     const empty = $('feed').querySelector('.empty-chat'); if (empty) empty.remove();
@@ -46,17 +69,34 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
     $('pause').textContent='Pause'; paused=false; document.body.classList.remove('is-paused');
   }
   function moveTo(target, label, docked = false) {
-    clearTimeout(returnTimer); lastTarget = target;
+    clearTimeout(returnTimer);
     const box=$('workspace').getBoundingClientRect(), rect=target.getBoundingClientRect();
-    const x=docked ? rect.left-box.left : Math.max(5,rect.left-box.left-43);
+    const x=docked ? rect.left-box.left-3 : Math.max(3,rect.left-box.left-57);
     const y=docked ? rect.top-box.top-7 : rect.top-box.top+5;
-    $('character').style.transform=`translate(${x}px,${y}px) scale(${docked ? '.75' : '1'})`;
-    $('character').classList.add('present'); $('character').classList.remove('is-docked');
+    const character=$('character'), scale=docked ? .75 : 1, pose=(px,py,sx,sy=sx,rotation=0)=>`translate(${px}px,${py}px) rotate(${rotation}deg) scale(${sx},${sy})`;
+    const matrix=new DOMMatrixReadOnly(getComputedStyle(character).transform==='none'?undefined:getComputedStyle(character).transform);
+    const start=lastTarget?{x:matrix.e,y:matrix.f,s:Math.hypot(matrix.a,matrix.b)}:{x,y,s:.35};
+    holdTravel();lastTarget=target;character.style.transform=pose(x,y,scale);
+    character.classList.add('present');character.classList.remove('is-docked');
+    const distance=Math.hypot(x-start.x,y-start.y), direction=Math.sign(x-start.x)||1;
+    travelMs=reduced()?0:Math.min(1100,560+distance*.5);
+    if(travelMs) {
+      const lift=Math.min(65,14+distance*.08);
+      const animation=character.animate([
+        {transform:pose(start.x,start.y,start.s),offset:0},
+        {transform:pose(start.x-direction*5,start.y+3,start.s*1.09,start.s*.88,-direction*5),offset:.12},
+        {transform:pose(start.x+(x-start.x)*.55,start.y+(y-start.y)*.48-lift,scale*.97,scale*1.03,direction*6),offset:.55},
+        {transform:pose(x+direction*4,y+2,scale*1.04,scale*.95,-direction*2),offset:.84},
+        {transform:pose(x,y,scale),offset:1}
+      ],{duration:travelMs,easing:'cubic-bezier(.25,.65,.3,1)'});
+      travel=animation;syncTravel();animation.onfinish=()=>{if(travel===animation)travel=null;};
+    }
     $('character-label').textContent=label;
+    return travelMs;
   }
   function park() {
     $('character').classList.remove('is-writing'); moveTo($('dock'),'Back in chat',true);
-    returnTimer=setTimeout(() => { if(lastTarget===$('dock')) $('character').classList.add('is-docked'); },reduced()?0:700);
+    returnTimer=setTimeout(() => { if(lastTarget===$('dock')) $('character').classList.add('is-docked'); },travelMs+40);
   }
   function wait(ms, signal) {
     return new Promise((resolve,reject) => {
@@ -72,7 +112,7 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   function typeInto(target, text, signal) {
     if(reduced()) { target.textContent=text; return wait(80,signal); }
     return new Promise((resolve,reject)=>{
-      let last=performance.now(),elapsed=0; const duration=1000+text.length*4;
+      let last=performance.now(),elapsed=0; const duration=380+Math.min(720,text.length*24);
       function frame(now) {
         if(signal.aborted){reject(new DOMException('Stopped','AbortError'));return;}
         if(!paused)elapsed+=(now-last)*Number($('speed').value);
@@ -82,8 +122,37 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
       requestAnimationFrame(frame);
     });
   }
+  // Keep matching words and whitespace outside the edited spans.
+  function wordChanges(before,after) {
+    const tokens=text=>text.match(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu)||[];
+    const a=tokens(before),b=tokens(after),table=Array.from({length:a.length+1},()=>new Uint16Array(b.length+1));
+    for(let i=a.length-1;i>=0;i--)for(let j=b.length-1;j>=0;j--)table[i][j]=a[i]===b[j]?table[i+1][j+1]+1:Math.max(table[i+1][j],table[i][j+1]);
+    const parts=[];let i=0,j=0,change=null;
+    const flush=()=>{if(change){parts.push(change);change=null;}};
+    while(i<a.length||j<b.length) {
+      if(i<a.length&&j<b.length&&a[i]===b[j]){flush();parts.push({same:a[i++]});j++;}
+      else {if(!change)change={before:'',after:''};if(i<a.length&&(j===b.length||table[i+1][j]>=table[i][j+1]))change.before+=a[i++];else change.after+=b[j++];}
+    }
+    flush();return parts;
+  }
+  async function suggestInline(line,before,after,signal) {
+    const edits=[];line.replaceChildren();
+    for(const part of wordChanges(before,after)) {
+      if(part.same!==undefined){line.append(document.createTextNode(part.same));continue;}
+      const wrapper=el('span','inline-change'),original=el('span','original-word',part.before);
+      wrapper.append(original);line.append(wrapper);edits.push({part,wrapper,original});
+    }
+    for(const {part,wrapper,original} of edits) {
+      wrapper.classList.add('is-active');const old=el('del','',part.before),next=el('ins'),caret=el('span','typing-caret');
+      original.replaceWith(old);wrapper.append(next,caret);
+      await typeInto(next,part.after,signal);caret.remove();wrapper.classList.remove('is-active');
+    }
+    return edits.length;
+  }
+  const spellingPass=text=>text.replace(/\bdetials\b/g,'details').replace(/\bseperately\b/g,'separately').replace(/\bquestons\b/g,'questions').replace(/\bseperate\b/g,'separate');
+  const grammarPass=text=>text.replace(/\brobots have\b/g,'robots has').replace(/\bdetails that makes\b/g,'details that make').replace(/\bquestions is\b/g,'questions are').replace(/\bidea seperate\b/g,'idea separately');
   function abort() {
-    if(controller) controller.abort(); controller=null; busy(false);
+    if(controller) controller.abort(); controller=null;clearTimeout(reactionTimer);holdTravel();busy(false);
     $('feed').querySelectorAll('.thinking').forEach(e=>e.remove());
     $('character').classList.remove('is-writing');
   }
@@ -94,7 +163,7 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
     abort(); const own = new AbortController(); controller=own; const signal=own.signal;
     const kind=$('command').value;
     base=committed ? [...committed] : (kind==='spelling' ? corrected.map(s=>s.replace('separately','seperately').replace('questions','questons').replace('details','detials')) : [...source]);
-    const output=follow==='shorter'?shorter : follow==='voice'?corrected : kind==='rephrase'||kind==='writing'?rephrased : corrected;
+    const output=follow==='shorter'?shorter : follow==='voice'?corrected : kind==='rephrase'||kind==='writing'?rephrased : base.map(kind==='spelling'?spellingPass:grammarPass);
     suggestions=[]; $('review').hidden=true; $('undo').hidden=true; $('doc-mode').textContent='Reading your passage';
     renderNote(base); busy(true); message('user',follow==='shorter'?'Make it shorter.':follow==='voice'?'Keep my voice.':labels[kind]);
     const thinking=el('div','thinking','Finding the right lines '); thinking.append(el('i'),el('i'),el('i')); $('feed').append(thinking);
@@ -103,19 +172,19 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
       await wait(850,signal); thinking.remove();
       message('assistant',kind==='general'?'I’ll read alongside you and point out what could be clearer. I won’t change your text.':'I’ll work through these three passages. You’ll see each suggestion on the page before accepting it.');
       for(let i=0;i<base.length;i++) {
-        const line=lines()[i]; line.classList.add('reading'); moveTo(line,'Reading '+(i+1)); activity('reading','Reading passage '+(i+1)+' of 3');
-        await wait(950,signal);
+        const line=lines()[i]; line.classList.add('reading'); const flight=moveTo(line,'Reading '+(i+1)); activity('reading','Reading passage '+(i+1)+' of 3');
+        await wait(flight+450,signal);
         if(kind==='general') { await wait(400,signal); line.classList.remove('reading'); continue; }
         $('doc-mode').textContent='Live suggestions · not accepted'; activity('editing','Suggesting an edit in passage '+(i+1));
         $('character').classList.add('is-writing'); $('character-label').textContent='Editing '+(i+1); line.classList.add('editing');
-        const before=el('del','',base[i]), after=el('ins'), caret=el('span','typing-caret'); line.replaceChildren(before,after,caret);
-        await typeInto(after,output[i],signal);
-        caret.remove(); suggestions[i]=output[i]; line.classList.remove('reading','editing'); line.classList.add('suggested');
-        $('character').classList.remove('is-writing'); await wait(350,signal);
+        const changes=await suggestInline(line,base[i],output[i],signal);
+        if(changes)suggestions[i]=output[i];line.classList.remove('reading','editing');line.classList.toggle('suggested',changes>0);
+        mood('pleased');sparkle();await wait(420,signal);
       }
-      activity('review',kind==='general'?'Ready to talk about your note':'Three suggestions ready for review');
+      const changed=suggestions.filter(Boolean).length;
+      activity('review',kind==='general'?'Ready to talk about your note':changed?changed+' passages have suggestions to review':'No corrections needed');
       if(kind==='general') { $('doc-mode').textContent='Read only · no edits'; message('assistant','Your reflection connects making, testing, and teamwork. Add one concrete moment from a project to make it more memorable. Want help shaping that example?'); park(); }
-      else { message('assistant','Here’s the pass. Original wording is crossed out; suggestions are green. Accept them, discard them, or ask me to try a different approach.'); $('character-label').textContent='Your call'; prepareReview(); }
+      else { message('assistant',changed?'Only the changed words are marked. Everything around them stays in place. Accept the suggestions, discard them, or ask me to try a different approach.':'No corrections are needed in this demo passage. The wording is unchanged.'); $('character-label').textContent=changed?'Your call':'All good';prepareReview();sparkle(); }
       controller=null; busy(false);
     } catch(error) {
       if(error.name!=='AbortError') { message('assistant','Preview interrupted. Reset the demo to try again.',true); }
@@ -123,14 +192,14 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
     }
   }
   function reset() {
-    abort(); clearTimeout(returnTimer); committed=null; undoState=null; suggestions=[]; base=[...source]; renderNote(base);
+    abort(); clearTimeout(returnTimer);clearTimeout(reactionTimer);committed=null; undoState=null; suggestions=[]; base=[...source]; renderNote(base);
     $('review').hidden=true; $('undo').hidden=true; $('doc-mode').textContent='Original note';
     $('feed').replaceChildren(); const empty=el('div','empty-chat'); empty.append(el('span','empty-star','✦'),el('h3','','Let’s work on this together.'),el('p','','Your command starts the conversation. I’ll show my work right on the page.')); $('feed').append(empty);
-    $('character').className='co-editor is-docked'; lastTarget=null; $('chat-input').value=''; activity('ready','Choose a command to get started.'); $('presence').textContent='Here when you need me';
+    $('character').className='co-editor is-docked'; lastTarget=null; $('chat-input').value=''; activity('ready','Choose a command to get started.'); $('presence').textContent='Here when you need me';park();
   }
   $('run').onclick=()=>play(); $('reset').onclick=reset;
   $('command').onchange=()=>{committed=null;undoState=null;suggestions=[];base=[...source];renderNote(base);prepareReview();$('undo').hidden=true;activity('ready','Ready for '+labels[$('command').value]);park();};
-  $('pause').onclick=()=>{paused=!paused;$('pause').textContent=paused?'Resume':'Pause';document.body.classList.toggle('is-paused',paused);$('presence').textContent=paused?'Paused · take your time':'Working alongside you';};
+  $('pause').onclick=()=>{paused=!paused;syncTravel();$('pause').textContent=paused?'Resume':'Pause';document.body.classList.toggle('is-paused',paused);$('presence').textContent=paused?'Paused · take your time':'Working alongside you';};
   $('stop').onclick=()=>{abort();suggestions=[];renderNote(base);prepareReview();activity('ready','Stopped · original wording preserved');message('assistant','Stopped. I removed the unaccepted preview. Your original wording is unchanged.');park();};
   $('accept').onclick=()=>{undoState={base:[...base],committed:committed&&[...committed]};committed=base.map((text,i)=>suggestions[i]||text);renderNote(committed);lines().forEach(e=>e.classList.add('accepted-line'));suggestions=[];$('review').hidden=true;$('undo').hidden=false;$('doc-mode').textContent='Accepted in demo';activity('review','Suggestions accepted · Undo is available');message('assistant','Accepted in this demo. You can undo this pass at any time.');park();};
   $('discard').onclick=()=>{suggestions=[];renderNote(base);prepareReview();$('undo').hidden=!committed;activity('ready','Suggestions discarded · original wording preserved');message('assistant','Discarded. Let’s try a different approach whenever you’re ready.');park();};
@@ -143,10 +212,17 @@ const currentMotion = [{"name":"asstFloatA","group":"Full Assistant","file":"sty
   }
   document.querySelectorAll('[data-follow]').forEach(b=>b.onclick=()=>follow(b.textContent,b.dataset.follow));
   $('chat-form').onsubmit=e=>{e.preventDefault();const text=$('chat-input').value.trim();if(!text)return;$('chat-input').value='';follow(text);};
-  $('error-demo').onclick=()=>{abort();suggestions=[];renderNote(base);prepareReview();activity('ready','Connection interrupted · original note is safe');message('assistant','Connection interrupted. Your original note is safe; no suggestions were accepted. Run the preview to retry.',true);moveTo($('dock'),'Try again',true);};
+  $('error-demo').onclick=()=>{abort();suggestions=[];renderNote(base);prepareReview();activity('ready','Connection interrupted · original note is safe');message('assistant','Connection interrupted. Your original note is safe; no suggestions were accepted. Run the preview to retry.',true);moveTo($('dock'),'Try again',true);mood('confused');};
+  function react(label) {
+    clearTimeout(reactionTimer);if(!controller)park();mood('pleased');$('character-label').textContent=label;sparkle();
+    reactionTimer=setTimeout(()=>{const step=document.querySelector('[data-step].active')?.dataset.step;mood(step==='editing'?'writing':step==='reading'?'reading':step==='review'?'pleased':'idle');},1300);
+  }
+  $('hello-demo').onclick=()=>react('Hey there!');$('aha-demo').onclick=()=>react('Aha!');
   $('return-demo').onclick=()=>{if(controller){$('stop').click();}else park();};
   $('theme').onclick=()=>{const light=document.body.classList.toggle('light');$('theme').textContent=light?'Dark theme':'Light theme';};
-  $('reduce').onchange=()=>document.body.classList.toggle('reduce',$('reduce').checked);
+  $('reduce').onchange=()=>{document.body.classList.toggle('reduce',$('reduce').checked);syncTravel();};
+  $('speed').onchange=syncTravel;
+  matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',syncTravel);
   addEventListener('resize',()=>{if(lastTarget&&lastTarget.isConnected)moveTo(lastTarget,$('character-label').textContent,lastTarget===$('dock'));});
 
   function renderLibrary() {

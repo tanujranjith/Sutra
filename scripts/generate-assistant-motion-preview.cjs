@@ -14,7 +14,7 @@ for (const [group,file] of specs) {
 fs.mkdirSync('docs/prototypes',{recursive:true});
 for (const ext of ['html','css','js']) {
   let output=fs.readFileSync('scripts/templates/assistant-motion/gallery.'+ext,'utf8');
-  if(ext==='html')output=output.replace('href="gallery.css"','href="assistant-animation-gallery.css"').replace('src="gallery.js"','src="assistant-animation-gallery.js"');
+  if(ext==='html')output=output.replace('href="gallery.css"','href="assistant-animation-gallery.css"').replace('src="gallery.js"','src="assistant-animation-gallery.js"').replaceAll('src="../../../assets/','src="../../assets/');
   if(ext==='css')output+='\n/* Existing Assistant definitions, unchanged. */\n'+rows.map(r=>r.css).join('\n');
   if(ext==='js')output='const currentMotion = '+JSON.stringify(rows).replace(/</g,'\\u003c')+';\n'+output;
   const target='docs/prototypes/assistant-animation-gallery.'+ext;

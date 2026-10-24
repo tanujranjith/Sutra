@@ -1129,6 +1129,26 @@ accept/discard, exact single-pass Undo, error feedback, return-to-chat, light/da
 and reduced motion are available. Replies and edits are scripted examples;
 this choreography is not wired into the production editor yet.
 
+The character uses Sutra's existing Assistant logo with overlaid blinking eyes,
+reading glances, focused pupils, a small smile, and brief pleased reactions; the
+brand image itself is unchanged. Arced travel includes anticipation and a soft
+settling pose, and a floating pencil marks editing. Hello and Aha controls
+preview a happy bob and small sparkles. Travel respects
+pause/resume, playback speed, and both system and preview reduced-motion controls.
+Inline suggestions use a word/whitespace comparison: unchanged text stays plain,
+and only changed spans show removed and inserted wording. The spelling scenario
+changes only misspelled words; grammar corrections retain surrounding wording.
+Explicit rephrasing can change more words, with the same local comparison.
+
+The logo/precision follow-up was checked in a separate Chrome preview tab:
+spelling showed exactly `detials → details`, `seperately → separately`, and
+`questons → questions`, with surrounding text outside the change spans. Accept
+and Undo preserved the spelling scenario's exact source. Grammar showed only
+four changed words; logo loading, two animated eyes, happy/error expressions,
+paused travel remaining stationary, reduced motion, and 390px overflow checks
+passed. No robot body/arm elements remain. The viewport override was reset;
+provider usage and runtime workspace changes remain zero.
+
 The collapsed existing-motion library copies 21 Assistant keyframe definitions
 and source timings from the full view and side panel. It excludes shared UI and
 optional-theme families. Hover/focus transitions remain in the named styles.
