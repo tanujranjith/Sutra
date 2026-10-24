@@ -33,6 +33,11 @@ Apply commits exact changed spans through the owning editor; Cancel clears the
 preview. Writing help uses this same review flow. The Sutra logo glides above
 visible affected words; reduced motion and narrow layouts show suggestions
 without the travelling character. Classic Notes retains its draft review.
+The logo starts at the Assistant header, reaches the original word before the
+suggestion appears, and returns after the pass; a single comma receives the
+same entrance and editing pause. Scrolling or resizing ends the travel and
+reveals the remaining suggestions. The writing composer uses a visible **Send**
+label, Enter to send, and Shift+Enter for a new line.
 
 ## HTML embeds and drawings
 

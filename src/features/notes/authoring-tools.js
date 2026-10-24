@@ -101,7 +101,7 @@
         function previewWriting(token, blocks, parts) {
             if (!previewKey || !previewEngine || !current(token) || !global.SutraAssistantSidebar) return null;
             var changes = writingChanges(token, blocks, parts), ed = editor(), disposed = false;
-            function draw(count) {
+            function draw(count, targetIndex) {
                 if (disposed || !current(token)) return null;
                 var decorations = [];
                 changes.slice(0, count).forEach(function (change, index) {
@@ -113,8 +113,21 @@
                         return node;
                     }, { side: 1, key: 'writing-' + index + '-' + change.after, ignoreSelection: true }));
                 });
+                // Locate the original word before revealing its correction.
+                // This anchor is a decoration, never part of the saved document.
+                if (targetIndex !== undefined && changes[targetIndex]) {
+                    decorations.push(previewEngine.Decoration.widget(changes[targetIndex].from, function () {
+                        var anchor = document.createElement('span');
+                        anchor.className = 'sutra-ai-change-anchor';
+                        anchor.setAttribute('data-sutra-ai-target', String(targetIndex));
+                        anchor.setAttribute('aria-hidden', 'true');
+                        return anchor;
+                    }, { side: -1, key: 'writing-target-' + targetIndex, ignoreSelection: true }));
+                }
                 ed.view.dispatch(ed.state.tr.setMeta(previewKey, previewEngine.DecorationSet.create(ed.state.doc, decorations)).setMeta('addToHistory', false));
-                return ed.view.dom.querySelector('[data-sutra-ai-edit="' + (count - 1) + '"]');
+                return targetIndex !== undefined
+                    ? ed.view.dom.querySelector('[data-sutra-ai-target="' + targetIndex + '"]')
+                    : ed.view.dom.querySelector('[data-sutra-ai-edit="' + (count - 1) + '"]');
             }
             var stop = global.SutraAssistantSidebar.animateEdits(changes, draw, function () { return current(token); });
             return function () {

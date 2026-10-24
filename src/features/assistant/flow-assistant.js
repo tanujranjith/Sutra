@@ -1056,7 +1056,7 @@
         { type: 'create_note_backlink', desc: 'Append a clickable sutra:// backlink from one note to another.', risk: 'medium', fields: { fromNoteId: 'string', toNoteId: 'string', label: 'string?' } },
         { type: 'convert_selection_to_fields', desc: 'Replace the current selected content with user-reviewed structured fields while preserving the original facts.', risk: 'high', fields: { text: 'markdown' } },
         { type: 'replace_selection', desc: 'Replace the user\'s currently selected text in the editor', risk: 'high', fields: { text: 'string' } },
-        { type: 'create_task', desc: 'Create a task in the planner', risk: 'medium', fields: { title: 'string', dueDate: 'YYYY-MM-DD?', dueTime: 'HH:MM?', priority: 'low|medium|high?', notes: 'string?', category: 'string?', linkPageId: 'string?' } },
+        { type: 'create_task', desc: 'Create a to-do, task, reminder, or upcoming test/deadline in the planner', risk: 'medium', fields: { title: 'string', dueDate: 'YYYY-MM-DD?', dueTime: 'HH:MM?', priority: 'low|medium|high?', notes: 'string?', category: 'string?', linkPageId: 'string?' } },
         { type: 'create_homework', desc: 'Create a homework assignment', risk: 'medium', fields: { title: 'string', courseName: 'string?', dueDate: 'YYYY-MM-DD?', difficulty: 'easy|medium|hard?' } },
         { type: 'create_timeline_block', desc: 'Schedule a calendar/timeline block', risk: 'medium', fields: { name: 'string', date: 'YYYY-MM-DD', start: 'HH:MM', end: 'HH:MM', category: 'string?', linkTaskId: 'string?', linkHomeworkId: 'string?' } },
         { type: 'create_page', desc: 'Create a new note page', risk: 'medium', fields: { title: 'string', body: 'markdown', tags: 'string[]?', classLinkId: 'string?' } },
@@ -1311,6 +1311,9 @@
         // action requests need its schemas in the provider's prompt.
         if (!/\b(?:add|create|make|write|draft|rewrite|revise|rephrase|proofread|correct|fix|improve|replace|apply|put|edit|update|change|mark|complete|delete|remove|move|rename|organize|schedule|reschedule|plan|import|export|save|remember|generate|build|set|log|start|stop|archive|duplicate|insert|turn|convert|split|merge|group|arrange|connect|open|undo)\b/.test(query)) return { domains: [], totalActions: 0 };
         const noteEdit = /\b(?:revise|rewrite|rephrase|proofread|correct|improve|replace|edit)\b/.test(query);
+        const createTodo = /\b(?:add|create|make|put|log|remind)\b/.test(query)
+            && (/\b(?:tasks?|to[ -]?dos?|reminders?|homework|assignments?|deadlines?)\b/.test(query)
+                || (/\b(?:add|log|put)\b/.test(query) && /\b(?:tests?|exams?|quizzes)\b/.test(query)));
         const stop = new Set('a an the to for of in on my me i you can could please this that with and it some help'.split(' '));
         const terms = (query.match(/[a-z0-9]+/g) || []).filter(term => term.length > 2 && !stop.has(term));
         const bank = buildActionsBank();
@@ -1318,7 +1321,9 @@
             const type = action.type.replace(/_/g, ' ');
             const text = (type + ' ' + action.description).toLowerCase();
             const score = terms.reduce((sum, term) => sum + (type.includes(term) ? 4 : text.includes(term) ? 1 : 0), 0)
-                + (noteEdit && action.type === 'edit_note_patch' ? 120 : 0);
+                + (noteEdit && action.type === 'edit_note_patch' ? 120 : 0)
+                + (createTodo && action.type === 'create_task' ? 120 : 0)
+                + (createTodo && /\b(?:homework|assignments?)\b/.test(query) && action.type === 'create_homework' ? 110 : 0);
             return { action, domain, score };
         })).filter(row => row.score > 0).sort((a, b) => b.score - a.score).slice(0, 12);
         const domains = bank.domains.map(domain => ({ ...domain, actions: ranked.filter(row => row.domain === domain).map(row => row.action) })).filter(domain => domain.actions.length);
@@ -1337,6 +1342,7 @@
             'Prefer a higher-level workflow action to many atomic edits. For ordered dependent actions, give stable planActionId and dependsOn referencing only earlier actions in the same reply.',
             'Canvas/Slides operations require the active board/deck and stable object IDs. Create only supported text/shapes/charts; never invent image URLs or data URLs. Keep at most 24 operations in one board/deck action.',
             'Dates use YYYY-MM-DD, times HH:MM. Import assignments as one import_assignments action. Deterministic grade math and schedule conflicts must use Sutra engines, not guessed calculations.',
+            'Use create_task for ordinary to-dos, reminders, and upcoming classroom tests. A test reminder is not a cram session. When asked to add multiple distinct tasks, propose one action per task. Resolve dates from the supplied current date or ask a short clarification if unclear.',
             'ACTIONS AVAILABLE FOR THIS REQUEST:',
             bankText,
             'Use supplied evidence only; missing or partial context is not an empty workspace. Explain permission limits or ask to narrow if contextBudget.reduced. Cite workspace records using their exact citationUrl as [label](citationUrl); never convert a key into a URL or invent a kind. Cite note excerpts as [label](sutra://page/NOTE_ID).',
@@ -5114,7 +5120,13 @@
         ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview', 'workspaceRetrieval'].forEach(key => { delete ctx[key]; });
         Object.assign(ctx, relevant);
         if (/\b(?:plan|schedule|due|overdue|priorities|next step|what should i do)\b/i.test(userText) && derived) ctx.derived = derived;
-        if (!/\b(?:this|current|open|active)\s+(?:note|page|canvas|slides?)\b/i.test(userText) && !ctx.selection) {
+        const scope = options.scope || options.conversationScope || {};
+        const visibleNote = ctx.view === 'notes';
+        const scopedNote = scope.type === 'note' || scope.type === 'page';
+        // An open Notes surface is a concrete target even when the student says
+        // “my supplement” or “revise it”. Keep it ahead of incidental matches;
+        // the final privacy filter still enforces Notes/locked-page access.
+        if (!visibleNote && !scopedNote && !/\b(?:this|current|open|active)\s+(?:note|page|canvas|slides?)\b/i.test(userText) && !ctx.selection) {
             delete ctx.activeNote; delete ctx.canvas; delete ctx.slides;
         }
         return ctx;
@@ -8909,13 +8921,13 @@
                     </div>
                 </section>`);
             parts.push(`
-                <section class="flow-tutoring-modes" aria-label="Tutoring modes">
-                    <h3 class="flow-qa-heading">Study with a tutoring mode</h3>
+                <details class="flow-tutoring-modes" aria-label="Tutoring modes">
+                    <summary class="flow-qa-heading">Study with a tutoring mode</summary>
                     <div class="flow-tutoring-grid">
                         ${tutoringModes.map(mode => `<button type="button" class="flow-tutoring-mode" data-flow-tutoring-mode="${esc(mode.id)}">${esc(mode.label)}</button>`).join('')}
                     </div>
                     <p class="flow-onboarding-note">Provider-backed. Sutra keeps actions reviewable and uses your selected materials and workspace access.</p>
-                </section>`);
+                </details>`);
             if (!configured && continueWithoutAi) {
                 parts.push('<p class="flow-onboarding-note">No AI provider connected — model-powered actions will ask you to add a key. <button type="button" class="flow-link-btn" data-flow-connect="groq">Connect a provider</button></p>');
             }
@@ -8935,6 +8947,8 @@
             const rec = pulse.nextBestAction ? `<div class="flow-pulse-next"><span aria-hidden="true">✨</span> ${esc(truncate(pulse.nextBestAction.label, 80))}</div>` : '';
             const actionBtn = pulse.action ? `<button type="button" class="flow-pulse-action" data-flow-pulse-prompt="${esc(pulse.action.prompt)}">${esc(pulse.action.label)}</button>` : '';
             parts.push(`
+                <details class="flow-pulse-disclosure">
+                    <summary>Workspace pulse</summary>
                 <section class="flow-pulse" aria-label="Workspace pulse">
                     <div class="flow-pulse-head">
                         <span class="flow-pulse-title"><span aria-hidden="true">〰</span> Workspace pulse</span>
@@ -8943,7 +8957,7 @@
                     ${insightRows}
                     ${rec}
                     ${actionBtn}
-                </section>`);
+                </section></details>`);
         }
 
         host.innerHTML = parts.join(''); // sutra-allow-html: parts built from esc()-escaped local signals

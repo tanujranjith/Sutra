@@ -2,6 +2,15 @@
 
 Final result for this follow-up: pending user browser validation.
 
+Screenshot follow-up: the user reported cramped input fields, an invisible
+writing Send glyph, an imperceptible comma animation, dropped visible-note
+context, and a missing to-do proposal. These are addressed in local code with
+visible Send text, explicit flex sizing, collapsed welcome sections, a header
+to-word animation with a pause, retained visible/scoped note context, and
+intent-weighted selection of the existing task schema. The supplied screenshots
+are the visual evidence for these reports. No follow-up browser QA or provider
+requests were performed; the user will check the implementation.
+
 Reference: the approved Assistant sidebar mockup in this conversation. The
 implementation docks the existing chat below navigation, reserves desktop
 workspace width, and moves the floating Focus, Feedback, and storage controls

@@ -1121,9 +1121,27 @@ storage controls move beside it and return when it closes. Narrow screens use
 an overlay, with a full-width sidebar on phones. Existing provider, model,
 thinking, permissions, and conversation controls remain canonical.
 
+The sidebar keeps tutoring modes and Workspace pulse collapsed until opened,
+and uses a compact provider/thinking/context footer. Writing commands have a
+visible **Send** button; Enter sends the instruction and Shift+Enter adds a
+line. Their source disclosure remains available above the review.
+
+Workspace retrieval retains the visible Notes target for indirect questions
+such as “do you like my supplement?” and for explicitly scoped note chats.
+Permission filters and separate locked-note consent still apply. “Open note”
+identifies the page on screen; exact request context remains inspectable through
+the context button. Unrelated last-opened notes are not retained for other views.
+
+Ordinary to-dos use the existing `create_task` proposal and canonical planner
+store, with review before Apply. Requests to add upcoming classroom tests also
+expose that schema; they are not limited to creating a cram session. Several
+distinct tasks can be proposed separately, and dates still require a clear
+interpretation from the current date or a clarification.
+
 In Modern Notes, writing commands preview exact changed spans without saving
 suggestions into the document. The existing Sutra logo with small eyes glides
-above visible changed words; reduced motion skips that travel. Apply uses the
+above visible changed words, pauses before revealing even a punctuation-only
+correction, and returns to its header. Reduced motion skips that travel. Apply uses the
 owning editor's transaction/save path, while Cancel removes the preview.
 Classic Notes and chat retain an editable full-draft review. See
 [Modern Notes Editor](MODERN_NOTES_EDITOR.md) for scope and stale-source guards.

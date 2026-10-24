@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261024-writing-followup1",
-    "hash": "5b58213d73d4bece"
+    "stamp": "20261024-sidebar3",
+    "hash": "513e3ea93ec4cea1"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -196,12 +196,12 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/assistant-sidebar.js": {
-    "stamp": "20261024-sidebar2",
-    "hash": "b4f8c4916fcb4dd4"
+    "stamp": "20261024-sidebar3",
+    "hash": "f8141423136686ba"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261024-writing-followup1",
-    "hash": "af7b2e75b20159a3"
+    "stamp": "20261024-sidebar3",
+    "hash": "c4abd4eae4952971"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -240,8 +240,8 @@
     "hash": "90689f9cbbabdfd8"
   },
   "src/features/assistant/writing-commands.js": {
-    "stamp": "20261024-sidebar2",
-    "hash": "ad4c98e899b10202"
+    "stamp": "20261024-sidebar3",
+    "hash": "cff7d01a1a16488a"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -256,16 +256,16 @@
     "hash": "4619be4ddf2e90f2"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261024-sidebar2",
-    "hash": "13efdec9932d52f8"
+    "stamp": "20261024-sidebar3",
+    "hash": "35fd82e54a51a9fa"
   },
   "src/features/notes/editor-v2.js": {
     "stamp": "20261016-ci-page-flow2",
     "hash": "2251acb689897110"
   },
   "src/features/notes/inline-ai-assist.js": {
-    "stamp": "20261024-sidebar2",
-    "hash": "448688d50773177e"
+    "stamp": "20261024-sidebar3",
+    "hash": "9c4d17eae764102e"
   },
   "src/features/notes/rich-links.js": {
     "stamp": "20261003-create-review5",
@@ -572,8 +572,8 @@
     "hash": "471e4b2f094dc3c4"
   },
   "styles/features/assistant-sidebar.css": {
-    "stamp": "20261024-sidebar2",
-    "hash": "44a938735d0e027f"
+    "stamp": "20261024-sidebar3",
+    "hash": "1b7f352234bb6a65"
   },
   "styles/features/backup-progress.css": {
     "stamp": "20261001-backup-progress1",

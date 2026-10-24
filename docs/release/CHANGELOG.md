@@ -9,6 +9,10 @@ These changes are on `codex/student-workflow-batch`, which has been uploaded for
 - Dock Assistant below navigation as a full-height sidebar; move floating
   workspace controls alongside it and preview Modern Notes writing corrections
   at changed words before guarded Apply. This local follow-up awaits user QA.
+- Fix cramped sidebar composers and the invisible writing Send label; animate
+  even punctuation corrections from the Assistant header to the original word.
+  Retain visible note context for indirect writing requests and expose existing
+  to-do creation proposals for natural classroom-test/reminder requests.
 - Default new Assistant workspaces to Everyday: bounded workspace retrieval,
   recent conversation context, and reviewed changes with Apply and Undo.
   Add Private and Advanced controls without upgrading existing restrictions;

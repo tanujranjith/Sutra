@@ -74,33 +74,60 @@
         var stillCurrent = function () {
             return !controller.signal.aborted && isCurrent() && panel && panel.style.display === 'flex';
         };
+        var onViewportChange = function () {
+            if (stillCurrent()) draw(edits.length);
+            controller.abort();
+            if (avatar && previewController === controller) avatar.hidden = true;
+        };
         var delay = function (ms) { return new Promise(function (resolve) { global.setTimeout(resolve, ms); }); };
         (async function () {
             if (reduced() || global.innerWidth <= 900) { if (stillCurrent()) draw(edits.length); return; }
-            var mark = createAvatar(), previous = null;
+            var mark = createAvatar(), image = mark.querySelector('img');
+            // Wait for the local brand image before its first short correction.
+            if (image.decode) { try { await image.decode(); } catch (_) { /* local image may already be decoded */ } }
+            if (!stillCurrent()) return;
+            global.addEventListener('scroll', onViewportChange, true);
+            global.addEventListener('resize', onViewportChange);
+            var dock = panel.querySelector('.chatbot-mascot') || panel.querySelector('.chatbot-header');
+            var dockRect = dock.getBoundingClientRect();
+            var previous = { x: dockRect.left + dockRect.width / 2 - 22, y: dockRect.top + dockRect.height / 2 - 22 };
+            function position(point) { return 'translate(' + point.x + 'px,' + point.y + 'px)'; }
+            async function glide(next, duration) {
+                mark.hidden = false;
+                mark.style.transform = position(next);
+                mark.animate([{ transform: position(previous) }, { transform: position(next) }],
+                    { duration: duration, easing: 'cubic-bezier(.22,.68,.25,1)' });
+                previous = next;
+                await delay(duration);
+            }
             for (var index = 0; index < Math.min(12, edits.length); index++) {
                 if (!stillCurrent()) break;
-                var target = draw(index + 1);
+                var target = draw(index, index);
                 if (!target) continue;
                 var rect = target.getClientRects()[0] || target.getBoundingClientRect();
                 var line = target.closest('p,h1,h2,h3,h4,h5,h6,li') || target.parentElement;
                 var lineRect = line.getBoundingClientRect(), sidebar = panel.getBoundingClientRect();
-                if (rect.top < 100 || rect.bottom > global.innerHeight || rect.left > sidebar.left) continue;
+                if (rect.top < 100 || rect.bottom > global.innerHeight || rect.left > sidebar.left) { draw(index + 1); continue; }
                 var next = { x: Math.max(4, Math.min(rect.left + rect.width / 2 - 22, sidebar.left - 48)), y: Math.max(72, lineRect.top - 42) };
-                mark.hidden = false;
-                mark.style.transform = 'translate(' + next.x + 'px,' + next.y + 'px)';
-                if (previous) mark.animate([
-                    { transform: 'translate(' + previous.x + 'px,' + previous.y + 'px)' },
-                    { transform: mark.style.transform }
-                ], { duration: 230, easing: 'cubic-bezier(.25,.1,.25,1)' });
-                previous = next;
-                await delay(320);
+                await glide(next, index === 0 ? 650 : 420);
                 if (!stillCurrent()) break;
+                await delay(180);
+                if (!stillCurrent()) break;
+                draw(index + 1);
+                // Even a single punctuation fix gets a visible editing beat.
+                mark.animate([{ scale: '1' }, { scale: '1.08' }, { scale: '1' }], { duration: 360, easing: 'ease-in-out' });
+                await delay(850);
             }
-            if (stillCurrent()) draw(edits.length);
+            if (stillCurrent()) {
+                draw(edits.length);
+                await glide({ x: dockRect.left + dockRect.width / 2 - 22, y: dockRect.top + dockRect.height / 2 - 22 }, 550);
+            }
         })().catch(function (error) {
+            if (stillCurrent()) draw(edits.length);
             if (global.reportError) global.reportError(error, { feature: 'assistant-inline-preview' });
         }).finally(function () {
+            global.removeEventListener('scroll', onViewportChange, true);
+            global.removeEventListener('resize', onViewportChange);
             if (id === sequence && avatar) avatar.hidden = true;
         });
         return function () { controller.abort(); if (previewController === controller) stopPreview(); };
@@ -127,7 +154,7 @@
         var context = doc.getElementById('sutraSidebarContext'), title = doc.getElementById('pageTitle');
         if (context) {
             var notes = doc.getElementById('view-notes');
-            var hidden = !(notes && notes.classList.contains('active')), label = 'Current note · ' + (title && title.value || 'Untitled');
+            var hidden = !(notes && notes.classList.contains('active')), label = 'Open note · ' + (title && title.value || 'Untitled');
             if (context.hidden !== hidden) context.hidden = hidden;
             if (context.textContent !== label) context.textContent = label;
         }

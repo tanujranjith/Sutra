@@ -97,6 +97,7 @@
         if (session.backButton) session.backButton.removeEventListener('click', session.onBackClick);
         if (session.cancelRequest) session.cancelRequest.removeEventListener('click', session.onCancelRequest);
         if (session.generate) session.generate.removeEventListener('click', session.onGenerate);
+        if (session.instruction) session.instruction.removeEventListener('keydown', session.onInstructionKey);
         if (session.replace) session.replace.removeEventListener('click', session.onReplace);
         if (session.insert) session.insert.removeEventListener('click', session.onInsert);
         if (session.root) {
@@ -231,7 +232,7 @@
             session.insert.hidden = false;
             setStatus(session, 'Draft ready. Review the suggestions, then Apply or Cancel.');
             var count = global.SutraAssistantSidebar ? global.SutraAssistantSidebar.diff(session.selectedText || session.contextText, value).length : 0;
-            appendTurn(session, 'assistant', count ? count + ' suggested changes. Your note is unchanged until you approve them.' : 'The draft is ready for your review.');
+            appendTurn(session, 'assistant', count ? count + (count === 1 ? ' suggested change.' : ' suggested changes.') + ' Your note is unchanged until you approve.' : 'The draft is ready for your review.');
             refreshPreview(session);
             if (session.previewWrap.open) session.preview.focus();
         }).catch(function (error) {
@@ -267,9 +268,9 @@
         header.appendChild(backButton);
 
         var body = element('div', 'sutra-inline-ai-body');
-        var disclosure = element('p', 'sutra-inline-ai-disclosure', options.command
-            ? 'Generate sends only the passage and editing instruction shown here to your configured provider. Chat history, workspace context, and attachments are excluded. Review the editable draft; Apply returns it to the original text field. Nothing is sent before Generate.'
-            : 'Generate sends the instruction and note text shown here through your configured Sutra Assistant provider. Review its send confirmation before continuing. Nothing is sent until you choose Generate, and your note changes only after you approve a draft.');
+        var disclosure = element('p', 'sutra-inline-ai-disclosure',
+            'Only this passage and your instruction are sent. Review changes before applying.');
+        disclosure.title = 'Chat history, other workspace context, and attachments are excluded. Nothing is sent before Generate draft. Your note changes only after Apply.';
 
         var instructionLabel = element('label', 'sutra-inline-ai-label', 'What should Sutra do?');
         instructionLabel.htmlFor = 'sutraInlineAiInstruction_' + id;
@@ -338,7 +339,8 @@
         var generate = element('button', 'sutra-inline-ai-button sutra-inline-ai-primary', 'Generate draft');
         generate.type = 'button';
         generate.setAttribute('aria-label', 'Generate draft'); generate.title = 'Generate draft';
-        generate.appendChild(element('i', 'fas fa-arrow-up'));
+        // Keep a real text label: inherited font/icon rules must never erase Send.
+        generate.textContent = 'Send';
         var replace = element('button', 'sutra-inline-ai-button sutra-inline-ai-primary', 'Replace selected text');
         replace.type = 'button';
         replace.disabled = true;
@@ -498,6 +500,12 @@
                 requestDraft(session);
             }
         };
+        session.onInstructionKey = function (event) {
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                if (!session.generate.disabled) requestDraft(session);
+            }
+        };
         session.onInput = function (event) {
             if (event.target === session.instruction || event.target === session.sourceInput) {
                 clearPreview(session);
@@ -536,6 +544,7 @@
         session.backButton.addEventListener('click', session.onBackClick);
         session.cancelRequest.addEventListener('click', session.onCancelRequest);
         session.generate.addEventListener('click', session.onGenerate);
+        session.instruction.addEventListener('keydown', session.onInstructionKey);
         session.root.addEventListener('input', session.onInput);
         session.replace.addEventListener('click', session.onReplace);
         session.insert.addEventListener('click', session.onInsert);

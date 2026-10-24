@@ -175,6 +175,23 @@ test('prompt action selection includes create_task with its catalog fields and s
   assert.equal(selectPromptActionBank('hello').totalActions, 0);
 });
 
+test('natural to-do and classroom test requests expose the real task-creation schema', () => {
+  for (const prompt of [
+    'can you add that i have a math and physics test on tesuday',
+    'add math and physics tests on Tuesday',
+    'put buy a binder on my to-do list',
+    'create a reminder to return my textbook',
+    'add my biology homework due Friday'
+  ]) {
+    const bank = selectPromptActionBank(prompt);
+    const actions = bank.domains.flatMap(domain => domain.actions);
+    assert.ok(actions.some(action => action.type === 'create_task'), prompt);
+    assert.ok(actions.length <= 12);
+  }
+  assert.ok(buildSystemPromptParts({ view: 'assistantview', depth: 'workspace' },
+    'can you add that i have a math and physics test on tesuday').static.includes('create_task:'));
+});
+
 test('ordinary note retrieval excludes Help & Docs but an explicit Help & Docs request can retrieve it', () => {
   const pages = [
     {

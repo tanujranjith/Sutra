@@ -48,7 +48,11 @@ test('inline correction decorations never enter saved note content and clear on 
   const editor=page.locator('#editorV2Host .ProseMirror');
   const before='This are a sentence.'; await editor.fill(before); await selectEditorTextAndWait(page,editor,before);
   await editor.press('/'); await page.locator('.editor-v2-slash-item').filter({hasText:'/grammar'}).click();
-  const review=page.locator('.sutra-inline-ai-workbench'); await review.getByRole('button',{name:'Generate draft',exact:true}).click();
+  const review=page.locator('.sutra-inline-ai-workbench');
+  const send=review.getByRole('button',{name:'Generate draft',exact:true});
+  await expect(send).toBeVisible(); await expect(send).toHaveText('Send');
+  await expect.poll(()=>send.evaluate(button=>button.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44);
+  await send.click();
   await expect(editor.locator('.sutra-ai-change-new')).toHaveText('is');
   const html=await page.evaluate(()=>window.SutraNotesEditorV2.getStorageHtml());
   expect(html).toContain(before); expect(html).not.toContain('sutra-ai-change'); expect(html).not.toContain('This is a sentence.');

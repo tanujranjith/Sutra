@@ -14,6 +14,14 @@ function selector(records, permissions = { mode: 'read_only', areas: {} }, memor
   }, (text, limit) => String(text || '').slice(0, limit), () => memoryMode);
 }
 
+test('visible and explicitly scoped notes survive indirect writing questions without retaining unrelated last-opened notes', () => {
+  const apply = new Function('selectRelevantWorkspaceContext', extractFunction(source, 'applyRelevantWorkspaceContext').body + ';return applyRelevantWorkspaceContext;')(() => ({ workspaceOverview: [] }));
+  const note = { id: 'vt4', title: 'VT #4', excerpt: 'My supplement text' };
+  assert.equal(apply({ depth: 'workspace', view: 'notes', activeNote: note }, 'do you like my supplement?').activeNote, note);
+  assert.equal(apply({ depth: 'workspace', view: 'assistantview', activeNote: note }, 'revise it', { scope: { type: 'note', noteId: 'vt4' } }).activeNote, note);
+  assert.equal(apply({ depth: 'workspace', view: 'home', activeNote: note }, 'what is due tomorrow?').activeNote, undefined);
+});
+
 test('exam dates, task URLs and exact registry citations survive selective retrieval', () => {
   const result = selector([
     record('testing_exam', 'sat', 'SAT', { dates: { due: '2026-12-05' } }),

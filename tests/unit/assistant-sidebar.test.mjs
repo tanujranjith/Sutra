@@ -8,6 +8,14 @@ vm.runInNewContext(readFileSync(new URL('../../src/features/assistant/assistant-
   window, document: {readyState:'loading',addEventListener() {}}
 });
 const diff = window.SutraAssistantSidebar.diff;
+test('a comma insertion is one exact punctuation edit', () => {
+  const before = 'Thanks Professor';
+  const changes = diff(before, 'Thanks, Professor');
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].from, 6);
+  assert.equal(changes[0].to, 6);
+  assert.equal(changes[0].after, ',');
+});
 function apply(before, changes) {
   let result = before;
   for (const change of [...changes].reverse()) {
