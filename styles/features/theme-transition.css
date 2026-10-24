@@ -2,27 +2,27 @@
 html.sutra-theme-reveal { background-color: var(--sutra-theme-backdrop, var(--bg-primary)); }
 /* Capture finished colors, rather than the start of each control's own fade. */
 html.sutra-theme-reveal, html.sutra-theme-reveal *,
-html.sutra-theme-reveal *::before, html.sutra-theme-reveal *::after { transition: none !important; }
+html.sutra-theme-reveal *::before, html.sutra-theme-reveal *::after { transition: none !important; animation-play-state: paused !important; }
 html.sutra-theme-reveal::view-transition { pointer-events: none; background: var(--sutra-theme-backdrop, var(--bg-primary)); }
 html.sutra-theme-reveal::view-transition-group(root) { animation: none; overflow: clip; }
 html.sutra-theme-reveal::view-transition-image-pair(root) { isolation: isolate; }
 html.sutra-theme-reveal::view-transition-old(root),
 html.sutra-theme-reveal::view-transition-new(root) {
-    animation-duration: 420ms;
-    animation-timing-function: cubic-bezier(.2,.65,.3,1);
+    animation-duration: 360ms;
+    animation-timing-function: cubic-bezier(.3,0,.25,1);
     animation-fill-mode: both;
     mix-blend-mode: normal;
     width: 100%;
     height: 100%;
     object-fit: fill;
-    backface-visibility: hidden;
 }
 html.sutra-theme-reveal::view-transition-old(root) { animation: none; transform: none; z-index: 1; }
-html.sutra-theme-reveal::view-transition-new(root) { animation-name: sutra-theme-spread; transform: none; z-index: 2; }
-/* One basic circular clip instead of a morphing multi-point mask. */
+html.sutra-theme-reveal::view-transition-new(root) { animation-name: sutra-theme-spread; transform: none; z-index: 2; will-change: clip-path; }
+/* One rectangular edge crosses every surface on the same timeline. No curves,
+   animated paths, filters, or translation of the workspace textures. */
 @keyframes sutra-theme-spread {
-    from { clip-path: circle(0vmax at 0% 50%); }
-    to { clip-path: circle(120vmax at 0% 50%); }
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
 }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
     html.sutra-theme-reveal::view-transition-group(root),

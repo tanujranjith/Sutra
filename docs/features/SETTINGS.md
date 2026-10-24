@@ -1,7 +1,8 @@
 # Settings
 
-Explicit preset and light/dark theme choices use a 420ms rounded reveal: new
-colors spread from the left through a single expanding circular clip. Both workspace
+Explicit preset and light/dark theme choices use a 360ms straight left-to-right
+color reveal. A single rectangular edge crosses the sidebar, navigation, and
+content on the same timeline; the leftmost surfaces are reached first. Both workspace
 snapshots stay stationary; text, panels, and controls do not slide. The animation wraps
 the existing theme handlers; it adds no preferences, storage, or network use.
 Reduced/off motion, forced colors, background tabs, and browsers without View
@@ -9,6 +10,8 @@ Transitions apply themes immediately. Rapid choices finish on the latest choice.
 During the reveal, control-level color transitions are suppressed so snapshots
 contain the final palette. A temporary theme-colored backdrop covers transparent
 areas; both overrides are removed when the reveal finishes or fails.
+Background CSS animations pause during the reveal, then resume, reducing
+competing rendering work. The reveal uses no curved masks or animated paths.
 
 Settings uses a compact, integrated category rail on desktop, with the title and
 search above grouped Personalization, Productivity, and Services links. All 16
