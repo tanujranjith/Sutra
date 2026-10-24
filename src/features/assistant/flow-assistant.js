@@ -525,7 +525,6 @@
                     examDate: page.examDate || ''
                 };
             }
-            const latestVersion = Array.isArray(page.versions) && page.versions.length ? page.versions[page.versions.length - 1] : null;
             const tmp = document.createElement('div');
             setUserHtml(tmp, String(page.content || page.body || ''));
             const text = (tmp.textContent || '').replace(/\s+/g, ' ').trim();
@@ -535,7 +534,7 @@
                 tags: Array.isArray(page.tags) ? page.tags.map(t => t.name || t).filter(Boolean) : [],
                 excerpt: truncate(text, 800),
                 wordCount: text ? text.split(/\s+/).length : 0,
-                versionId: String(page.versionId || (latestVersion && latestVersion.id) || (Array.isArray(page.versions) ? page.versions.length : '')),
+                versionId: String(page.versionId || page.version || (Array.isArray(page.versions) ? page.versions.length : '')),
                 contentHash: window.SutraNotePatchSystem && typeof window.SutraNotePatchSystem.hash === 'function'
                     ? window.SutraNotePatchSystem.hash(String(page.content || page.body || ''))
                     : '',
@@ -1046,7 +1045,7 @@
     const ACTION_CATALOG = [
         // --- Atomic actions ---
         { type: 'insert_text', desc: 'Insert markdown text into the current note at the caret', risk: 'medium', fields: { text: 'string' } },
-        { type: 'edit_note_patch', desc: 'Propose anchored note edits with note/version/block ids, baseHash, and character ranges. Each hunk is reviewed separately; stale anchors must be rebased or regenerated.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', blockId: 'string?', title: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
+        { type: 'edit_note_patch', desc: 'Propose note edits by quoting exact source HTML from activeNote.patchContent in before. Sutra resolves unique quotes locally; do not count character offsets. Every hunk is reviewed; stale or ambiguous anchors are refused.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', blockId: 'string?', title: 'string?', hunks: '[{id,start?,end?,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
         { type: 'rename_note_heading', desc: 'Rename one or more headings through anchored note hunks. Use exact heading text and offsets from activeNote.patchContent.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
         { type: 'move_note_blocks', desc: 'Move note sections or blocks through anchored hunks that delete the exact original range and insert it at an exact target.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
         { type: 'deduplicate_note', desc: 'Remove duplicated note content through anchored hunks. Never remove merely similar passages.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
@@ -1351,7 +1350,7 @@
             'You are Sutra Assistant, the contextual assistant in a private, local-first student workspace.',
             ...HARD_AGENT_RULES,
             'Propose changes only when requested, using a single fenced flow-actions block containing a JSON array of at most eight actions. Each action needs type and a short label. Use ONLY the schemas below. The user must review and Apply; never claim a proposal changed anything.',
-            'Copy existing IDs from evidence. Never guess target IDs, note offsets, versionId or baseHash. Anchored note edits require exact before text, start/end offsets, noteId, versionId and baseHash; ask for the note if it is not fully available.',
+            'Copy existing IDs, versionId and contentHash from evidence (contentHash becomes baseHash). Never guess them. For note edits, quote exact raw HTML from activeNote.patchContent in each hunk.before; omit start/end rather than counting characters. Sutra resolves unique quotes locally. Plain-text excerpts are not HTML anchors. Preserve existing markup in replacement; for a whole-note rewrite quote the complete untruncated patchContent. Ask for missing source instead of inventing it.',
             'When asked to revise a supplied note and put it back, propose edit_note_patch for that exact note, with reviewed hunks. Do not claim it is saved before Apply. Recent chat turns are conversation evidence; never substitute unrelated workspace notes when asked what this conversation discussed.',
             'Prefer a higher-level workflow action to many atomic edits. For ordered dependent actions, give stable planActionId and dependsOn referencing only earlier actions in the same reply.',
             'Canvas/Slides operations require the active board/deck and stable object IDs. Create only supported text/shapes/charts; never invent image URLs or data URLs. Keep at most 24 operations in one board/deck action.',
@@ -2084,7 +2083,23 @@
         const patchSystem = window.SutraNotePatchSystem;
         if (!patchSystem) return { ok: false, error: 'Note patch system unavailable' };
         try {
-            const proposal = patchSystem.create({ note: page, noteId: action.noteId, versionId: action.versionId, baseHash: action.baseHash, blockId: action.blockId, hunks: action.hunks });
+            const content = String(page.content || page.body || '');
+            const version = String(page.versionId || page.version || (Array.isArray(page.versions) ? page.versions.length : ''));
+            const sameBase = (!action.baseHash || String(action.baseHash) === patchSystem.hash(content))
+                && (!action.versionId || !version || String(action.versionId) === version);
+            const hunks = action.hunks.map(raw => {
+                // Models are unreliable at counting serialized HTML offsets.
+                // Bind a literal, unique quote before the first review only.
+                // Never relocate a stale proposal or guess among repeated text.
+                if (!sameBase || !raw || typeof raw.before !== 'string' || !raw.before.length) return raw;
+                if (Number.isInteger(raw.start) && Number.isInteger(raw.end) && content.slice(raw.start, raw.end) === raw.before) return raw;
+                const start = content.indexOf(raw.before);
+                if (start < 0) throw new Error('The quoted source does not match this note. Regenerate the proposal using the current note.');
+                if (content.indexOf(raw.before, start + 1) !== -1) throw new Error('The quoted source occurs more than once. Regenerate with a larger, unique passage.');
+                return Object.assign({}, raw, { start, end: start + raw.before.length });
+            });
+            const proposal = patchSystem.create({ note: page, noteId: action.noteId, versionId: action.versionId, baseHash: action.baseHash, blockId: action.blockId, hunks });
+            action.hunks = proposal.hunks;
             action.baseHash = proposal.baseHash;
             action.versionId = proposal.versionId;
         } catch (error) {

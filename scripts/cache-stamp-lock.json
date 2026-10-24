@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261024-sidebar5",
-    "hash": "633411fa7cf9d4ab"
+    "stamp": "20261024-note-anchors1",
+    "hash": "a3a2b2446da02eba"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -200,8 +200,8 @@
     "hash": "f420acce3cc3ce82"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261024-sidebar5",
-    "hash": "7a7b3168478e6798"
+    "stamp": "20261024-note-anchors1",
+    "hash": "ec3026f19f373793"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

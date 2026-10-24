@@ -17,6 +17,8 @@ These changes are on `codex/student-workflow-batch`, which has been uploaded for
   hide the docked sidebar while the full Assistant tab is active.
 - Preserve action schemas through Stateful clarification replies using retained
   user turns, and release sidebar width in the full Assistant view.
+- Resolve unique note source quotes locally before proposal review, and align
+  prompt version metadata with the patch engine; retain stale/ambiguous guards.
 - Default new Assistant workspaces to Everyday: bounded workspace retrieval,
   recent conversation context, and reviewed changes with Apply and Undo.
   Add Private and Advanced controls without upgrading existing restrictions;

@@ -1148,6 +1148,14 @@ retain the schemas from the recent user request. Only user turns retained in
 the request budget supply that intent; assistant capability claims do not.
 Cancel stops this carryover, and Stateless chats do not use previous turns.
 
+Note edit proposals quote exact source HTML rather than requiring the provider
+to count serialized character offsets. Before the first review, Sutra resolves
+an exact, unique quote against the current hash/version and validates all ranges
+and overlaps. Ambiguous or missing quotes are rejected; changed baselines keep
+the existing rebase/conflict gate. Prompt version metadata uses the same version
+contract as the canonical patch engine. Previously failed proposals may need
+regeneration after loading this update.
+
 In Modern Notes, writing commands preview exact changed spans without saving
 suggestions into the document. The existing Sutra logo with small eyes glides
 above visible changed words, pauses before revealing even a punctuation-only
