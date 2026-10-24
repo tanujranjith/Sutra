@@ -1129,16 +1129,28 @@ accept/discard, exact single-pass Undo, error feedback, return-to-chat, light/da
 and reduced motion are available. Replies and edits are scripted examples;
 this choreography is not wired into the production editor yet.
 
-The character uses Sutra's existing Assistant logo with overlaid blinking eyes,
-reading glances, focused pupils, a small smile, and brief pleased reactions; the
-brand image itself is unchanged. Arced travel includes anticipation and a soft
-settling pose, and a floating pencil marks editing. Hello and Aha controls
-preview a happy bob and small sparkles. Travel respects
+The character uses Sutra's existing Assistant logo with small cyan/purple eyes
+integrated into the mark's lower dots, subtle glances, and a small smile; the
+brand image itself is unchanged. Travel is a smooth glide with a quiet float
+and slight tilts, without squash/stretch, hopping, or sparkle bursts. A small
+pencil marks editing. The logo aligns above each affected word before typing
+the correction, keeping clear of the text. Wrapped words use a clear rail above
+their paragraph with the same horizontal alignment. The logo returns to chat
+when the pass is ready; it has no floating status badge. Travel respects
 pause/resume, playback speed, and both system and preview reduced-motion controls.
 Inline suggestions use a word/whitespace comparison: unchanged text stays plain,
 and only changed spans show removed and inserted wording. The spelling scenario
 changes only misspelled words; grammar corrections retain surrounding wording.
 Explicit rephrasing can change more words, with the same local comparison.
+
+The calmer word-focus iteration was manually checked in Chrome: pausing an
+active correction showed the logo horizontally aligned with the affected word,
+clear of its text. No floating badge remained. Spelling still produced exactly
+three word replacements, and the logo returned to its chat dock on completion.
+Reduced motion, 390px document overflow, and console-error checks passed; the
+viewport was reset. Generator freshness, targeted syntax, and local links were
+checked. This remains a scripted gallery change, with no provider calls or
+production editor changes.
 
 The logo/precision follow-up was checked in a separate Chrome preview tab:
 spelling showed exactly `detials → details`, `seperately → separately`, and
