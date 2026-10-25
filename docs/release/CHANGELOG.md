@@ -4,6 +4,9 @@ All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
 ## Unreleased — local reliability and cleanup work
 
+- Replace app and Assistant brand masters with the owner's new logos; regenerate
+  icon sizes, favicon, maskable icon, social preview, and compatibility artwork.
+
 - Group landing-page screenshots under `assets/marketing/screenshots`, update
   capture/deployment consumers, and document asset ownership and legacy paths.
 

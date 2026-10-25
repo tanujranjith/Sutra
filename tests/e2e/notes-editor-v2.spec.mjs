@@ -25,9 +25,8 @@ test('Assistant sidebar reserves editor space and moves workspace controls with 
   await openApp(page); await openNotesView(page); await stageWritingProvider(page);
   await page.locator('#chatbotBtn').click();
   await expect(page.locator('body')).toHaveClass(/sutra-assistant-sidebar-open/);
-  const eyes = page.locator('#chatbotPanel .sutra-sidebar-avatar .sutra-editing-eyes i');
-  await expect(eyes).toHaveCount(2);
-  await expect(eyes.first()).toBeVisible();
+  await expect(page.locator('#chatbotPanel .sutra-sidebar-avatar .chatbot-mascot')).toBeVisible();
+  await expect(page.locator('#chatbotPanel .sutra-sidebar-avatar .sutra-editing-eyes')).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>{
     const panel=document.querySelector('#chatbotPanel').getBoundingClientRect();
     const view=document.querySelector('#view-notes').getBoundingClientRect();

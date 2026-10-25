@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     sys.exit("ERROR: Pillow is not installed.  Run: pip install Pillow")
 
@@ -62,12 +62,10 @@ def write_png(img: Image.Image, path: Path) -> None:
 
 
 def write_ico(master: Image.Image, path: Path, sizes: list[int]) -> None:
-    frames = [high_quality_resize(master, s) for s in sizes]
-    frames[0].save(
+    master.save(
         path,
         format="ICO",
         sizes=[(s, s) for s in sizes],
-        append_images=frames[1:],
     )
     print(f"  wrote  {path.relative_to(ROOT)}  [{', '.join(str(s) for s in sizes)}]")
 
@@ -93,6 +91,22 @@ def main() -> None:
     for size in APP_SIZES:
         resized = high_quality_resize(app_master, size)
         write_png(resized, GEN_DIR / f"sutra-icon-{size}.png")
+    # Compatibility filenames and PWA/social consumers belong to this generator
+    # too; otherwise they silently retain an older approved logo.
+    write_png(high_quality_resize(app_master, 512), GEN_DIR / "sutra-icon-maskable-512.png")
+    write_png(high_quality_resize(app_master, 1024), GEN_DIR / "sutra-mark-transparent.png")
+    social = Image.new("RGB", (1200, 630), (253, 253, 249))
+    social.paste(high_quality_resize(app_master, 480), (48, 75))
+    draw = ImageDraw.Draw(social)
+    def brand_font(size):
+        try:
+            return ImageFont.truetype("C:/Windows/Fonts/georgiab.ttf", size)
+        except OSError:
+            return ImageFont.load_default(size=size)
+    draw.text((570, 190), "Sutra", font=brand_font(84), fill=(20, 29, 52))
+    draw.text((570, 315), "Your academic life,", font=brand_font(26), fill=(55, 65, 86))
+    draw.text((570, 355), "woven into one private workspace.", font=brand_font(26), fill=(55, 65, 86))
+    write_png(social, GEN_DIR / "social-preview.png")
 
     # favicon.ico  (multi-resolution: 16, 32, 48, 64)
     write_ico(app_master, GEN_DIR / "favicon.ico", ICO_SIZES)

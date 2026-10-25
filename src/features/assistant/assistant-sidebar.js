@@ -54,18 +54,12 @@
     function reduced() {
         return doc.body.classList.contains('motion-off') || global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
-    function createEyes() {
-        var face = doc.createElement('span'); face.className = 'sutra-editing-eyes';
-        face.setAttribute('aria-hidden', 'true');
-        face.appendChild(doc.createElement('i')); face.appendChild(doc.createElement('i'));
-        return face;
-    }
     function createAvatar() {
         if (avatar) return avatar;
         avatar = doc.createElement('div'); avatar.className = 'sutra-editing-presence'; avatar.hidden = true;
         avatar.setAttribute('aria-hidden', 'true');
         var image = doc.createElement('img'); image.src = 'assets/brand/sutra/generated/sutra-assistant-icon-128.png'; image.alt = '';
-        avatar.appendChild(image); avatar.appendChild(createEyes()); doc.body.appendChild(avatar); return avatar;
+        avatar.appendChild(image); doc.body.appendChild(avatar); return avatar;
     }
     function stopPreview() {
         if (previewController) previewController.abort(); previewController = null;
@@ -174,7 +168,6 @@
             dockedAvatar.setAttribute('aria-hidden', 'true');
             logo.before(dockedAvatar);
             dockedAvatar.appendChild(logo);
-            dockedAvatar.appendChild(createEyes());
         }
         new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['style', 'class'] });
         new MutationObserver(sync).observe(doc.body, { attributes: true, attributeFilter: ['data-view'] });
