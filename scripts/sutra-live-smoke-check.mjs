@@ -72,7 +72,7 @@ const manifestRes = await checkResolves('manifest.webmanifest', 'manifest respon
 
 // 2. Key assets resolve.
 await checkResolves('assets/brand/sutra/generated/favicon.ico', 'favicon.ico resolves');
-await checkResolves('assets/brand/sutra/generated/sutra-icon-32.png', 'favicon-32 resolves');
+await checkResolves('assets/brand/sutra/generated/sutra-favicon-32.png', 'favicon-32 resolves');
 await checkResolves('assets/brand/sutra/generated/social-preview.png', 'social-preview.png resolves');
 
 // 3. Branding present.

@@ -100,9 +100,9 @@ for (const html of ['index.html', 'HomePage.html', 'Sutra.html']) {
 
 console.log('\n── HTML: new brand PNG favicon referenced ──────────────────────');
 for (const html of ['index.html', 'HomePage.html', 'Sutra.html']) {
-  requireContains(html, 'assets/brand/sutra/generated/sutra-icon-32.png',
+  requireContains(html, 'assets/brand/sutra/generated/sutra-favicon-32.png',
     `${html}: 32px PNG favicon linked`);
-  requireContains(html, 'assets/brand/sutra/generated/sutra-icon-16.png',
+  requireContains(html, 'assets/brand/sutra/generated/sutra-favicon-16.png',
     `${html}: 16px PNG favicon linked`);
   requireContains(html, 'assets/brand/sutra/generated/favicon.ico',
     `${html}: favicon.ico shortcut linked`);

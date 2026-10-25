@@ -383,11 +383,11 @@
     "./styles/views/today-redesign.css?v=20260816-home-quick-task1"
   ],
   "optional": [
-    "./assets/brand/sutra/generated/favicon.ico",
+    "./assets/brand/sutra/generated/favicon.ico?v=20261025-white1",
     "./assets/brand/sutra/generated/sutra-assistant-face-128.png",
-    "./assets/brand/sutra/generated/sutra-icon-16.png",
+    "./assets/brand/sutra/generated/sutra-favicon-16.png?v=20261025-white1",
+    "./assets/brand/sutra/generated/sutra-favicon-32.png?v=20261025-white1",
     "./assets/brand/sutra/generated/sutra-icon-180.png",
-    "./assets/brand/sutra/generated/sutra-icon-32.png",
     "./assets/vendor/office/mammoth.browser.min.js?v=1.8.0",
     "./assets/vendor/office/xlsx.full.min.js?v=0.20.3"
   ],

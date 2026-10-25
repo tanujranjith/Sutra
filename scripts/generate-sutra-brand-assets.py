@@ -114,8 +114,12 @@ def main() -> None:
 
     write_png(app_master, ROOT / "assets" / "logos" / "sutra.png")
 
-    # favicon.ico  (multi-resolution: 16, 32, 48, 64)
-    write_ico(app_master, GEN_DIR / "favicon.ico", ICO_SIZES)
+    # Browser favicons alone retain a white backing; UI/PWA PNGs stay separate.
+    favicon_master = Image.new("RGBA", app_master.size, (255, 255, 255, 255))
+    favicon_master.alpha_composite(app_master)
+    for size in (16, 32):
+        write_png(high_quality_resize(favicon_master, size), GEN_DIR / f"sutra-favicon-{size}.png")
+    write_ico(favicon_master, GEN_DIR / "favicon.ico", ICO_SIZES)
 
     # ── Sutra Assistant icon derivatives ─────────────────────────────────────
     print(f"\nLoading master:  {MASTER_ASST.relative_to(ROOT)}")

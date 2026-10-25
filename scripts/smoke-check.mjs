@@ -484,7 +484,7 @@ mustContain('Sutra.html', 'id="chatbotPanel"', 'Flow Assistant panel present');
 
 // ---- Sutra rebrand (public branding + assistant) -------------------------
 mustContain('Sutra.html', '<title>Sutra</title>', 'app shell title rebranded to Sutra');
-mustContain('Sutra.html', 'assets/brand/sutra/generated/sutra-icon-32.png', 'Sutra PNG favicon (32px) referenced');
+mustContain('Sutra.html', 'assets/brand/sutra/generated/sutra-favicon-32.png', 'Sutra PNG favicon (32px) referenced');
 mustContain('Sutra.html', 'aria-label="Sutra Assistant"', 'assistant panel renamed to Sutra Assistant');
 mustContain('Sutra.html', 'data-sutra-component="assistant-intelligence-badge"', 'Powered by Sutra Intelligence badge hook present');
 mustContain('Sutra.html', 'Powered by Sutra Intelligence', 'Sutra Intelligence badge label present');

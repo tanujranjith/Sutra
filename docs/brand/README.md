@@ -42,3 +42,7 @@ Created using built-in imagegen. Prompt: extract the exact cyan/blue/purple
 ribbon S; remove the off-white background, floor shadow, and background through
 both openings; preserve geometry, folds, colors, and shading; center on a square
 transparent canvas with clear padding and clean edges for light and dark UI.
+
+Browser favicons (`sutra-favicon-16.png`, `sutra-favicon-32.png`, and
+`favicon.ico`) use a white backing. These are separate from transparent runtime
+logos and ordinary PWA PNGs. All three entry pages reference the favicon files.
