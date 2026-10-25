@@ -28,3 +28,17 @@ transparent output requested. Prompt:
 ### Animated eyes
 
 Built-in imagegen produced [`sutra-assistant-face-master.png`](../../assets/brand/sutra/sutra-assistant-face-master.png) from the transparent avatar. Prompt: remove only the two blue pill eyes, seamlessly restore the pale face, preserve canvas, character geometry, colors, and transparency; no mouth or new features. The brand generator makes a 128px face. Live and gallery CSS supply independent eyes; static icons retain the original eyes.
+
+### Transparent Sutra S
+
+Runtime app icons, favicon, transparent mark, and `assets/logos/sutra.png` now
+come from [`sutra-mark-master.png`](../../assets/brand/sutra/sutra-mark-master.png).
+The approved original logo master remains unchanged. Transparent space around
+and through the S shows the current theme background. The maskable PWA icon
+uses an opaque navy backing and safe-area padding; social artwork composites
+the transparent mark onto its existing light background.
+
+Created using built-in imagegen. Prompt: extract the exact cyan/blue/purple
+ribbon S; remove the off-white background, floor shadow, and background through
+both openings; preserve geometry, folds, colors, and shading; center on a square
+transparent canvas with clear padding and clean edges for light and dark UI.

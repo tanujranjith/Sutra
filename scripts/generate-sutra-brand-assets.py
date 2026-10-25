@@ -12,7 +12,7 @@ Prerequisites:
     pip install Pillow
 
 Master inputs (must exist before running):
-    assets/brand/sutra/sutra-app-icon-master.png
+    assets/brand/sutra/sutra-mark-master.png
     assets/brand/sutra/sutra-assistant-avatar-master.png
 
 All derivatives are written to:
@@ -35,7 +35,7 @@ except ImportError:
 ROOT        = Path(__file__).resolve().parent.parent
 BRAND_DIR   = ROOT / "assets" / "brand" / "sutra"
 GEN_DIR     = BRAND_DIR / "generated"
-MASTER_APP  = BRAND_DIR / "sutra-app-icon-master.png"
+MASTER_APP  = BRAND_DIR / "sutra-mark-master.png"
 MASTER_ASST = BRAND_DIR / "sutra-assistant-avatar-master.png"
 
 # ── Derivative specs ─────────────────────────────────────────────────────────
@@ -93,10 +93,14 @@ def main() -> None:
         write_png(resized, GEN_DIR / f"sutra-icon-{size}.png")
     # Compatibility filenames and PWA/social consumers belong to this generator
     # too; otherwise they silently retain an older approved logo.
-    write_png(high_quality_resize(app_master, 512), GEN_DIR / "sutra-icon-maskable-512.png")
+    # Installed app masks need an opaque background and safe-area padding.
+    maskable = Image.new("RGBA", (512, 512), (7, 17, 31, 255))
+    maskable.alpha_composite(high_quality_resize(app_master, 360), (76, 76))
+    write_png(maskable, GEN_DIR / "sutra-icon-maskable-512.png")
     write_png(high_quality_resize(app_master, 1024), GEN_DIR / "sutra-mark-transparent.png")
     social = Image.new("RGB", (1200, 630), (253, 253, 249))
-    social.paste(high_quality_resize(app_master, 480), (48, 75))
+    social_mark = high_quality_resize(app_master, 480)
+    social.paste(social_mark, (48, 75), social_mark)
     draw = ImageDraw.Draw(social)
     def brand_font(size):
         try:
@@ -107,6 +111,8 @@ def main() -> None:
     draw.text((570, 315), "Your academic life,", font=brand_font(26), fill=(55, 65, 86))
     draw.text((570, 355), "woven into one private workspace.", font=brand_font(26), fill=(55, 65, 86))
     write_png(social, GEN_DIR / "social-preview.png")
+
+    write_png(app_master, ROOT / "assets" / "logos" / "sutra.png")
 
     # favicon.ico  (multi-resolution: 16, 32, 48, 64)
     write_ico(app_master, GEN_DIR / "favicon.ico", ICO_SIZES)

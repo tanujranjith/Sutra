@@ -58,6 +58,7 @@ function requireNotContains(filePath, needle, label) {
 // ── Masters ──────────────────────────────────────────────────────────────────
 
 console.log('\n── Canonical master PNGs ───────────────────────────────────────');
+requireFile('assets/brand/sutra/sutra-mark-master.png', 'Transparent Sutra S master');
 requireFile('assets/brand/sutra/sutra-app-icon-master.png',       'Main Sutra master PNG');
 requireFile('assets/brand/sutra/sutra-assistant-icon-master.png', 'Sutra Assistant master PNG');
 requireFile('assets/brand/sutra/sutra-assistant-avatar-master.png', 'Transparent Assistant avatar master PNG');
