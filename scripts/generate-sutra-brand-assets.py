@@ -2,7 +2,7 @@
 """
 generate-sutra-brand-assets.py
 ──────────────────────────────
-Reads the two canonical Sutra master PNGs and produces all required
+Reads the canonical Sutra logo and extracted avatar PNGs and produces all required
 derivative icons + favicon.ico for the Sutra app.
 
 Usage:
@@ -13,7 +13,7 @@ Prerequisites:
 
 Master inputs (must exist before running):
     assets/brand/sutra/sutra-app-icon-master.png
-    assets/brand/sutra/sutra-assistant-icon-master.png
+    assets/brand/sutra/sutra-assistant-avatar-master.png
 
 All derivatives are written to:
     assets/brand/sutra/generated/
@@ -36,7 +36,7 @@ ROOT        = Path(__file__).resolve().parent.parent
 BRAND_DIR   = ROOT / "assets" / "brand" / "sutra"
 GEN_DIR     = BRAND_DIR / "generated"
 MASTER_APP  = BRAND_DIR / "sutra-app-icon-master.png"
-MASTER_ASST = BRAND_DIR / "sutra-assistant-icon-master.png"
+MASTER_ASST = BRAND_DIR / "sutra-assistant-avatar-master.png"
 
 # ── Derivative specs ─────────────────────────────────────────────────────────
 
@@ -121,6 +121,8 @@ def main() -> None:
     for size in ASST_SIZES:
         resized = high_quality_resize(asst_master, size)
         write_png(resized, GEN_DIR / f"sutra-assistant-icon-{size}.png")
+
+    write_png(asst_master, ROOT / "assets" / "logos" / "sutra-assistant.png")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     all_files = sorted(GEN_DIR.glob("*"))

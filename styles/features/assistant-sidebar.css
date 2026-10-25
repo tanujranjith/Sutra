@@ -112,7 +112,21 @@ body[data-view="assistantview"] #chatbotPanel.sutra-assistant-sidebar { display:
 .sutra-ai-change-anchor { display: inline-block; width: 0; height: 1em; padding: 0; margin: 0; pointer-events: none; vertical-align: baseline; }
 .sutra-editing-presence { position: fixed; top: 0; left: 0; width: 44px; height: 44px; z-index: 2205; pointer-events: none; transform-origin: 0 0; }
 .sutra-editing-presence[hidden] { display: none !important; }
-.sutra-editing-presence img { display: block; width: 44px; height: 44px; animation: sutra-editing-float 5s ease-in-out infinite; }
+.sutra-editing-presence img { display: block; width: 44px; height: 44px; }
+.sutra-assistant-character { position: relative; animation: sutra-character-float 6s ease-in-out infinite; transform-origin: center; }
+.sutra-editing-presence > .sutra-assistant-character { display: block; width: 44px; height: 44px; }
+.sutra-assistant-launcher-character { display: block; width: 50px; height: 50px; }
+.sutra-assistant-lid { position: absolute; top: 43.5%; width: 6.6%; height: 12.5%; border-radius: 48%; background: linear-gradient(#f4effa,#e9e0f5); transform: scaleY(0); transform-origin: center; pointer-events: none; animation: sutra-character-blink 7s ease-in-out infinite; }
+.sutra-assistant-lid.left { left: 37.2%; }
+.sutra-assistant-lid.right { left: 56.5%; }
+#chatbotPanel:has(.chatbot-thinking,.sutra-inline-ai-workbench[aria-busy="true"]) .sutra-sidebar-avatar { animation: sutra-character-thinking 2.4s ease-in-out infinite; }
+#view-assistantview .asst-hero-icon { animation: sutra-character-float 6s ease-in-out infinite; }
+@keyframes sutra-character-float { 0%,100% { transform: translate3d(0,0,0) rotate(0); } 50% { transform: translate3d(0,-1.5px,0) rotate(-1deg); } }
+@keyframes sutra-character-thinking { 0%,100% { transform: translate3d(0,0,0) rotate(-2deg); } 50% { transform: translate3d(0,-2px,0) rotate(2deg); } }
+@keyframes sutra-character-blink { 0%,45%,49%,100% { transform: scaleY(0); } 47% { transform: scaleY(1); } }
+@media(prefers-reduced-motion: reduce) { .sutra-assistant-character,#view-assistantview .asst-hero-icon { animation: none !important; transform: none !important; } .sutra-assistant-lid { animation: none !important; transform: scaleY(0) !important; } }
+body.motion-off .sutra-assistant-character,body.motion-off #view-assistantview .asst-hero-icon { animation: none !important; transform: none !important; }
+body.motion-off .sutra-assistant-lid { animation: none !important; transform: scaleY(0) !important; }
 .sutra-editing-eyes { position: absolute; top: 62%; left: 38%; width: 20%; height: 17%; display: flex; align-items: flex-start; justify-content: space-between; pointer-events: none; }
 .sutra-editing-eyes i { display: block; flex: 0 0 3.3px; width: 3.3px; height: 4.2px; border-radius: 3px; background: linear-gradient(#7bf3ff,#655bff); box-shadow: 0 0 2px #69baff44; transform-origin: center; animation: sutra-editing-blink 6s infinite; }
 @keyframes sutra-editing-float { 0%,100% { translate: 0 0; } 50% { translate: 0 -1px; } }

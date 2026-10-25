@@ -54,6 +54,9 @@
 @keyframes demo-logo-pencil{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(-6deg)}}
 @media(max-width:720px){.document{padding-left:64px}}
 
+/* Eyelids follow the eyes in the transparent avatar; the face has no mouth. */
+.character-bob .avatar-lid{position:absolute;top:43.5%;width:6.6%;height:12.5%;border-radius:48%;background:linear-gradient(#f4effa,#e9e0f5);transform:scaleY(0);animation:avatar-lid-blink 7s ease-in-out infinite;pointer-events:none}.avatar-lid.left{left:37.2%}.avatar-lid.right{left:56.5%}@keyframes avatar-lid-blink{0%,45%,49%,100%{transform:scaleY(0)}47%{transform:scaleY(1)}}
+
 /* Existing Assistant definitions, unchanged. */
 @keyframes asstFloatA {
     0%,100% { transform: translate(0,0) scale(1); }

@@ -1164,9 +1164,16 @@ owning editor's transaction/save path, while Cancel removes the preview.
 Classic Notes and chat retain an editable full-draft review. See
 [Modern Notes Editor](MODERN_NOTES_EDITOR.md) for scope and stale-source guards.
 
-The docked sidebar and moving logo use the new approved Assistant artwork,
+The docked sidebar, launcher, chat avatars, gallery, and moving logo use a
+transparent character extracted from the approved Assistant artwork,
 which contains its own eyes and no mouth. The former separate eye overlay is
 omitted so a second pair is not drawn over the new ribbon.
+The live header and launcher float gently and blink using small decorative
+eyelids over the artwork's existing eyes. The header tilts subtly while a chat
+or writing request is pending, and the full-view welcome logo floats. Inline
+editing retains its existing word-target travel. These use small CSS transform
+animations, add no provider calls, and stop under reduced/off motion. Original
+logo masters remain unchanged; no mouth or additional eyes are drawn.
 
 ### Local motion inventory
 

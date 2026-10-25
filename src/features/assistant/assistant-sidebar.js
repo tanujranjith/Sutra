@@ -54,12 +54,21 @@
     function reduced() {
         return doc.body.classList.contains('motion-off') || global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
+    function decorateCharacter(root) {
+        if (!root || root.classList.contains('sutra-assistant-character')) return;
+        root.classList.add('sutra-assistant-character');
+        ['left', 'right'].forEach(function (side) {
+            var lid = doc.createElement('span'); lid.className = 'sutra-assistant-lid ' + side;
+            lid.setAttribute('aria-hidden', 'true'); root.appendChild(lid);
+        });
+    }
     function createAvatar() {
         if (avatar) return avatar;
         avatar = doc.createElement('div'); avatar.className = 'sutra-editing-presence'; avatar.hidden = true;
         avatar.setAttribute('aria-hidden', 'true');
         var image = doc.createElement('img'); image.src = 'assets/brand/sutra/generated/sutra-assistant-icon-128.png'; image.alt = '';
-        avatar.appendChild(image); doc.body.appendChild(avatar); return avatar;
+        var character = doc.createElement('span'); character.appendChild(image);
+        decorateCharacter(character); avatar.appendChild(character); doc.body.appendChild(avatar); return avatar;
     }
     function stopPreview() {
         if (previewController) previewController.abort(); previewController = null;
@@ -168,6 +177,13 @@
             dockedAvatar.setAttribute('aria-hidden', 'true');
             logo.before(dockedAvatar);
             dockedAvatar.appendChild(logo);
+        }
+        if (logo) decorateCharacter(logo.closest('.sutra-sidebar-avatar'));
+        var launchImage = doc.querySelector('#chatbotBtn > img');
+        if (launchImage) {
+            var launchCharacter = doc.createElement('span'); launchCharacter.className = 'sutra-assistant-launcher-character';
+            launchCharacter.setAttribute('aria-hidden', 'true'); launchImage.before(launchCharacter);
+            launchCharacter.appendChild(launchImage); decorateCharacter(launchCharacter);
         }
         new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['style', 'class'] });
         new MutationObserver(sync).observe(doc.body, { attributes: true, attributeFilter: ['data-view'] });
