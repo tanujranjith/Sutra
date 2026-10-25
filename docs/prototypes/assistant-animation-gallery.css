@@ -54,8 +54,18 @@
 @keyframes demo-logo-pencil{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(-6deg)}}
 @media(max-width:720px){.document{padding-left:64px}}
 
-/* Eyelids follow the eyes in the transparent avatar; the face has no mouth. */
-.character-bob .avatar-lid{position:absolute;top:43.5%;width:6.6%;height:12.5%;border-radius:48%;background:linear-gradient(#f4effa,#e9e0f5);transform:scaleY(0);animation:avatar-lid-blink 7s ease-in-out infinite;pointer-events:none}.avatar-lid.left{left:37.2%}.avatar-lid.right{left:56.5%}@keyframes avatar-lid-blink{0%,45%,49%,100%{transform:scaleY(0)}47%{transform:scaleY(1)}}
+/* Independent eye layers over the eyeless face; transforms only. */
+.sutra-assistant-eye { position:absolute; top:43.7%; width:6.4%; height:12%; pointer-events:none; animation:sutra-eye-gaze 10s ease-in-out infinite; }
+.sutra-assistant-eye.left { left:37.4%; }
+.sutra-assistant-eye.right { left:56.7%; }
+.sutra-assistant-eye i { display:block; width:100%; height:100%; border-radius:999px; background:linear-gradient(165deg,#172cff 0%,#00115f 48%,#0037ff 88%); transform-origin:center; animation:sutra-eye-blink 6.8s ease-in-out infinite; }
+.sutra-assistant-eye.right i { background:linear-gradient(165deg,#202bfc 0%,#060b64 48%,#4925ff 100%); }
+@keyframes sutra-eye-gaze { 0%,18%,42%,64%,100% { transform:translate3d(0,0,0); } 24%,34% { transform:translate3d(-32%,-8%,0); } 70%,82% { transform:translate3d(34%,6%,0); } }
+@keyframes sutra-eye-blink { 0%,40%,44%,73%,77%,81%,100% { transform:scaleY(1); } 42%,75%,79% { transform:scaleY(.08); } }
+@keyframes sutra-eye-think { 0%,100% { transform:translate3d(-18%,-16%,0); } 45%,65% { transform:translate3d(25%,-20%,0); } }
+
+.co-editor.is-reading .sutra-assistant-eye { animation:sutra-eye-think 3.2s ease-in-out infinite; }
+.co-editor.is-writing .sutra-assistant-eye { animation:none; transform:translate3d(12%,16%,0); }
 
 /* Existing Assistant definitions, unchanged. */
 @keyframes asstFloatA {

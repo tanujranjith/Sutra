@@ -57,9 +57,14 @@
     function decorateCharacter(root) {
         if (!root || root.classList.contains('sutra-assistant-character')) return;
         root.classList.add('sutra-assistant-character');
+        var face = root.querySelector('img');
+        if (face) {
+            face.src = 'assets/brand/sutra/generated/sutra-assistant-face-128.png';
+            face.removeAttribute('srcset');
+        }
         ['left', 'right'].forEach(function (side) {
-            var lid = doc.createElement('span'); lid.className = 'sutra-assistant-lid ' + side;
-            lid.setAttribute('aria-hidden', 'true'); root.appendChild(lid);
+            var eye = doc.createElement('span'); eye.className = 'sutra-assistant-eye ' + side;
+            eye.setAttribute('aria-hidden', 'true'); eye.appendChild(doc.createElement('i')); root.appendChild(eye);
         });
     }
     function createAvatar() {

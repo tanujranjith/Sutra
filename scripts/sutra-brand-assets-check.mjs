@@ -64,6 +64,9 @@ requireFile('assets/brand/sutra/sutra-assistant-avatar-master.png', 'Transparent
 
 // ── Main Sutra derivatives ───────────────────────────────────────────────────
 
+requireFile('assets/brand/sutra/sutra-assistant-face-master.png', 'Assistant eyeless face master');
+requireFile('assets/brand/sutra/generated/sutra-assistant-face-128.png', 'Assistant animation face');
+
 console.log('\n── Main Sutra icon derivatives ─────────────────────────────────');
 const APP_SIZES = [16, 32, 48, 64, 96, 128, 180, 192, 256, 512, 1024];
 for (const s of APP_SIZES) {

@@ -124,6 +124,9 @@ def main() -> None:
 
     write_png(asst_master, ROOT / "assets" / "logos" / "sutra-assistant.png")
 
+    face_master = Image.open(BRAND_DIR / "sutra-assistant-face-master.png").convert("RGBA")
+    write_png(high_quality_resize(face_master, 128), GEN_DIR / "sutra-assistant-face-128.png")
+
     # ── Summary ───────────────────────────────────────────────────────────────
     all_files = sorted(GEN_DIR.glob("*"))
     print(f"\nOK  {len(all_files)} file(s) in {GEN_DIR.relative_to(ROOT)}/")

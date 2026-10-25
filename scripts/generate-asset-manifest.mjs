@@ -67,6 +67,8 @@ function collectReferences() {
   // exercised once while online.
   optional.add('./assets/vendor/office/mammoth.browser.min.js?v=1.8.0');
   optional.add('./assets/vendor/office/xlsx.full.min.js?v=0.20.3');
+  // Animated Assistant swaps its static icon for a separate eyeless face.
+  optional.add('./assets/brand/sutra/generated/sutra-assistant-face-128.png');
   for (const item of critical) optional.delete(item);
   const featureSource = readFileSync(resolve(root, 'src/config/feature-manifest.js'), 'utf8');
   const sandbox = {};

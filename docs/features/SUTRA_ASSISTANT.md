@@ -1168,8 +1168,11 @@ The docked sidebar, launcher, chat avatars, gallery, and moving logo use a
 transparent character extracted from the approved Assistant artwork,
 which contains its own eyes and no mouth. The former separate eye overlay is
 omitted so a second pair is not drawn over the new ribbon.
-The live header and launcher float gently and blink using small decorative
-eyelids over the artwork's existing eyes. The header tilts subtly while a chat
+The live header and launcher float gently. Their eyes are separate blue pill
+layers over an eyeless face image: they blink, occasionally double-blink, and
+glance sideways when idle. While thinking they look upward; while editing they
+look down toward the word. The gallery uses the same eye layers. Reduced/off
+motion keeps the eyes open and centered. The header tilts subtly while a chat
 or writing request is pending, and the full-view welcome logo floats. Inline
 editing retains its existing word-target travel. These use small CSS transform
 animations, add no provider calls, and stop under reduced/off motion. Original
