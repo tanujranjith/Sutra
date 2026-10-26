@@ -83041,14 +83041,19 @@ function parseQuickCaptureText(text, options) {
 
     // Natural-language due date (today/tomorrow, weekdays + abbreviations,
     // "in N days", "next week", explicit + month-name dates) — see parseQuickCaptureDate.
+    // A deadline clause owns the due fields; dates/times in the description
+    // ("lab done on Oct 26 due tomorrow night") remain descriptive text.
+    const deadlineClause = working.match(/\bdue\s+(?:(?:on|by|at)\s+)?(.+)$/i);
+    const temporalText = deadlineClause ? deadlineClause[1] : working;
     const sharedDateParser = window.SutraStudentDateParser;
     const sharedTimeParsed = sharedDateParser && typeof sharedDateParser.parseNaturalTime === 'function'
-        ? sharedDateParser.parseNaturalTime(working)
+        ? sharedDateParser.parseNaturalTime(temporalText)
         : null;
     const sharedDuration = sharedDateParser && typeof sharedDateParser.parseDurationMinutes === 'function'
         ? sharedDateParser.parseDurationMinutes(working)
         : null;
-    const dateParsed = parseQuickCaptureDate(working, new Date());
+    const dateParsed = parseQuickCaptureDate(temporalText, new Date());
+    const deadlineNightIntent = !!deadlineClause && /\b(?:night|tonight|tn|eod|end of day)\b/i.test(temporalText);
     const tonightDateIntent = dateParsed && (dateParsed.kind === 'tonight'
         || /\b(tonight|tn|eod|end of day)\b/i.test(String(dateParsed.match || '')));
     if (dateParsed && dateParsed.date) {
@@ -83062,10 +83067,11 @@ function parseQuickCaptureText(text, options) {
 
     // Time parse e.g. "6pm", "18:00", "3:30pm".
     let explicitTimeSpecified = false;
-    const timeMatch = working.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+    const timeMatch = sharedTimeParsed && sharedTimeParsed.time ? null
+        : temporalText.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b/i);
     if (timeMatch) {
-        let h = parseInt(timeMatch[1], 10);
-        const min = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+        let h = parseInt(timeMatch[1] || timeMatch[4], 10);
+        const min = parseInt(timeMatch[2] || timeMatch[5] || '0', 10);
         const suffix = (timeMatch[3] || '').toLowerCase();
         if (suffix === 'pm' && h < 12) h += 12;
         if (suffix === 'am' && h === 12) h = 0;
@@ -83076,7 +83082,7 @@ function parseQuickCaptureText(text, options) {
         }
     } else if (sharedTimeParsed && sharedTimeParsed.time) {
         out.dueTime = String(sharedTimeParsed.time);
-        explicitTimeSpecified = !(sharedTimeParsed.kind === 'evening' && tonightDateIntent);
+        explicitTimeSpecified = sharedTimeParsed.kind !== 'evening';
         // Phrases such as "after school" may already have been removed by the
         // date parser; replacing a missing match is harmless and keeps titles clean.
         if (sharedTimeParsed.match) {
@@ -83164,7 +83170,8 @@ function parseQuickCaptureText(text, options) {
         if (classMatch) out.classHint = classMatch[1].trim();
     }
 
-    if (tonightDateIntent && !explicitTimeSpecified && (out.type === 'homework' || captureType === 'homework')) {
+    if ((tonightDateIntent || deadlineNightIntent) && !explicitTimeSpecified
+        && (deadlineNightIntent || out.type === 'homework' || out.type === 'test' || captureType === 'homework')) {
         // “Tonight” on an assignment means end of the local day, not the
         // generic evening estimate used for calendar/study-block intents.
         out.dueTime = '23:59';
@@ -83586,7 +83593,9 @@ function openQuickCaptureModal(prefillText, options) {
 
     if (requestedType) {
         typeSelect.value = requestedType;
-        if (typeSelect.dataset) typeSelect.dataset.manualType = requestedType;
+        // Add task is a starting point, not a manual choice to ignore "hw".
+        // Explicit dropdown changes still pin the destination in onchange.
+        if (typeSelect.dataset) typeSelect.dataset.manualType = requestedType === 'task' ? '' : requestedType;
         syncQuickCaptureApSubjectField({ type: requestedType }, modal);
         syncQuickCaptureCourseField({ type: requestedType, courseId: requestedCourseId, classHint: '' }, modal);
         if (requestedCourseId && courseSelect && Array.from(courseSelect.options).some(option => option.value === requestedCourseId)) {

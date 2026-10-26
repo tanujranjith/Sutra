@@ -197,7 +197,7 @@
             return { time: String(Number(match[1])).padStart(2, '0') + ':' + match[2], match: match[0], kind: 'clock-24' };
         }
         if ((match = lower.match(/\b(after school|after class)\b/))) return { time: '15:30', match: match[0], kind: 'after-school' };
-        if ((match = lower.match(/\b(after dinner|after supper|tonight)\b/))) return { time: '19:00', match: match[0], kind: 'evening' };
+        if ((match = lower.match(/\b(after dinner|after supper|tonight|night|evening)\b/))) return { time: '19:00', match: match[0], kind: 'evening' };
         return null;
     }
 
