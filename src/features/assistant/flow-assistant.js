@@ -1055,7 +1055,7 @@
         { type: 'create_note_backlink', desc: 'Append a clickable sutra:// backlink from one note to another.', risk: 'medium', fields: { fromNoteId: 'string', toNoteId: 'string', label: 'string?' } },
         { type: 'convert_selection_to_fields', desc: 'Replace the current selected content with user-reviewed structured fields while preserving the original facts.', risk: 'high', fields: { text: 'markdown' } },
         { type: 'replace_selection', desc: 'Replace the user\'s currently selected text in the editor', risk: 'high', fields: { text: 'string' } },
-        { type: 'create_task', desc: 'Create a to-do, task, reminder, or upcoming test/deadline in the planner', risk: 'medium', fields: { title: 'string', dueDate: 'YYYY-MM-DD?', dueTime: 'HH:MM?', priority: 'low|medium|high?', notes: 'string?', category: 'string?', linkPageId: 'string?' } },
+        { type: 'create_task', desc: 'Create a general task, reminder, or upcoming test/deadline in To-do', risk: 'medium', fields: { title: 'string', dueDate: 'YYYY-MM-DD?', dueTime: 'HH:MM?', priority: 'low|medium|high?', notes: 'string?', category: 'string?', linkPageId: 'string?' } },
         { type: 'create_homework', desc: 'Create a homework assignment', risk: 'medium', fields: { title: 'string', courseName: 'string?', dueDate: 'YYYY-MM-DD?', difficulty: 'easy|medium|hard?' } },
         { type: 'create_timeline_block', desc: 'Schedule a calendar/timeline block', risk: 'medium', fields: { name: 'string', date: 'YYYY-MM-DD', start: 'HH:MM', end: 'HH:MM', category: 'string?', linkTaskId: 'string?', linkHomeworkId: 'string?' } },
         { type: 'create_page', desc: 'Create a new note page', risk: 'medium', fields: { title: 'string', body: 'markdown', tags: 'string[]?', classLinkId: 'string?' } },
@@ -2431,16 +2431,29 @@
 
     function applyCreateTask(action) {
         const b = bridge();
-        const tasks = b && Array.isArray(b.tasks) ? b.tasks : null;
-        if (!Array.isArray(tasks)) return { ok: false, message: 'Tasks not available.' };
-        // IMPORTANT: match the canonical Atelier task shape (see app.js task
-        // creation at line ~16329). Missing `isActive`/`scheduleType`/etc. makes
-        // the task invisible in Today's filters, Daily Thread counts, and the
-        // Deadline Radar — even though it shows up in the All Tasks drawer.
-        const newTask = {
+        const legacy = b && Array.isArray(b.tasks) ? b.tasks.filter(task => task.origin === 'flow'
+            && task.title === action.title && (task.dueDate || '') === (action.dueDate || '')
+            && (task.dueTime || '') === (action.dueTime || '') && (task.notes || '') === (action.notes || '')) : [];
+        if (legacy.length === 1) return { ok: true, existing: true, message: 'This reminder is saved in the older planner. Move it to To-do below.', payload: { taskId: legacy[0].id, createdObjectIds: [{ kind: 'task', id: legacy[0].id }] } };
+        if (legacy.length > 1) return { ok: false, message: 'Several matching reminders are saved in the planner. Review those before adding another.' };
+        const saved = homeworkSnapshot().tasks.filter(task => task.kind === 'task' && task.origin === 'flow' && !task.done
+            && task.title === action.title && (task.dueDate || '') === (action.dueDate || '')
+            && (task.dueTime || '') === (action.dueTime || '') && (task.notes || '') === (action.notes || ''));
+        if (saved.length === 1) return { ok: true, existing: true, message: 'This reminder is already in To-do.', payload: { taskId: saved[0].id, createdObjectIds: [{ kind: 'homework', id: saved[0].id }] } };
+        if (saved.length > 1) return { ok: false, message: 'Several matching reminders are already in To-do. Review those before adding another.' };
+        return saveAssistantTodo(action);
+    }
+
+    function saveAssistantTodo(action, legacyTask) {
+        const store = window.SutraHomeworkStore;
+        if (!store || typeof store.transact !== 'function') return { ok: false, message: 'To-do is not available. Nothing was added.' };
+        const newTask = Object.assign({}, legacyTask || {}, {
             id: makeId('t'),
             title: String(action.title).slice(0, 200),
             notes: action.notes || '',
+            kind: 'task',
+            courseId: '',
+            done: false,
             completed: false,
             isActive: true,
             scheduleType: 'once',
@@ -2454,18 +2467,33 @@
             referenceUrl: null,
             createdAt: new Date().toISOString(),
             origin: 'flow'
-        };
-        tasks.unshift(newTask);
-        // Keep taskOrder in sync if it exists on the bridge.
+        });
+        if (legacyTask) Object.assign(newTask, legacyTask, { kind: 'task', courseId: '', done: !!legacyTask.completed, completed: !!legacyTask.completed });
         try {
-            if (typeof window.taskOrder !== 'undefined' && Array.isArray(window.taskOrder)) {
-                window.taskOrder.unshift(newTask.id);
-            }
-        } catch (e) { /* non-critical */ }
-        if (b) { b.persistAppData(); b.renderTaskViews(); }
-        else { safeCall(window.persistAppData); safeCall(window.renderTaskViews); }
-        if (action.linkPageId) safeCall(addPageLinks, action.linkPageId, { taskIds: [newTask.id] });
-        return { ok: true, message: 'Task added.', payload: { taskId: newTask.id, createdObjectIds: [{ kind: 'task', id: newTask.id }] } };
+            store.transact(workspace => {
+                const existing = workspace.tasks.find(task => String(task.id) === String(newTask.id));
+                if (existing) {
+                    const normalizedFields = new Set(['id', 'kind', 'courseId', 'done', 'completed', 'title', 'text', 'dueDate', 'dueTime', 'due', 'priority', 'difficulty', 'notes', 'createdAt', 'updatedAt', 'recurrence']);
+                    const metadataMatches = Object.keys(legacyTask || {}).filter(key => !normalizedFields.has(key))
+                        .every(key => JSON.stringify(existing[key]) === JSON.stringify(newTask[key]));
+                    const matches = metadataMatches && existing.kind === 'task' && existing.origin === 'flow' && existing.title === newTask.title
+                        && (existing.dueDate || '') === newTask.dueDate && (existing.dueTime || '') === newTask.dueTime
+                        && (existing.notes || '') === newTask.notes && existing.done === newTask.done;
+                    if (!matches) throw new Error('A different or edited To-do item already uses this id. Nothing was replaced.');
+                    return;
+                }
+                workspace.tasks.unshift(newTask);
+            }, { reason: 'assistant-create-todo', id: newTask.id });
+            if (!homeworkSnapshot().tasks.some(task => String(task.id) === String(newTask.id))) throw new Error('To-do did not accept the task.');
+            notifyHomeworkChanged();
+            const b = bridge();
+            if (b) b.renderTaskViews(); else safeCall(window.renderTaskViews);
+            if (action.linkPageId) safeCall(addPageLinks, action.linkPageId, { homeworkIds: [newTask.id] });
+            return { ok: true, message: 'Added to To-do.', payload: { taskId: newTask.id, createdObjectIds: [{ kind: 'homework', id: newTask.id }] } };
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'flow-assistant.saveAssistantTodo' }, 'error');
+            return { ok: false, message: error.message || 'Could not add the task to To-do.' };
+        }
     }
 
     function applyCreateHomework(action) {
@@ -4087,9 +4115,46 @@
     // created object (a new note opens itself); otherwise falls back to the
     // action's domain view via the capability registry. Returns null for
     // actions with no meaningful destination (navigation, memory, assistant).
+    async function moveLegacyAssistantTodo(id) {
+        const b = bridge();
+        const task = b && Array.isArray(b.tasks) ? b.tasks.find(row => String(row.id) === String(id)) : null;
+        if (!task || task.origin !== 'flow') { showToast('That saved planner task is no longer available.'); return false; }
+        const before = JSON.stringify(task);
+        try {
+            const permissionError = assistantActionPermissionError({ type: 'create_task', title: task.title }, { reviewed: true }, false);
+            if (permissionError) throw new Error(permissionError);
+            const store = window.SutraHomeworkStore;
+            if (!store || typeof store.whenPersisted !== 'function') throw new Error('To-do persistence is not available. The planner task was kept.');
+            const saved = saveAssistantTodo(task, task);
+            if (!saved.ok) throw new Error(saved.message);
+            if (await store.whenPersisted() === false) throw new Error('To-do save is not confirmed. The planner task was kept.');
+            const index = b.tasks.findIndex(row => row === task);
+            if (index < 0 || JSON.stringify(task) !== before) throw new Error('The planner task changed during the move. It was kept for review.');
+            b.tasks.splice(index, 1);
+            try {
+                if (await b.persistAppData() === false) throw new Error('The planner update could not be saved.');
+            } catch (error) { b.tasks.splice(index, 0, task); throw error; }
+            b.renderTaskViews();
+            notifyHomeworkChanged();
+            callApp('setActiveView', 'homework');
+            showToast('Moved the saved reminder to To-do.');
+            return true;
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'flow-assistant.moveLegacyAssistantTodo', id }, 'error');
+            showToast(error.message || 'The reminder could not be moved.');
+            return false;
+        }
+    }
+
     function receiptLinkForAction(action, result) {
         try {
             const created = (result && result.payload && result.payload.createdObjectIds) || [];
+            const oldTask = created.find(object => object && object.kind === 'task' && object.id);
+            if (oldTask && action && action.type === 'create_task') {
+                const b = bridge();
+                const legacy = b && Array.isArray(b.tasks) ? b.tasks.find(row => String(row.id) === String(oldTask.id)) : null;
+                if (legacy && legacy.origin === 'flow') return { label: 'Move to To-do', go: () => moveLegacyAssistantTodo(oldTask.id) };
+            }
             const page = created.find(o => o && o.kind === 'page' && o.id);
             if (page) {
                 if (!resolveLiveAssistantTarget('page', page.id)) return null;
@@ -4105,7 +4170,7 @@
             const reg = (typeof window !== 'undefined') ? window.SutraCapabilityRegistry : null;
             const meta = reg && typeof reg.get === 'function' ? reg.get(type) : null;
             const DOMAIN_VIEWS = {
-                tasks: { label: 'Open Home', view: 'today' },
+                tasks: { label: 'Open To-do', view: 'homework' },
                 homework: { label: 'Open To-do', view: 'homework' },
                 timeline: { label: 'Open Timeline', view: 'timeline' },
                 review: { label: 'Open Review', view: 'review' },
@@ -4133,9 +4198,12 @@
         receipt.className = 'flow-action-receipt';
         const created = (result && result.payload && result.payload.createdObjectIds) || [];
         const bits = [];
-        if (created.length) {
+        if (created.length && !result.existing) {
             const byKind = created.reduce((acc, o) => {
-                if (o && o.kind) acc[o.kind] = (acc[o.kind] || 0) + 1;
+                if (o && o.kind) {
+                    const kind = o.kind === 'homework' && homeworkSnapshot().tasks.some(task => String(task.id) === String(o.id) && task.kind === 'task') ? 'task' : o.kind;
+                    acc[kind] = (acc[kind] || 0) + 1;
+                }
                 return acc;
             }, {});
             bits.push('Created ' + Object.keys(byKind).map(k => `${byKind[k]} ${k}${byKind[k] === 1 ? '' : 's'}`).join(', '));
@@ -5083,9 +5151,14 @@
                 .find(turn => turn && turn.role === 'user' && String(turn.content || '').trim() !== String(userText || '').trim());
             if (previous) query += ' ' + String(previous.content || '').slice(0, 1000).toLowerCase();
         }
+        const classListRequest = /\b(?:classes?|courses?)\b/.test(query)
+            && ((/\b(?:my|mine|our|we|i(?:['’]?m)?|taking|enrolled|registered)\b/.test(query)
+                    && /\b(?:list|show|which|what|all|take|taking|enrolled|registered|have)\b/.test(query))
+                || (/\b(?:list|show)\b/.test(query) && /\b(?:all|every)\b/.test(query)));
         const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your saved notes note details reference url one short sentence cite same its'.split(' '));
         const todo = /\b(?:to[ -]?dos?|task(?:s| list)?|homework|assignments?)\b/i.test(query);
         if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo', 'todos', 'dos', 'u', 'all', 'summarize', 'summarise', 'summary', 'overview', 'check'].forEach(term => stop.add(term));
+        if (classListRequest) ['class', 'classes', 'course', 'courses', 'all', 'every', 'im', 'taking', 'enrolled', 'registered', 'list', 'show', 'which', 'what', 'have', 'mine', 'our', 'we'].forEach(term => stop.add(term));
         const terms = (query.match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !stop.has(term)).slice(0, 32);
         const taskList = todo && terms.length === 0;
         const taskDetailsOnly = todo && /\b(?:saved notes|reference url|task notes|assignment notes)\b/.test(query)
@@ -5100,11 +5173,26 @@
         let records;
         try { records = registry.collectSearchable({}, { types: allowedTypes, includePrivate: permissions.allowPrivateDocuments === true }); }
         catch (error) { return null; }
+        const courseTypes = new Map();
+        if (classListRequest && privacy.canRead('courses', options) && window.courseHub && typeof window.courseHub.getCourses === 'function') {
+            try {
+                const hubCourses = window.courseHub.getCourses({ filter: 'active' }) || [];
+                (Array.isArray(hubCourses) ? hubCourses : []).forEach(course => {
+                    if (course && course.id && course.type) courseTypes.set(String(course.id), String(course.type).trim().toLowerCase());
+                });
+            } catch (error) { /* registry records remain the bounded fallback */ }
+        }
+        const nonClassCourseType = /^(?:activity|misc|self[ _-]?study)$/i;
         const ranked = records.map(entity => {
             const target = mapping[entity.type];
             if (!target || !privacy.canRead(target[0], options) || excluded.has(String(entity.key)) || excluded.has(String(entity.id))) return null;
             if (entity.privacy && entity.privacy.locked) return null;
             const meta = entity.metadata || {};
+            if (classListRequest) {
+                if (entity.type !== 'course' || /^(?:archived|completed|done)$/i.test(entity.status || '')) return null;
+                const courseType = courseTypes.get(String(entity.id)) || String(meta.courseType || meta.type || meta.kind || '').trim().toLowerCase();
+                if (nonClassCourseType.test(courseType)) return null;
+            }
             const category = [meta.collection, meta.domain].join(' ');
             if (!permissions.allowFinancial && /cost|financial|invoice|finance|spend|expense|income|budget|scholarship|tuition/i.test(category)) return null;
             if (/wellness|checkins|journalentries|fitness|calories|sleeptracker|journals/i.test(category)) return null;
@@ -5115,19 +5203,26 @@
             if (isTask && completed && !/^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
             const title = String(entity.title || '').toLowerCase();
             const text = [entity.text || '', entity.status || '', ...(entity.keywords || [])].join(' ').toLowerCase();
-            let score = terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
+            let score = classListRequest ? 100 : terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
             if (taskList && isTask) score += 40;
             if (planning && target[0] === 'planning') score += 15;
             if (todo && isTask && score > 0) score += 10;
             if (score === 0) return null;
             const match = terms.map(term => text.indexOf(term)).filter(index => index >= 0).sort((a, b) => a - b)[0] || 0;
-            return { entity, target, score, excerpt: truncate(String(entity.text || '').slice(Math.max(0, match - 160)), 900) };
-        }).filter(Boolean).sort((a, b) => b.score - a.score || String(a.entity.dates && a.entity.dates.due || '9999').localeCompare(String(b.entity.dates && b.entity.dates.due || '9999')) || String(a.entity.key).localeCompare(String(b.entity.key)));
+            const courseType = classListRequest
+                ? courseTypes.get(String(entity.id)) || String(meta.courseType || meta.type || meta.kind || '').trim().toLowerCase()
+                : '';
+            return { entity, target, score, courseType, excerpt: truncate(String(entity.text || '').slice(Math.max(0, match - 160)), 900) };
+        }).filter(Boolean).sort((a, b) => classListRequest
+            ? String(a.entity.title || '').localeCompare(String(b.entity.title || '')) || String(a.entity.key).localeCompare(String(b.entity.key))
+            : b.score - a.score || String(a.entity.dates && a.entity.dates.due || '9999').localeCompare(String(b.entity.dates && b.entity.dates.due || '9999')) || String(a.entity.key).localeCompare(String(b.entity.key)));
         const selected = taskDetailsOnly && ranked.length ? ranked.filter(row => row.score >= ranked[0].score * 0.75) : ranked;
         const result = {};
-        selected.slice(0, taskList ? 40 : 16).forEach(({ entity, target, score, excerpt }) => {
+        const selectionLimit = taskList || classListRequest ? 40 : 16;
+        selected.slice(0, selectionLimit).forEach(({ entity, target, score, courseType, excerpt }) => {
             if (!result[target[1]]) result[target[1]] = [];
             result[target[1]].push({ id: entity.id, key: entity.key, type: entity.type, title: entity.title,
+                courseType: classListRequest ? courseType : undefined,
                 excerpt: entity.type === 'task' || entity.type === 'homework' ? undefined : excerpt,
                 notes: entity.type === 'task' || entity.type === 'homework' ? String(entity.metadata && entity.metadata.taskNotes || '') : undefined,
                 notesTruncated: entity.type === 'task' || entity.type === 'homework' ? Number(entity.metadata && entity.metadata.taskNotesLength || 0) > 1000 : undefined,
@@ -5136,7 +5231,7 @@
                 citationUrl: 'sutra://entity/' + encodeURIComponent(entity.key),
                 courseId: entity.courseId || '', relevance: score });
         });
-        result.workspaceRetrieval = { matchedCount: selected.length, selectedCount: Math.min(selected.length, taskList ? 40 : 16), limit: taskList ? 40 : 16, taskDetailsOnly };
+        result.workspaceRetrieval = { matchedCount: selected.length, selectedCount: Math.min(selected.length, selectionLimit), limit: selectionLimit, taskDetailsOnly, classListOnly: classListRequest };
         return result;
     }
 
@@ -6447,6 +6542,15 @@
                 const tasks = b ? b.tasks : [];
                 const idx = (tasks || []).findIndex(t => t && t.id === id);
                 if (idx >= 0) { tasks.splice(idx, 1); return true; }
+                // Receipts predating the To-do destination fix retain kind=task
+                // after an explicit move; their original Undo still owns this id.
+                const moved = homeworkSnapshot().tasks.find(task => String(task.id) === String(id) && task.kind === 'task' && task.origin === 'flow');
+                if (moved) {
+                    const result = safeHwWrite('hwTasks:v2', JSON.stringify(homeworkSnapshot().tasks.filter(task => String(task.id) !== String(id))));
+                    if (!result.ok) return false;
+                    notifyHomeworkChanged();
+                    return true;
+                }
             } else if (kind === 'timeline') {
                 const blocks = b ? b.timeBlocks : [];
                 const idx = (blocks || []).findIndex(x => x && x.id === id);
@@ -6458,7 +6562,8 @@
             } else if (kind === 'homework') {
                 const tasks = homeworkSnapshot().tasks;
                 const next = (Array.isArray(tasks) ? tasks : []).filter(t => t && t.id !== id);
-                safeHwWrite('hwTasks:v2', JSON.stringify(next));
+                const saved = safeHwWrite('hwTasks:v2', JSON.stringify(next));
+                if (!saved.ok) return false;
                 notifyHomeworkChanged();
                 return true;
             } else if (kind === 'reviewDeck') {
@@ -7710,6 +7815,12 @@
         const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
         if (!pk || typeof pk.answer !== 'function') return null;
         // Product help answers how Sutra works, not questions about saved data.
+        // A class/course list request is about the student's own workspace even
+        // when they type "im taking" without an apostrophe or the word "my".
+        const asksForPersonalCourseList = /\b(?:classes?|courses?)\b/.test(lc)
+            && /\b(?:i(?:['’]?m)?|my|mine|our|we|taking|enrolled|registered)\b/.test(lc)
+            && /\b(?:list|show|which|what|all|take|taking|enrolled|registered|have)\b/.test(lc);
+        if (asksForPersonalCourseList) return null;
         if (/\b(?:my|our|saved)\b/i.test(rawText) && !/\b(?:how (?:do|can|should) (?:i|we)|how to|where (?:do|can) (?:i|we)|why (?:can'?t|doesn'?t))\b/i.test(rawText)) return null;
         // Only treat clearly question-shaped or help-shaped text as product Q&A,
         // so ordinary chat still goes to the provider.

@@ -1138,8 +1138,15 @@ Permission filters and separate locked-note consent still apply. “Open note”
 identifies the page on screen; exact request context remains inspectable through
 the context button. Unrelated last-opened notes are not retained for other views.
 
-Ordinary to-dos use the existing `create_task` proposal and canonical planner
-store, with review before Apply. Requests to add upcoming classroom tests also
+Ordinary to-dos use the existing `create_task` proposal and canonical To-do
+store (`SutraHomeworkStore`, `kind: task`), with review before Apply. They appear
+in All and General, and their receipts open To-do. The internal homework
+identity keeps existing persistence, links, task mutations, and Undo intact.
+Earlier Assistant reminders saved in the planner are retained. Reapplying an
+exact matching proposal reuses that reminder and offers **Move to To-do** rather
+than creating another one. The explicit move preserves its id and unknown
+metadata, waits for destination persistence before removing the planner value,
+and keeps the original on failure. Old receipts can still undo a moved reminder. Requests to add upcoming classroom tests also
 expose that schema; they are not limited to creating a cram session. Several
 distinct tasks can be proposed separately, and dates still require a clear
 interpretation from the current date or a clarification.
@@ -1257,3 +1264,9 @@ was zero. New unit/E2E regressions are prepared for CI, not run locally. Success
 live Stateful follow-ups and reviewed provider-generated edits remain unverified
 for this revision. No new durable fields were introduced; note identity uses the
 existing conversation scope. Existing permissions, PIN gates, and Apply remain.
+
+Personal class-list questions, including “classes im taking,” bypass fuzzy
+Product Knowledge / Local Help routing and use permitted workspace context.
+Class-list retrieval selects active class/AP course records and Homework fallback
+courses, omits activity/misc/self-study and archived records, and reports its
+40-record bound. Course type metadata is ephemeral; no workspace schema changes.

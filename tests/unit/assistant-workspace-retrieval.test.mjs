@@ -7,10 +7,10 @@ import { extractFunction } from '../helpers/extract-function.mjs';
 const source = readFileSync(new URL('../../src/features/assistant/flow-assistant.js', import.meta.url), 'utf8');
 const privacy = createRequire(import.meta.url)('../../src/features/assistant/assistant-permissions.js');
 const record = (type, id, title, extra = {}) => ({ type, id, key: type + ':' + id, title, text: title, status: 'open', dates: {}, privacy: {}, metadata: {}, ...extra });
-function selector(records, permissions = { mode: 'read_only', areas: {} }, memoryMode = 'stateless') {
+function selector(records, permissions = { mode: 'read_only', areas: {} }, memoryMode = 'stateless', courseHub = null) {
   privacy.configure({ getPermissions: () => permissions });
   return new Function('window', 'truncate', 'getChatMemoryMode', extractFunction(source, 'selectRelevantWorkspaceContext').body + ';return selectRelevantWorkspaceContext;')({
-    SutraWorkspaceEntityRegistry: { collectSearchable: () => records }, SutraAssistantPrivacy: privacy
+    SutraWorkspaceEntityRegistry: { collectSearchable: () => records }, SutraAssistantPrivacy: privacy, courseHub
   }, (text, limit) => String(text || '').slice(0, limit), () => memoryMode);
 }
 
@@ -77,6 +77,83 @@ test('personal saved-data questions cannot be intercepted by product help', () =
   const productQuestion = 'How do I use notes in my classes?';
   assert.equal(route(productQuestion, productQuestion.toLowerCase()).handled, true);
   assert.equal(handedOffQuestion, productQuestion);
+});
+
+test('personal class-list questions bypass product-help routing', () => {
+  let productLookups = 0;
+  let opened = false;
+  const route = new Function('window', extractFunction(source, 'routeProductKnowledge').body + ';return routeProductKnowledge;')({
+    SutraProductKnowledge: { answer: () => { productLookups += 1; return { entry: { id: 'feature-tour' } }; } },
+    SutraLocalHelp: { nodeIdForKnowledge: () => 'feature-tour', open: () => { opened = true; return true; } }
+  });
+  const questions = [
+    'Can you list all the classes im taking?',
+    'What courses am I enrolled in?',
+    'Which classes do I have?'
+  ];
+
+  for (const question of questions) {
+    assert.equal(route(question, question.toLowerCase()), null, question);
+  }
+  assert.equal(productLookups, 0, 'personal class-list requests should not be scored as product help');
+  assert.equal(opened, false, 'personal class-list requests should not open a Local Help card');
+});
+
+test('class-list retrieval selects active classes, AP courses, and Homework course rows only', () => {
+  const records = [
+    record('course', 'chemistry', 'Chemistry', { text: 'Chemistry', status: 'active' }),
+    record('course', 'ap-biology', 'AP Biology', { text: 'Biology', status: 'active' }),
+    record('course', 'homework-algebra', 'Algebra II', { text: 'Algebra II', status: 'active', metadata: { source: 'homework', courseType: 'class' } }),
+    record('course', 'robotics-activity', 'Robotics', { text: 'Robotics', status: 'active' }),
+    record('course', 'homework-activity', 'Art Club', { text: 'Art Club', status: 'active', metadata: { source: 'homework', courseType: 'misc' } }),
+    record('course', 'archived-history', 'History', { text: 'History', status: 'archived' }),
+    record('homework', 'chem-lab', 'Chemistry lab', { courseId: 'chemistry' }),
+    record('course_file', 'chem-syllabus', 'Chemistry syllabus'),
+    record('task', 'study-chemistry', 'Study chemistry')
+  ];
+  const courseHub = {
+    getCourses: options => {
+      assert.deepEqual(options, { filter: 'active' });
+      return [
+        { id: 'chemistry', type: 'class' },
+        { id: 'ap-biology', type: 'ap' },
+        { id: 'robotics-activity', type: 'activity' }
+      ];
+    }
+  };
+  const result = selector(records, undefined, 'stateless', courseHub)('Can you list all the classes im taking?');
+
+  assert.deepEqual(result.workspaceCourses.map(row => row.id).sort(), ['ap-biology', 'chemistry', 'homework-algebra']);
+  assert.deepEqual(result.workspaceCourses.filter(row => row.courseType).map(row => row.courseType).sort(), ['ap', 'class', 'class']);
+  assert.equal(result.workspacePlanning, undefined);
+  assert.equal(result.workspaceRetrieval.classListOnly, true);
+  assert.equal(result.workspaceRetrieval.selectedCount, 3);
+  assert.equal(result.workspaceRetrieval.limit, 40);
+});
+
+test('class-list retrieval respects denied Courses access before reading Course Hub', () => {
+  let courseHubReads = 0;
+  const result = selector(
+    [record('course', 'chemistry', 'Chemistry', { status: 'active' })],
+    { mode: 'read_only', areas: { courses: 'denied' } },
+    'stateless',
+    { getCourses: () => { courseHubReads += 1; return [{ id: 'chemistry', type: 'class' }]; } }
+  )('Can you list all the classes im taking?');
+
+  assert.equal(result.workspaceCourses, undefined);
+  assert.equal(result.workspaceRetrieval.classListOnly, true);
+  assert.equal(courseHubReads, 0);
+});
+
+test('class-list retrieval reports its bound when more than forty course rows match', () => {
+  const records = Array.from({ length: 45 }, (_, i) => record('course', 'course-' + i, 'Course ' + i, { status: 'active' }));
+  const result = selector(records)('Can you list all the classes im taking?');
+
+  assert.equal(result.workspaceCourses.length, 40);
+  assert.equal(result.workspaceRetrieval.matchedCount, 45);
+  assert.equal(result.workspaceRetrieval.selectedCount, 40);
+  assert.equal(result.workspaceRetrieval.limit, 40);
+  assert.equal(result.workspaceRetrieval.classListOnly, true);
 });
 
 test('Local Help provider handoff stays in the full chat composer', () => {

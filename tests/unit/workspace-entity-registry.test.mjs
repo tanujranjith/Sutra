@@ -192,7 +192,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
         }]
       },
       courseWorkspace: {
-        courses: [{ id: 'bio', name: 'Biology', teacher: 'Dr. Rivera' }],
+        courses: [{ id: 'bio', name: 'Biology', teacher: 'Dr. Rivera', type: 'class' }],
         files: [{ id: 'file-1', courseId: 'bio', name: 'Lab rubric.pdf', mimeType: 'application/pdf' }]
       },
       reviewWorkspace: {
@@ -250,6 +250,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
     assert.equal(searchable.some((entity) => entity.key === 'note:locked-note'), false);
     assert.equal(searchable.some((entity) => entity.key === 'private_document:private-1'), false);
     assert.equal(searchable.find((entity) => entity.key === 'note:open-note').text.includes('ATP'), true);
+    assert.equal(searchable.find((entity) => entity.key === 'course:bio').metadata.courseType, 'class');
     assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.referenceUrl, 'https://example.com/chapter-4');
     assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.taskNotes, 'Take notes');
     assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.taskNotesLength, 10);

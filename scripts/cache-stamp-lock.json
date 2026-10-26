@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261024-note-anchors1",
-    "hash": "a3a2b2446da02eba"
+    "stamp": "20261025-todo-classes1",
+    "hash": "f248c5b04c312dce"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261024-note-anchors1",
-    "hash": "ec3026f19f373793"
+    "stamp": "20261025-todo-classes1",
+    "hash": "6923a5cb4a030c0b"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -472,8 +472,8 @@
     "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "42a1b193b84bff24"
+    "stamp": "20261025-course-types1",
+    "hash": "dea081d0001a61e3"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260831-revoke5",

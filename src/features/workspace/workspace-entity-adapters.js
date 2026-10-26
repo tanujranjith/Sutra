@@ -442,7 +442,7 @@
               status: course.archived ? 'archived' : 'active',
               dates: dateFields(course),
               deepLink: { view: 'courses', params: { courseId: course.id } },
-              metadata: { color: course.color || '', teacher: course.teacher || '', term: course.term || '' }
+              metadata: { courseType: course.type || '', color: course.color || '', teacher: course.teacher || '', term: course.term || '' }
             };
           });
         },
