@@ -351,14 +351,14 @@
         dx: (Math.random() - 0.45) * 58, fall: 48 + Math.random() * 112,
         color: `rgb(${color.join(',')})`, alpha: surface ? 0.78 : 0.98 });
     }
-    const surfaceCount = Math.min(650, Math.max(220, Math.round(width * height / 110)));
+    const surfaceCount = Math.min(280, Math.max(100, Math.round(width * height / 240)));
     for (let index = 0; index < surfaceCount; index++) {
       const x = (index + Math.random()) / surfaceCount * (width - 1);
       const y = Math.random() * (height - 1);
       grain(x, y, (Math.floor(y) * width + Math.floor(x)) * 4, true);
     }
     // Actual ink/badges keep their own color as they break into dust.
-    const ink = new Uint32Array(750);
+    const ink = new Uint32Array(320);
     let inkSeen = 0;
     const stride = Math.max(2, Math.ceil(Math.sqrt(width * height / 9000)));
     for (let y = 0; y < height; y += stride) {
@@ -491,7 +491,7 @@
       const elapsed = now - started;
       if (elapsed >= LIFETIME_MS) return removeEffect(effect);
       try {
-        restoreEffectGaps();
+        if (state.gap && !state.gap.isConnected) restoreEffectGaps();
         // A list rerender may adjust an ancestor's scroll offset. Keep the
         // snapshot in its content slot instead of cancelling before it paints.
         let shiftX = 0;
@@ -526,7 +526,7 @@
           context.fillRect(x, y, piece.size * (1 - age * 0.45), piece.size * (1 - age * 0.45));
         });
         context.globalAlpha = 1;
-        if (state.gap && state.gap.isConnected) {
+        if (elapsed >= SWEEP_MS + FALL_MS && state.gap && state.gap.isConnected) {
           const collapse = Math.max(0, (elapsed - SWEEP_MS - FALL_MS) / COLLAPSE_MS);
           const eased = collapse * collapse * (3 - 2 * collapse);
           state.gap.firstElementChild.style.height = `${snapshot.layoutHeight * (1 - eased)}px`;

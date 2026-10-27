@@ -318,7 +318,7 @@
     "./src/ui/select-enhancer.js?v=20261009-issues4",
     "./src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1",
     "./src/ui/student-loop-actions.js?v=20260809-audit1",
-    "./src/ui/task-completion-effects.js?v=20261002-task-dust-reliable1",
+    "./src/ui/task-completion-effects.js?v=20261027-smooth1",
     "./src/ui/theme-transition.js?v=20261024-theme-perf1",
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260905-updatelayer1",

@@ -544,8 +544,8 @@
     "hash": "45186a4c913b046f"
   },
   "src/ui/task-completion-effects.js": {
-    "stamp": "20261002-task-dust-reliable1",
-    "hash": "fec715a38e757d7f"
+    "stamp": "20261027-smooth1",
+    "hash": "2ad7ca52dda6440a"
   },
   "src/ui/theme-transition.js": {
     "stamp": "20261024-theme-perf1",
