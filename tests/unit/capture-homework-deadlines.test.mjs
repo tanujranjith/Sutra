@@ -8,7 +8,11 @@ const app = readFileSync(new URL('../../src/core/app.js', import.meta.url), 'utf
 const shared = readFileSync(new URL('../../src/core/student-date-parser.js', import.meta.url), 'utf8');
 const text = 'physics hw do the graph for the lab done on oct 26 due tomorrow night';
 function fixture() {
-  const context = vm.createContext({ window: { SutraHomework: { getCourses: () => [{ id: 'physics', name: 'Physics C + Physics', type: 'class' }] } } });
+  const context = vm.createContext({ window: { SutraHomework: { getCourses: () => [
+    { id: 'physics', name: 'Physics C + Physics', type: 'class' },
+    { id: 'photo', name: 'Photography', type: 'class' },
+    { id: 'applications', name: 'Submit applications', type: 'misc' }
+  ] } } });
   vm.runInContext(`const NativeDate = Date;
     Date = class extends NativeDate { constructor(...args) { super(...(args.length ? args : [2026, 9, 26, 19, 0])); } };`, context);
   vm.runInContext(shared, context);
@@ -43,6 +47,35 @@ test('explicit deadline clocks beat night defaults and incidental event clocks',
   }
   assert.equal(parse('physics hw lab due tomorrow night').dueTime, '23:59');
   assert.equal(parse('schedule physics study block tomorrow night').dueTime, '19:00');
+});
+
+test('Photography homework infers its exact class and tomorrow-night deadline without due', () => {
+  const { parse } = fixture();
+  const result = parse('submit photography hw tmrw night');
+  assert.equal(result.type, 'homework');
+  assert.equal(result.courseId, 'photo', 'an incidental submit activity word must not block the exact Photography name');
+  assert.equal(result.courseName, 'Photography');
+  assert.equal(result.dueDate, '2026-10-27');
+  assert.equal(result.dueTime, '23:59');
+  assert.equal(parse('submit photography hw tmrw night at 8pm').dueTime, '20:00');
+});
+
+test('inferred Photography reaches the actual course picker while explicit no-class remains respected', () => {
+  const { context, parse } = fixture();
+  const select = { value: '', dataset: { userTouched: '0' }, options: [],
+    replaceChildren() { this.options = []; }, appendChild(option) { this.options.push(option); } };
+  const fields = { quickCaptureCourse: select, quickCaptureCourseField: {}, quickCaptureNewCourse: {}, quickCaptureCourseHelp: {} };
+  context.document = { createElement: () => ({}) };
+  context.modal = { querySelector: selector => fields[selector.slice(1)] };
+  context.parsed = parse('submit photography hw tmrw night');
+  vm.runInContext(extractFunction(app, 'syncQuickCaptureCourseField').body, context);
+  const selected = vm.runInContext('syncQuickCaptureCourseField(parsed, modal)', context);
+  assert.equal(select.value, 'photo');
+  assert.equal(selected.selectedCourse.name, 'Photography');
+  select.value = '';
+  select.dataset.userTouched = '1';
+  assert.equal(vm.runInContext('syncQuickCaptureCourseField(parsed, modal)', context).selectedCourse, null);
+  assert.equal(select.value, '');
 });
 
 test('opening Add task permits homework inference while an explicit dropdown choice still wins', () => {

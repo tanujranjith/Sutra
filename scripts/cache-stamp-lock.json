@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261026-capture-deadlines1",
-    "hash": "289cd46824f8d597"
+    "stamp": "20261026-capture-deadlines2",
+    "hash": "027764317cb5d207"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261026-capture-deadlines1",
-    "hash": "6a5446a40cca66f7"
+    "stamp": "20261026-capture-deadlines2",
+    "hash": "4dae0f107f337f6d"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",

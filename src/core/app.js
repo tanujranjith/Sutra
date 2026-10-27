@@ -82956,9 +82956,7 @@ function parseQuickCaptureDate(text, now) {
     return null;
 }
 
-// Resolve free text to one of the student's existing Homework courses (hwCourses:v2)
-// using the course name, its significant words, and common student shorthand
-// (math, chem, bio, ...). Multiple distinct matches require a destination choice.
+// Match existing course names and shorthand; distinct matches need a choice.
 function resolveQuickCaptureCourse(text) {
     const courses = getQuickCaptureCourses();
     if (!Array.isArray(courses) || courses.length === 0) return null;
@@ -82966,7 +82964,7 @@ function resolveQuickCaptureCourse(text) {
     const padded = ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
     if (padded.trim() === '') return null;
 
-    // Student shorthand -> name stems that must appear in a matching course name.
+    // Shorthand mapped to course-name stems.
     const SHORTHAND = {
         math: ['math', 'calc', 'algebra', 'geometry', 'trig', 'precalc', 'statistic'],
         calc: ['calculus'],
@@ -82992,11 +82990,16 @@ function resolveQuickCaptureCourse(text) {
         const name = String(course.name || '').toLowerCase();
         if (!name.trim()) return;
         const candidates = new Set();
-        candidates.add(name.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim());
+        const fullName = name.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const aliases = new Set([fullName]);
+        candidates.add(fullName);
         name.split(/[^a-z0-9]+/).forEach(w => { if (w.length >= 3) candidates.add(w); });
         Object.keys(SHORTHAND).forEach(short => {
             SHORTHAND[short].forEach(stem => {
-                if (name.indexOf(stem) !== -1) { candidates.add(short); candidates.add(stem); }
+                if (name.indexOf(stem) !== -1) {
+                    candidates.add(short); candidates.add(stem);
+                    aliases.add(short); aliases.add(stem);
+                }
             });
         });
         let localScore = 0, token = '';
@@ -83004,9 +83007,12 @@ function resolveQuickCaptureCourse(text) {
             if (!tok || tok.length < 3) return;
             if (padded.indexOf(' ' + tok + ' ') !== -1 && tok.length > localScore) { localScore = tok.length; token = tok; }
         });
-        if (localScore > 0) matches.push({ id: String(course.id), name: String(course.name || ''), score: localScore, token });
+        if (localScore > 0) matches.push({ id: String(course.id), name: String(course.name || ''), score: localScore, token,
+            exact: token === fullName, strong: aliases.has(token) });
     });
-    const distinct = matches.filter(course => !matches.some(other => other.score > course.score
+    // Exact names beat incidental words; explicit names/aliases retain ambiguity.
+    const meaningful = matches.some(course => course.exact) ? matches.filter(course => course.exact || course.strong) : matches;
+    const distinct = meaningful.filter(course => !meaningful.some(other => other.score > course.score
         && (' ' + other.token + ' ').includes(' ' + course.token + ' ')
         && !padded.replace(new RegExp('\\b' + other.token + '\\b', 'g'), ' ').includes(' ' + course.token + ' ')));
     if (distinct.length > 1) return { ambiguous: true, candidates: distinct.map(course => ({ id: course.id, name: course.name })) };
@@ -83041,8 +83047,7 @@ function parseQuickCaptureText(text, options) {
 
     // Natural-language due date (today/tomorrow, weekdays + abbreviations,
     // "in N days", "next week", explicit + month-name dates) — see parseQuickCaptureDate.
-    // A deadline clause owns the due fields; dates/times in the description
-    // ("lab done on Oct 26 due tomorrow night") remain descriptive text.
+    // Parse deadline fields from the due clause, not descriptive event dates.
     const deadlineClause = working.match(/\bdue\s+(?:(?:on|by|at)\s+)?(.+)$/i);
     const temporalText = deadlineClause ? deadlineClause[1] : working;
     const sharedDateParser = window.SutraStudentDateParser;
@@ -83065,7 +83070,6 @@ function parseQuickCaptureText(text, options) {
         }
     }
 
-    // Time parse e.g. "6pm", "18:00", "3:30pm".
     let explicitTimeSpecified = false;
     const timeMatch = sharedTimeParsed && sharedTimeParsed.time ? null
         : temporalText.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b/i);
@@ -83170,10 +83174,10 @@ function parseQuickCaptureText(text, options) {
         if (classMatch) out.classHint = classMatch[1].trim();
     }
 
-    if ((tonightDateIntent || deadlineNightIntent) && !explicitTimeSpecified
+    const homeworkNightIntent = !!out.dueDate && /\bnight\b/i.test(temporalText);
+    if ((tonightDateIntent || deadlineNightIntent || homeworkNightIntent) && !explicitTimeSpecified
         && (deadlineNightIntent || out.type === 'homework' || out.type === 'test' || captureType === 'homework')) {
-        // “Tonight” on an assignment means end of the local day, not the
-        // generic evening estimate used for calendar/study-block intents.
+        // Night deadlines use end of day; study blocks keep evening time.
         out.dueTime = '23:59';
     }
 
@@ -83378,6 +83382,7 @@ function syncQuickCaptureCourseField(parsed, modal) {
     if (userTouched && validValues.has(previousValue)) chosen = previousValue;
     else if (parsed.courseId && validValues.has(String(parsed.courseId))) chosen = String(parsed.courseId);
     select.value = chosen;
+    if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(select);
 
     const isNew = chosen === '__new__';
     if (newInput) {

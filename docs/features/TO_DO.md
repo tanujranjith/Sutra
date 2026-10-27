@@ -7,8 +7,12 @@ To-do is the existing Homework workspace with a clear place for general tasks. I
 **Add task** starts with General but allows the text to infer Homework until the
 student explicitly chooses a Type. For example, “physics hw do the graph for
 the lab done on Oct 26 due tomorrow night” selects the existing Physics class,
-keeps the lab date in the title, and previews tomorrow at 11:59 PM. Explicit
-deadline clocks override the night default. “Night” on a study/calendar block
+keeps the lab date in the title, and previews tomorrow at 11:59 PM. The same night deadline applies without the word “due,” such as “submit
+photography hw tmrw night.” Exact class names take priority over incidental
+words from other class/activity names; explicit multiple matches still need a
+choice. The class picker immediately reflects the inferred selection and keeps
+an explicit manual choice, including No class. Explicit deadline clocks
+override the night default. “Night” on a study/calendar block
 remains an evening estimate, not an assignment deadline. A `due` clause takes
 priority over incidental dates and times elsewhere in the description.
 
