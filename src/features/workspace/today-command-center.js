@@ -455,7 +455,7 @@
      * computeRadarLayout(radarData, { width, height, now }) → chips with stable
      * polar placement:
      *   { item|null, zone, statusKey, xPct, yPct, label, meta, overflowCount }
-     * Geometry: quarter-of-ellipse fan anchored at bottom-center. Each zone is
+     * Geometry: semicircular bands anchored at bottom-center (stage ratio 2:1). Each zone is
      * a band at a fixed radius; items spread evenly across the arc in due
      * order, so the same data always lands in the same spot.
      */
@@ -476,8 +476,8 @@
             for (var s = 0; s < slots; s++) {
                 var deg = slots === 1 ? 90 : startDeg + step * s;
                 var rad = deg * Math.PI / 180;
-                var x = 0.5 + (radius * 0.52) * Math.cos(rad) * -1; // mirror so earliest reads left→right
-                var y = 1 - radius * 0.88 * Math.sin(rad);
+                var x = 0.5 + (radius * 0.48) * Math.cos(rad) * -1; // mirror so earliest reads left→right
+                var y = 1 - radius * 0.96 * Math.sin(rad);
                 var isOverflow = s >= zone.items.length;
                 if (isOverflow) {
                     chips.push({
@@ -536,8 +536,8 @@
             { key: 'thisWeek', r: 0.72 }, { key: 'later', r: 0.92 }
         ];
         bands.forEach(function (band) {
-            var rx = band.r * 0.52 * width;
-            var ry = band.r * 0.88 * height;
+            var rx = band.r * 0.48 * width;
+            var ry = band.r * 0.96 * height;
             var path = svgEl('path', {
                 class: 'radar-arc radar-arc-' + band.key,
                 d: 'M ' + (cx - rx) + ' ' + cy + ' A ' + rx + ' ' + ry + ' 0 0 1 ' + (cx + rx) + ' ' + cy,
@@ -684,7 +684,7 @@
         var stage = el('div', 'radar-stage');
         stage.setAttribute('role', 'group');
         stage.setAttribute('aria-label', 'Upcoming radar: items grouped by time horizon');
-        var W = 700, H = 360;
+        var W = 700, H = 350;
         stage.appendChild(buildRadarBackdrop(W, H));
         computeRadarLayout(data, { now: now }).forEach(function (chip) {
             stage.appendChild(buildChipButton(chip, handlers));

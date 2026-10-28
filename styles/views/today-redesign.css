@@ -1700,9 +1700,13 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .tnu-actions .tnu-primar
 
 /* Keep content height independent: an expanded task section must not distort radar arcs. */
 #view-today.today-redesign .today-hero-row { align-items:start; }
-#view-today.today-redesign .today-radar-card { min-height:420px; }
+#view-today.today-redesign .today-radar-card { min-height:0; }
 #view-today .your-day-panel .your-day-heading p { margin-bottom:18px; }
 #view-today .your-day-panel .tnu-body { gap:6px; }
 #view-today .your-day-panel .tnu-actions { margin:10px 0 14px; }
 #view-today .your-day-panel .your-day-also { padding:14px 0; }
 #view-today .your-day-panel .your-day-task-row { padding:3px 0; }
+
+/* Geometry and task positions use the same 2:1 stage, so every band is circular. */
+#view-today.today-redesign .radar-mount { flex:none; min-height:0; }
+#view-today.today-redesign .radar-stage { flex:none; width:100%; height:auto; min-height:0; aspect-ratio:2 / 1; }

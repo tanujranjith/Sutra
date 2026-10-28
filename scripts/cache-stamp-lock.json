@@ -460,8 +460,8 @@
     "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20261028-your-day3",
-    "hash": "ee14bb418f2fd238"
+    "stamp": "20261028-radar-semicircle1",
+    "hash": "c8204d2e9ad32acc"
   },
   "src/features/workspace/today-dashboard.js": {
     "stamp": "20260920-home-calm4",
@@ -792,7 +792,7 @@
     "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20261028-your-day-height1",
-    "hash": "81c9ae0f5e3fbe1a"
+    "stamp": "20261028-radar-semicircle1",
+    "hash": "c30067a11012fed3"
   }
 }
