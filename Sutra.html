@@ -642,8 +642,14 @@
 
                     <!-- ── 1. HERO ROW: NEXT UP + UPCOMING RADAR ── -->
                     <div class="today-hero-row">
-                        <section class="today-nextup-card glass-card" aria-label="Next up">
-                            <section class="today-daily-brief" id="todayDailyBrief" aria-label="Next up"></section>
+                        <section class="today-nextup-card glass-card your-day-panel" aria-label="Your day">
+                            <section class="today-daily-brief" id="todayDailyBrief" aria-label="Your day"></section>
+                                <form class="home-quick-task" id="homeQuickTaskForm" novalidate>
+                                    <label class="sr-only" for="homeQuickTaskInput">Add a task due today</label>
+                                    <input id="homeQuickTaskInput" type="text" maxlength="180" autocomplete="off" placeholder="Capture a task…" />
+                                    <button id="homeQuickTaskAddBtn" type="submit" aria-label="Add task due today"><i class="fas fa-plus" aria-hidden="true"></i><span>Add</span></button>
+                                </form>
+                                <span class="home-quick-task-status" id="homeQuickTaskStatus" role="status" aria-live="polite"></span>
                             <div class="today-nextup-footer" role="group" aria-label="Deadline counts">
                                 <button type="button" class="tnu-count" id="tccStatOverdue" data-nextup-count="overdue" title="Open overdue recovery">
                                     <strong id="tccOverdueCount">0</strong> <span>overdue</span>
@@ -754,12 +760,7 @@
                                 <div class="tac-items" id="tccTasksList">
                                     <div class="tac-empty">All clear</div>
                                 </div>
-                                <form class="home-quick-task" id="homeQuickTaskForm" novalidate>
-                                    <label class="sr-only" for="homeQuickTaskInput">Add a task due today</label>
-                                    <input id="homeQuickTaskInput" type="text" maxlength="180" autocomplete="off" placeholder="Add a task for today…" />
-                                    <button id="homeQuickTaskAddBtn" type="submit" aria-label="Add task due today"><i class="fas fa-plus" aria-hidden="true"></i><span>Add</span></button>
-                                </form>
-                                <span class="home-quick-task-status sr-only" id="homeQuickTaskStatus" role="status" aria-live="polite"></span>
+
                                 <button class="tac-footer-link" type="button" id="tccTasksViewAllBtn">View all tasks →</button>
                             </div>
                             <!-- Review (populated by renderTodayReviewCard) -->
@@ -7573,7 +7574,7 @@
          Pure data, no logic; the app.js controller previews + applies on demand. -->
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
-    <script src="src/features/workspace/today-command-center.js?v=20260721-radar-consolidation1"></script>
+    <script src="src/features/workspace/today-command-center.js?v=20261028-your-day1"></script>
     <!-- Today dashboard composition — pure preference normalization + accessible
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
@@ -7608,7 +7609,7 @@
     <script src="src/features/search/global-search-engine.js?v=20261015-search-typos4"></script>
     <script src="src/features/search/global-search-modal.js?v=20261015-search-keyboard3"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261028-college-deadlines2"></script>
+    <script src="src/core/app.js?v=20261028-your-day1"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -8063,7 +8064,7 @@
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/backup-progress.css?v=20261001-backup-progress1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20261028-your-day1">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">

@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-28T03:30:33.861Z",
-  "reviewedReason": "Add recoverable individual College deadline completion markers",
-  "maxBytes": 5004454,
-  "maxLines": 86944
+  "blessedAt": "2026-10-28T21:00:39.910Z",
+  "reviewedReason": "Replace nested Home task presentation with Your day using existing actions",
+  "maxBytes": 5005841,
+  "maxLines": 86956
 }

@@ -693,6 +693,19 @@
         mount.appendChild(buildLegend());
     }
 
+    // Presentation only: the caller supplies the existing ranked recommendation.
+    function getYourDayTasks(items, featured, now, limit) {
+        var seen = new Set();
+        var todayTasks = safeItems(items).filter(function (item) {
+            if (item.completed || item.status === 'done' || (item.source !== 'task' && item.source !== 'homework')) return false;
+            if (getUrgencyStatus(item, now).key !== 'today' || seen.has(String(item.id))) return false;
+            seen.add(String(item.id)); return true;
+        });
+        var remaining = todayTasks.filter(function (item) { return !featured || String(item.id) !== String(featured.id); });
+        var cap = Math.max(1, Number(limit) || 3);
+        return { count: todayTasks.length, remaining: remaining.slice(0, cap), hasMore: remaining.length > cap };
+    }
+
     window.SutraTodayCenter = {
         HORIZONS: HORIZONS,
         HORIZON_LABELS: HORIZON_LABELS,
@@ -705,6 +718,7 @@
         getTodayAgenda: getTodayAgenda,
         getUpcomingRadarItems: getUpcomingRadarItems,
         computeRadarLayout: computeRadarLayout,
+        getYourDayTasks: getYourDayTasks,
         renderRadar: renderRadar
     };
 })();

@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261028-college-deadlines2",
-    "hash": "dcce4260d8b621ce"
+    "stamp": "20261028-your-day1",
+    "hash": "abc7ccc34a2bb8ee"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -460,8 +460,8 @@
     "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20260721-radar-consolidation1",
-    "hash": "9000432533f4d577"
+    "stamp": "20261028-your-day1",
+    "hash": "f62e6134b2e87645"
   },
   "src/features/workspace/today-dashboard.js": {
     "stamp": "20260920-home-calm4",
@@ -792,7 +792,7 @@
     "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260816-home-quick-task1",
-    "hash": "f9966d763806dff1"
+    "stamp": "20261028-your-day1",
+    "hash": "8ca1c3e9e515504f"
   }
 }

@@ -23474,6 +23474,7 @@ function populateProgressDashboard() {
             const groups = groupDeadlinesByTimeframe(items);
             const nba = pickNextBestAction(groups);
             const mode = getActiveWorkspaceMode();
+            const dayModel = window.SutraTodayCenter.getYourDayTasks(items, nba && nba.item, new Date(), 3);
 
             const count = (arr) => (Array.isArray(arr) ? arr.length : 0);
             const overdueN = count(groups.overdue);
@@ -23556,36 +23557,36 @@ function populateProgressDashboard() {
                 const isReviewItem = nba.item.source === 'review';
                 const isTestItem = /\b(test|quiz|exam|final|midterm)\b/i.test(`${nba.item.type || ''} ${nba.item.title || ''}`);
                 const linkedNoteId = String(nba.item.linkedNoteId || '');
-                const primaryLabel = (isReviewItem || isTestItem) ? 'Study now' : 'Start Focus';
+                const primaryLabel = isReviewItem ? 'Review now' : 'Start focus';
                 const primaryAction = isReviewItem
                     ? `<button type="button" class="neumo-btn active tnu-primary" data-donow-review="1"><i class="fas fa-play" aria-hidden="true"></i> ${primaryLabel}</button>`
                     : `<button type="button" class="neumo-btn active tnu-primary" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}"><i class="fas fa-play" aria-hidden="true"></i> ${primaryLabel}</button>`;
                 nbaHtml = `
                     <div class="today-brief-nba tnu-body" data-nextup-status="${escapeHtml(status.key)}">
-                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">${escapeHtml(nba.item.title)}</div>
                         <div class="today-brief-nba-meta tnu-meta">
-                            <i class="far fa-calendar" aria-hidden="true"></i>
-                            <span>${escapeHtml(dueLabel)}${relLabel ? ' · ' + escapeHtml(relLabel) : ''}${nba.item.subtitle ? ' · ' + escapeHtml(nba.item.subtitle) : ''}</span>
+                            
+                            <span>${nba.item.subtitle ? escapeHtml(nba.item.subtitle) + ' · ' : ''}${escapeHtml(status.label)}${dueLabel ? ' · ' + escapeHtml(dueLabel) : ''}</span>
                         </div>
-                        <div class="tnu-status-pill tnu-status-${escapeHtml(status.key)}">${escapeHtml(status.label)}</div>
-                        <p class="tnu-context">${escapeHtml(context)}</p>
-                        ${nba.reason ? `<p class="tnu-context"><strong>Why this first:</strong> ${escapeHtml(nba.reason)}</p>` : ''}
                         <div class="today-brief-actions tnu-actions">
                             ${primaryAction}
-                            <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Open Details →</button>
+                            <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Details →</button>
+                            <details class="your-day-options"><summary aria-label="More task actions">More</summary><div>
+                            ${nba.reason ? `<p>${escapeHtml(nba.reason)}</p>` : ''}
                             ${isWorkItem && !nba.item.scheduled ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-schedule="${escapeHtml(nba.item.id)}">Schedule</button>` : ''}
                             ${isWorkItem ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-done="${escapeHtml(nba.item.id)}">Mark Done</button>` : ''}
                             ${linkedNoteId ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-note="${escapeHtml(linkedNoteId)}">Open Notes</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-review-cards="${escapeHtml(nba.item.sourceId)}">Make review cards</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
                             ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn tnu-ghost" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
+                            </div></details>
                         </div>
                     </div>`;
             } else if (items.length === 0) {
                 nbaHtml = `
                     <div class="today-brief-nba today-brief-nba-empty tnu-body">
-                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">Nothing due — you're clear</div>
                         <p class="tnu-context">Capture an assignment with Quick Capture${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</p>
                         <div class="today-brief-actions tnu-actions">
@@ -23595,7 +23596,7 @@ function populateProgressDashboard() {
             } else {
                 nbaHtml = `
                     <div class="today-brief-nba today-brief-nba-empty tnu-body">
-                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">Nothing overdue or due today</div>
                         <p class="tnu-context">Get ahead on what's coming — scan the radar${reviewDue > 0 ? ` or clear your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''}.</p>
                         <div class="today-brief-actions tnu-actions">
@@ -23610,7 +23611,7 @@ function populateProgressDashboard() {
 
             const smartRow = `
                 <div class="today-brief-smartrow tnu-smartrow">
-                    ${overdueN > 0 ? `<button type="button" class="neumo-btn is-recover" data-donow-recover="1">Recover ${overdueN} overdue</button>` : ''}
+                    
                     ${nextClass && nextClassDue > 0 ? `<button type="button" class="neumo-btn is-quiz" data-quiz-class="${escapeHtml(nextClass.courseId)}" data-quiz-name="${escapeHtml(nextClass.name)}">Quiz me before ${escapeHtml(nextClass.name)} (${nextClassDue})</button>` : ''}
                     ${reviewDue > 0 ? `<button type="button" class="neumo-btn" data-donow-review="1">Review ${reviewDue} card${reviewDue === 1 ? '' : 's'}</button>` : ''}
                     <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="All deadlines grouped by timeframe">All deadlines</button>
@@ -23619,9 +23620,20 @@ function populateProgressDashboard() {
                 </div>`;
 
             container.innerHTML = `
+                <header class="your-day-heading"><h3>Your day</h3><p>${dayModel.count} ${dayModel.count === 1 ? 'task' : 'tasks'} today</p></header>
                 ${nbaHtml}
-                ${smartRow}
+                <section class="your-day-also" aria-labelledby="yourDayAlsoHeading">
+                    <h4 id="yourDayAlsoHeading">Also today</h4>
+                    ${dayModel.remaining.map(item => `<div class="your-day-task-row">
+                        <input type="checkbox" data-donow-done="${escapeHtml(item.id)}" aria-label="Mark done: ${escapeHtml(item.title)}">
+                        <button type="button" data-brief-open-source="${escapeHtml(item.id)}"><span>${escapeHtml(item.title)}</span><small>${item.subtitle ? escapeHtml(item.subtitle) + ' · ' : ''}Due today</small></button>
+                    </div>`).join('') || '<p class="your-day-empty">No other tasks due today.</p>'}
+                    ${dayModel.hasMore ? '<button type="button" class="your-day-view-all" data-your-day-all>View all tasks →</button>' : ''}
+                </section>
+                <div class="your-day-overdue"><span>${overdueN} overdue</span><button type="button" data-donow-recover="1">Review →</button></div>
+                <details class="your-day-tools"><summary>Planning tools</summary>${smartRow}</details>
             `;
+            container.querySelector('[data-your-day-all]')?.addEventListener('click', () => setActiveView('tasks'));
 
             container.querySelectorAll('[data-brief-open-source]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -23650,8 +23662,7 @@ function populateProgressDashboard() {
                     if (scheduled) renderTodayDailyBrief();
                 } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-schedule', 'warning'); }
             });
-            const doneBtn = container.querySelector('[data-donow-done]');
-            if (doneBtn) doneBtn.addEventListener('click', () => {
+            container.querySelectorAll('[data-donow-done]').forEach(doneBtn => doneBtn.addEventListener('click', () => {
                 const hadFocus = document.activeElement === doneBtn;
                 const id = doneBtn.getAttribute('data-donow-done');
                 const target = items.find(i => i.id === id);
@@ -23682,8 +23693,9 @@ function populateProgressDashboard() {
                             if (nextControl) nextControl.focus({ preventScroll: true });
                         }
                     }
-                } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-done', 'warning'); }
-            });
+                    if (!changed) { if ('checked' in doneBtn) doneBtn.checked = false; showToast('Could not complete this task. Open Details to try again.'); }
+                } catch (err) { if ('checked' in doneBtn) doneBtn.checked = false; window.SutraReportError && window.SutraReportError(err, 'today:donow-done', 'warning'); }
+            }));
             const noteBtn = container.querySelector('[data-donow-note]');
             if (noteBtn) noteBtn.addEventListener('click', () => {
                 const noteId = noteBtn.getAttribute('data-donow-note');
