@@ -33,5 +33,9 @@ Escape handling, scroll locking, and focus restoration to `SutraModalManager`.
 Deadline Radar can mark tasks, homework, timeline blocks, AP exams, College
 essay milestones, and College application tracker, essay, recommender, and
 scholarship records done using their existing fields. Final essays and submitted
-scholarships no longer appear as open deadlines. Checklist and date-only rows
-without an individual completion field still open their source for editing.
+scholarships no longer appear as open deadlines. Checklist and date-only College
+deadlines can be marked individually: each marker stores the completed date in
+the existing College tracker row, leaving other deadlines and submission status
+unchanged. Open **Completed College deadlines** in the Radar to restore one.
+Changing a deadline date makes the new date active again. Markers travel with
+College tracker backups and its atomic Sync record; unknown row fields remain.

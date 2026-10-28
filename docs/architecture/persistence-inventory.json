@@ -147,6 +147,8 @@
     "pages[].slides.slides[].elements[].contentTimeline": ["version", "title", "layout", "events"],
     "pages[].slides.slides[].elements[].contentTimeline.events[]": ["id", "label", "when", "description"],
     "tasks[]": ["id", "title", "notes", "priority", "difficulty", "status", "completed", "isActive", "scheduleType", "weeklyDays", "estimate", "category", "subtasks", "dependencies", "dueDate", "dueTime", "reminder", "recurrence", "noteId", "courseId", "createdAt", "updatedAt"],
+    "collegeTracker.checklist[].completedDeadlineDates": ["earlyDeadline", "regularDeadline", "fafsaDeadline", "cssDeadline"],
+    "collegeTracker.deadlines[].completedDeadlineDates": ["essaysDoneBy", "submitBy", "applicationDeadline"],
     "timeBlocks[]": ["id", "name", "start", "end", "date", "category", "color", "recurrence", "weeklyDays", "recurrenceUntil", "recurrenceExceptions", "preserveRecurrence", "importedRecurrence", "isAllDay", "notes", "referenceUrl", "source", "sourceUid", "calendarImportId", "calendarName", "calendarUid", "calendarRecurrenceId", "calendarTimeZone", "calendarRrule", "createdAt", "updatedAt"],
     "assistantChatHistory": ["version", "currentChatId", "conversations", "legacyMigrationComplete"],
     "assistantChatHistory.conversations[]": ["id", "title", "messages", "createdAt", "updatedAt", "providerLabel", "modelLabel", "archived", "pinned", "scope", "restoredFromBackup"],

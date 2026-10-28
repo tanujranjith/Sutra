@@ -22286,6 +22286,7 @@ function populateProgressDashboard() {
                 ].forEach(entry => {
                     const dueDate = String(row[entry.field] || '').trim();
                     if (!dueDate) return;
+                    if (row.completedDeadlineDates && row.completedDeadlineDates[entry.field] === dueDate) return;
                     pushCollegeDeadlineItem(out, current, {
                         id: `college:checklist:${row.id}:${entry.field}`,
                         sourceId: row.id,
@@ -22309,6 +22310,7 @@ function populateProgressDashboard() {
                 ].forEach(entry => {
                     const dueDate = String(row[entry.field] || '').trim();
                     if (!dueDate) return;
+                    if (row.completedDeadlineDates && row.completedDeadlineDates[entry.field] === dueDate) return;
                     pushCollegeDeadlineItem(out, current, {
                         id: `college:deadlines:${row.id}:${entry.field}`,
                         sourceId: row.id,
@@ -23768,6 +23770,24 @@ function populateProgressDashboard() {
             });
         }
 
+        function restoreCollegeDeadlineRecord(collection, id, field) {
+            const allowed = { checklist: ['earlyDeadline', 'regularDeadline', 'fafsaDeadline', 'cssDeadline'], deadlines: ['essaysDoneBy', 'submitBy', 'applicationDeadline'] };
+            if (!Object.prototype.hasOwnProperty.call(allowed, collection) || !allowed[collection].includes(field)) return false;
+            const rows = collegeTracker && collegeTracker[collection];
+            const row = Array.isArray(rows) && rows.find(value => value && String(value.id) === String(id));
+            if (!row || !row.completedDeadlineDates || typeof row.completedDeadlineDates !== 'object' || Array.isArray(row.completedDeadlineDates)
+                || row.completedDeadlineDates[field] !== String(row[field] || '').trim()) return false;
+            const previous = row.completedDeadlineDates;
+            row.completedDeadlineDates = { ...previous };
+            delete row.completedDeadlineDates[field];
+            try { persistAppData(); return true; }
+            catch (error) {
+                row.completedDeadlineDates = previous;
+                if (window.SutraReportError) window.SutraReportError(error, 'deadlineRadar:restore', 'warning');
+                return false;
+            }
+        }
+
         function openDeadlineRadar() {
             const modal = document.getElementById('deadlineRadarModal');
             if (!modal) return;
@@ -23817,6 +23837,43 @@ function populateProgressDashboard() {
                         renderGroup('This week', groups.thisWeek),
                         renderGroup('Later', groups.later)
                     ].filter(Boolean).join('');
+                // Keep individual completed deadlines recoverable without changing
+                // the submission status of the school or losing its dates.
+                const completedFields = {
+                    checklist: { earlyDeadline: 'Early deadline', regularDeadline: 'Regular deadline', fafsaDeadline: 'FAFSA deadline', cssDeadline: 'CSS deadline' },
+                    deadlines: { essaysDoneBy: 'Essays done', submitBy: 'Submit application', applicationDeadline: 'Application deadline' }
+                };
+                const completedRows = [];
+                Object.entries(completedFields).forEach(([collection, fields]) => {
+                    (Array.isArray(collegeTracker && collegeTracker[collection]) ? collegeTracker[collection] : []).forEach(row => {
+                        if (!row || !row.completedDeadlineDates || typeof row.completedDeadlineDates !== 'object') return;
+                        Object.entries(fields).forEach(([field, label]) => {
+                            const date = String(row[field] || '').trim();
+                            if (date && row.completedDeadlineDates[field] === date) completedRows.push({ collection, field, id: String(row.id), label: `${row.college || 'College'} · ${label}`, date });
+                        });
+                    });
+                });
+                if (completedRows.length) {
+                    const completedSection = document.createElement('div');
+                    window.SutraDOMSafety.setTrustedHTML(completedSection, `<details class="deadline-radar-group"><summary>Completed College deadlines (${completedRows.length})</summary><ul>${completedRows.map(row => `<li class="deadline-radar-item"><div class="deadline-radar-item-main"><div class="deadline-radar-item-title">${escapeHtml(row.label)}</div><div class="deadline-radar-item-meta">${escapeHtml(row.date)}</div></div><button type="button" class="neumo-btn" data-radar-restore-collection="${escapeHtml(row.collection)}" data-radar-restore-id="${escapeHtml(row.id)}" data-radar-restore-field="${escapeHtml(row.field)}">Restore</button></li>`).join('')}</ul></details>`);
+                    body.appendChild(completedSection);
+                }
+                body.querySelectorAll('[data-radar-restore-collection]').forEach(btn => {
+                    btn.addEventListener('click', event => {
+                        event.stopPropagation();
+                        const collection = btn.getAttribute('data-radar-restore-collection');
+                        const field = btn.getAttribute('data-radar-restore-field');
+                        if (!completedFields[collection] || !Object.prototype.hasOwnProperty.call(completedFields[collection], field)) return;
+                        if (!restoreCollegeDeadlineRecord(collection, btn.getAttribute('data-radar-restore-id'), field)) {
+                            if (typeof showToast === 'function') showToast('Could not restore this deadline; it may have changed or could not be saved.');
+                            return;
+                        }
+                        __workspaceDeadlineCache = null;
+                        if (typeof renderTodayDailyBrief === 'function') renderTodayDailyBrief();
+                        openDeadlineRadar();
+                        if (typeof showToast === 'function') showToast('Deadline restored.');
+                    });
+                });
                 body.querySelectorAll('.deadline-radar-item').forEach(li => {
                     li.addEventListener('click', (e) => {
                         // Action button clicks should not also route to source.
@@ -23853,6 +23910,8 @@ function populateProgressDashboard() {
                             __workspaceDeadlineCache = null;
                             try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (err) { /* non-critical */ }
                             try { openDeadlineRadar(); } catch (err) { /* non-critical */ }
+                        } else if (typeof showToast === 'function') {
+                            showToast('Could not mark this deadline done. Refresh and try again.');
                         }
                     });
                 });
@@ -23989,7 +24048,7 @@ function populateProgressDashboard() {
 
         function recoveryCanMarkDone(item) {
             return !!item && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline' || item.source === 'apexam'
-                || (item.source === 'college' && (item.sourceCollection === 'essays' || (item.sourceView === 'collegeapp'
+                || (item.source === 'college' && (['essays', 'checklist', 'deadlines'].includes(item.sourceCollection) || (item.sourceView === 'collegeapp'
                     && ['essayOrganizer', 'recommenders', 'collegeTracker', 'scholarships'].includes(item.sourceCollection)))));
         }
 
@@ -24014,13 +24073,30 @@ function populateProgressDashboard() {
                     const workspace = item.sourceView === 'collegeapp' ? collegeAppWorkspace : collegeTracker;
                     const row = workspace && Array.isArray(workspace[collection]) && workspace[collection].find(value => String(value.id) === sourceId);
                     if (!row) return false;
-                    if (collection === 'essays') {
+                    let previousDeadlineDates;
+                    if (collection === 'checklist' || collection === 'deadlines') {
+                        const field = String(item.id).split(':').pop();
+                        const allowed = collection === 'checklist'
+                            ? ['earlyDeadline', 'regularDeadline', 'fafsaDeadline', 'cssDeadline']
+                            : ['essaysDoneBy', 'submitBy', 'applicationDeadline'];
+                        if (!allowed.includes(field) || !row[field] || String(row[field]).trim() !== String(item.dueDate || '').trim()) return false;
+                        if (row.completedDeadlineDates != null && (typeof row.completedDeadlineDates !== 'object' || Array.isArray(row.completedDeadlineDates))) return false;
+                        previousDeadlineDates = row.completedDeadlineDates;
+                        row.completedDeadlineDates = { ...(row.completedDeadlineDates || {}), [field]: String(row[field]).trim() };
+                    } else if (collection === 'essays') {
                         const field = { firstDraftBy: 'firstDraftDone', reviewBy: 'reviewSubmitted', revisionBy: 'revisionSubmitted', finalBy: 'finalDraft' }[String(item.id).split(':').pop()];
                         if (!field) return false;
                         row[field] = true;
                     } else if (collection === 'essayOrganizer') row.draftStatus = 'final';
                     else row.status = 'submitted';
-                    persistAppData();
+                    try { persistAppData(); }
+                    catch (error) {
+                        if (collection === 'checklist' || collection === 'deadlines') {
+                            if (previousDeadlineDates === undefined) delete row.completedDeadlineDates;
+                            else row.completedDeadlineDates = previousDeadlineDates;
+                        }
+                        throw error;
+                    }
                     return true;
                 }
                 if (item.source === 'homework') {

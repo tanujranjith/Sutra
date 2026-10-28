@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-28T03:15:42.547Z",
-  "reviewedReason": "Support existing College and AP completion actions in Deadline Radar",
-  "maxBytes": 4997931,
-  "maxLines": 86868
+  "blessedAt": "2026-10-28T03:30:33.861Z",
+  "reviewedReason": "Add recoverable individual College deadline completion markers",
+  "maxBytes": 5004454,
+  "maxLines": 86944
 }
