@@ -17195,7 +17195,7 @@ function populateProgressDashboard() {
                     if (slot) {
                         const currentEl = slot.querySelector('.digit-current');
                         const nextEl = slot.querySelector('.digit-next');
-
+                        
                         // Restart animation safely
                         slot.classList.remove('is-animating');
                         nextEl.textContent = nextCh;
@@ -21688,12 +21688,7 @@ function populateProgressDashboard() {
                         'One priority at a time.',
                         'Start with what matters most.'
                     ];
-                    const dateLabel = document.getElementById('homeCalendarDate');
-                    if (dateLabel) dateLabel.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-                    const homeHeading = document.querySelector('.today-hero-date h2');
-                    const homeDeadlines = groupDeadlinesByTimeframe(collectWorkspaceDeadlines());
-                    if (homeHeading) homeHeading.textContent = greeting + '.';
-                    taglineEl.textContent = homeDeadlines.today.length + ' due today · ' + homeDeadlines.overdue.length + ' overdue · ' + (homeDeadlines.tomorrow.length + homeDeadlines.thisWeek.length + homeDeadlines.later.length) + ' upcoming';
+                    taglineEl.textContent = `${greeting} — ${tags[new Date().getDate() % tags.length]}`;
                 }
             } catch (e) { /* non-critical */ }
 
@@ -23568,25 +23563,23 @@ function populateProgressDashboard() {
                 nbaHtml = `
                     <div class="today-brief-nba tnu-body" data-nextup-status="${escapeHtml(status.key)}">
                         <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
-                        <div class="home-next-title">${recoveryCanMarkDone(nba.item) ? `<button type="button" class="home-task-check" data-home-next-done="${escapeHtml(nba.item.id)}" aria-label="Mark next task done"></button>` : ''}<div class="today-brief-nba-title tnu-title">${escapeHtml(nba.item.title)}</div></div>
+                        <div class="today-brief-nba-title tnu-title">${escapeHtml(nba.item.title)}</div>
                         <div class="today-brief-nba-meta tnu-meta">
                             <i class="far fa-calendar" aria-hidden="true"></i>
                             <span>${escapeHtml(dueLabel)}${relLabel ? ' · ' + escapeHtml(relLabel) : ''}${nba.item.subtitle ? ' · ' + escapeHtml(nba.item.subtitle) : ''}</span>
                         </div>
                         <div class="tnu-status-pill tnu-status-${escapeHtml(status.key)}">${escapeHtml(status.label)}</div>
-
+                        <p class="tnu-context">${escapeHtml(context)}</p>
                         ${nba.reason ? `<p class="tnu-context"><strong>Why this first:</strong> ${escapeHtml(nba.reason)}</p>` : ''}
                         <div class="today-brief-actions tnu-actions">
                             ${primaryAction}
                             <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Open Details →</button>
-                            <details class="home-task-actions"><summary aria-label="More task actions">•••</summary><div>
                             ${isWorkItem && !nba.item.scheduled ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-schedule="${escapeHtml(nba.item.id)}">Schedule</button>` : ''}
                             ${isWorkItem ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-done="${escapeHtml(nba.item.id)}">Mark Done</button>` : ''}
                             ${linkedNoteId ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-note="${escapeHtml(linkedNoteId)}">Open Notes</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-review-cards="${escapeHtml(nba.item.sourceId)}">Make review cards</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
                             ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn tnu-ghost" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
-                            </div></details>
                         </div>
                     </div>`;
             } else if (items.length === 0) {
@@ -23627,7 +23620,7 @@ function populateProgressDashboard() {
 
             container.innerHTML = `
                 ${nbaHtml}
-                <details class="home-tools"><summary>Planning tools</summary>${smartRow}</details>
+                ${smartRow}
             `;
 
             container.querySelectorAll('[data-brief-open-source]').forEach(btn => {
@@ -24019,26 +24012,8 @@ function populateProgressDashboard() {
                 now: new Date(),
                 filter: upcomingRadarFilterKey,
                 onOpen: openUpcomingRadarItem,
-                onTimeline: () => setActiveView('calendar'),
                 onOverflow: () => { try { openDeadlineRadar(); } catch (err) { /* non-critical */ } }
             });
-            window.SutraTodayCenter.renderHomeTasks(document.getElementById('homeTodayTasks'), collectUpcomingRadarItems(), {
-                now: new Date(), onOpen: openUpcomingRadarItem, onAll: () => setActiveView('tasks'), canComplete: recoveryCanMarkDone,
-                onComplete: item => {
-                    if (!mutateDeadlineRecord(item, { done: true })) { showToast('Could not complete this item. Open its details to try again.'); return; }
-                    __workspaceDeadlineCache = null;
-                    renderTodayView();
-                }
-            });
-            const nextDone = document.querySelector('[data-home-next-done]');
-            if (nextDone && !nextDone.dataset.bound) {
-                nextDone.dataset.bound = 'true';
-                nextDone.addEventListener('click', () => {
-                    const target = collectWorkspaceDeadlines().find(item => item.id === nextDone.dataset.homeNextDone);
-                    if (target && mutateDeadlineRecord(target, { done: true })) { __workspaceDeadlineCache = null; renderTodayView(); }
-                    else showToast('Could not complete this item. Open its details to try again.');
-                });
-            }
             const select = document.getElementById('upcomingRadarFilter');
             if (select && select.dataset.bound !== 'true') {
                 select.dataset.bound = 'true';
