@@ -17,7 +17,7 @@ contract is:
 - `sizes`: a bounded width choice per widget.
 
 The calm preset keeps the daily loop's Next up, Upcoming Radar, quick task
-capture, Priorities, and save-confidence surfaces visible on desktop. Duplicate
+capture and save-confidence surfaces visible on desktop. Duplicate
 deadline and schedule snapshots, secondary signals, and advanced planners remain
 available through the Study and Everything presets or Home customization; they
 are not deleted. An older saved Calm snapshot migrates to the current
@@ -57,3 +57,29 @@ on Home. No workspace schema or storage identifiers change.
 On phones, the daily panel and the existing radar stack within the Home content;
 canonical mobile navigation stays intact. Navbar markup, radar renderer/filter,
 focus timer, and floating controls are unchanged.
+## Workspace to-do list
+
+The All deadlines / Workspace to-do list action opens one read-only projection
+of source-owned work, grouped by timeframe plus No due date. It includes tasks,
+canonical Homework tasks and Assignment Studio steps, College applications,
+essays, recommendations and scholarships, legacy College plans, Business work,
+and Life goals. Existing dated AP exams and Timeline items stay included.
+Notes, informational records, and completed work are not invented as tasks.
+Source IDs remain stable; homework task mirrors are excluded. Identically named
+independent records stay separate. No workspace fields or stores are added.
+
+Done is available only for sources with an existing completion mutation; other
+items open their original workspace for editing. Source-opening links support
+keyboard access. Undated work does not leak into the radar or date-based
+notification and ranking contracts. The redundant Home Priorities widget is
+retired; planning remains in the Home menu, and generated day-plan output is
+shown only after a plan is generated.
+
+Notifications more than seven local calendar days past their event/deadline
+are retained under Older notifications, collapsed by default. Recent unread
+badges exclude that archive; expanding it retains read, dismiss and snooze
+actions. Archived reminders do not reappear as new urgent popups.
+
+Completion dust is decorative: one effect at a time, bounded snapshot/particle
+budgets, and a single image blit per frame. Reduced motion and visibility/scroll
+cancellation remain supported; task saving and completion never depend on it.

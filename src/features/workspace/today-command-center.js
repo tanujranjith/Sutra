@@ -718,6 +718,90 @@
         return { count: todayTasks.length, remaining: remaining.slice(0, cap), hasMore: remaining.length > cap };
     }
 
+    // Read-only projection. Source IDs, records and storage remain with their owners.
+    function collectWorkspaceTodos(snapshot, now) {
+        snapshot = snapshot || {}; now = now || new Date();
+        var result = new Map(), completed = new Set((snapshot.completedTaskIds || []).map(String));
+        var tasks = safeItems(snapshot.tasks), taskById = new Map(tasks.map(function (t) { return [String(t.id), t]; }));
+        var terminal = function (row) { return !row || row.completed || row.done || ['done','complete','completed','archived','cancelled','canceled'].indexOf(String(row.status || '').toLowerCase()) >= 0; };
+        function date(value, time) {
+            if (!value) return null;
+            var raw = String(value).trim();
+            var parsed = value instanceof Date ? new Date(value) : new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + 'T' + (time || '23:59') + ':00' : raw);
+            return Number.isFinite(parsed.getTime()) ? parsed : null;
+        }
+        function add(item) {
+            if (!item || !item.id || !item.sourceId || result.has(String(item.id))) return;
+            var due = date(item.due || item.dueDate, item.dueTime);
+            result.set(String(item.id), Object.assign({}, item, { due: due, status: 'open', overdue: !!due && due < now, workspaceTodo: true }));
+        }
+        safeItems(snapshot.deadlines).forEach(function (item) {
+            if (item.source === 'business' || item.source === 'life' || terminal(item)) return;
+            if (item.source === 'task') {
+                var task = taskById.get(String(item.sourceId));
+                if (task && (terminal(task) || completed.has(String(task.id)) || (task.scheduleType === 'once' && task.isActive === false))) return;
+            }
+            add(item);
+        });
+        tasks.forEach(function (row) {
+            if (terminal(row) || row.origin === 'homework' || row.isActive === false || completed.has(String(row.id))) return;
+            add({ id:'task:'+row.id, source:'task', sourceId:String(row.id), title:row.title || 'Task', dueDate:row.dueDate, dueTime:row.dueTime, priority:row.priority });
+        });
+        safeItems(snapshot.homework).forEach(function (row) {
+            if (terminal(row)) return;
+            add({ id:'hw:'+row.id, source:'homework', sourceId:String(row.id), sourceCourseId:row.courseId || '', title:row.title || row.text || 'Homework', dueDate:row.dueDate, dueTime:row.dueTime });
+            var studio = row.studio;
+            if (!studio || !studio.enabled) return;
+            ['milestones','subtasks'].forEach(function (collection) {
+                safeItems(studio[collection]).forEach(function (step) {
+                    if (terminal(step)) return;
+                    add({id:(collection === 'milestones' ? 'milestone:' : 'subtask:')+row.id+':'+step.id,source:'milestone',sourceId:String(row.id),milestoneId:String(step.id),todoOpenOnly:true,title:step.title || step.text || 'Assignment step',subtitle:row.title || 'Assignment',dueDate:step.dueDate,dueTime:step.dueTime});
+                });
+            });
+        });
+        var app = snapshot.collegeApp || {};
+        var appDone = new Set(snapshot.completedCollegeStatuses || ['submitted','completed','enrolled']);
+        [{key:'collegeTracker',prefix:'tracker',page:'tracker',label:'Application'}, {key:'essayOrganizer',prefix:'essay',page:'essays',label:'Essay'}, {key:'scholarships',prefix:'scholarship',page:'scholarships',label:'Scholarship'}, {key:'recommenders',prefix:'recommender',page:'recommenders',label:'Recommendation'}].forEach(function (spec) {
+            safeItems(app[spec.key]).forEach(function (row) {
+                if (terminal(row) || appDone.has(String(row.status || '').toLowerCase()) || ['submitted','won','not_awarded'].indexOf(String(row.status || '').toLowerCase()) >= 0 || row.draftStatus === 'final') return;
+                add({id:'collegeapp:'+spec.prefix+':'+row.id,source:'college',sourceId:String(row.id),sourceView:'collegeapp',sourceCollection:spec.key,sourceSubpage:spec.page,title:(row.school || row.name || row.prompt || spec.label)+' · '+spec.label,dueDate:row.deadline || row.dueDate || row.nextDate});
+            });
+        });
+        var tracker = snapshot.collegeTracker || {};
+        ['checklist','deadlines'].forEach(function (collection) {
+            safeItems(tracker[collection]).forEach(function (row) {
+                if (terminal(row) || row.appSubmitted || row.submitted) return;
+                if (Array.from(result.values()).some(function (item) { return item.sourceView === 'college' && item.sourceCollection === collection && String(item.sourceId) === String(row.id); })) return;
+                add({id:'college:'+collection+':'+row.id+':record',source:'college',sourceId:String(row.id),sourceView:'college',sourceCollection:collection,todoOpenOnly:true,title:(row.college || 'College')+' · '+(collection === 'checklist' ? 'Application checklist' : 'Application plan')});
+            });
+        });
+        safeItems(tracker.essays).forEach(function (row) {
+            if (row.finalDraft) return;
+            [['firstDraftBy','firstDraftDone','First draft'],['reviewBy','reviewSubmitted','Review'],['revisionBy','revisionSubmitted','Revision'],['finalBy','finalDraft','Final draft']].forEach(function (step) {
+                if (row[step[1]]) return;
+                add({id:'college:essays:'+row.id+':'+step[0],source:'college',sourceId:String(row.id),sourceView:'college',sourceCollection:'essays',title:(row.essay || 'Essay')+' · '+step[2],dueDate:row[step[0]]});
+            });
+        });
+        var business = snapshot.business || {};
+        ['tasks','projects','invoices','proposals','meetings','clients'].forEach(function (collection) {
+            safeItems(business[collection]).forEach(function (row) {
+                if (terminal(row) || row.paid || ['paid','void','accepted','rejected','expired'].indexOf(String(row.status || '').toLowerCase()) >= 0) return;
+                if (collection === 'clients' && !row.nextFollowUpDate) return;
+                var prefix = {projects:'proj',invoices:'inv'}[collection] || collection;
+                add({id:'biz:'+prefix+':'+row.id,source:'business',sourceId:String(row.id),todoOpenOnly:true,title:row.title || row.name || row.client || row.invoiceNumber || 'Business action',subtitle:collection,dueDate:row.dueDate || row.deadline || row.responseDate || row.date || row.nextFollowUpDate});
+                if (collection === 'projects') safeItems(row.milestones).forEach(function (step) {
+                    if (terminal(step)) return;
+                    add({id:'biz:milestone:'+row.id+':'+step.id,source:'business',sourceId:String(row.id),todoOpenOnly:true,title:step.title || 'Project milestone',subtitle:row.name || 'Project',dueDate:step.date});
+                });
+            });
+        });
+        safeItems((snapshot.life || {}).goals).forEach(function (row) {
+            if (terminal(row)) return;
+            add({id:'life:goal:'+row.id,source:'life',sourceId:String(row.id),todoOpenOnly:true,title:row.title || 'Life goal',dueDate:row.targetDate});
+        });
+        return Array.from(result.values()).sort(function (a,b) { return (a.due ? a.due.getTime() : Infinity) - (b.due ? b.due.getTime() : Infinity) || String(a.title).localeCompare(String(b.title)) || String(a.id).localeCompare(String(b.id)); });
+    }
+
     window.SutraTodayCenter = {
         HORIZONS: HORIZONS,
         HORIZON_LABELS: HORIZON_LABELS,
@@ -730,6 +814,7 @@
         getTodayAgenda: getTodayAgenda,
         getUpcomingRadarItems: getUpcomingRadarItems,
         computeRadarLayout: computeRadarLayout,
+        collectWorkspaceTodos: collectWorkspaceTodos,
         getYourDayItems: getYourDayItems,
         getYourDayTasks: getYourDayTasks,
         renderRadar: renderRadar

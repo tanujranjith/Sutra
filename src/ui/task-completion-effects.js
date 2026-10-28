@@ -7,8 +7,7 @@
   const CAPTURE_LIFETIME_MS = 2100;
   const SWEEP_MS = 700;
   const FALL_MS = 550;
-  const COLLAPSE_MS = 180;
-  const LIFETIME_MS = SWEEP_MS + FALL_MS + COLLAPSE_MS;
+  const LIFETIME_MS = SWEEP_MS + FALL_MS;
   const activeEffects = new Map();
   const pendingSnapshots = new Map();
 
@@ -222,7 +221,7 @@
     let measurements = 0;
     context.textAlign = 'left';
     context.textBaseline = 'alphabetic';
-    while ((textNode = walker.nextNode()) && measurements < 90) {
+    while ((textNode = walker.nextNode()) && measurements < 60) {
       const parent = textNode.parentElement;
       if (!parent || parent.closest('.hw-task-menu, .task-overflow-menu')) continue;
       const style = window.getComputedStyle(parent);
@@ -525,11 +524,8 @@
           context.fillRect(x, y, piece.size * (1 - age * 0.45), piece.size * (1 - age * 0.45));
         });
         context.globalAlpha = 1;
-        if (elapsed >= SWEEP_MS + FALL_MS && state.gap && state.gap.isConnected) {
-          const collapse = Math.max(0, (elapsed - SWEEP_MS - FALL_MS) / COLLAPSE_MS);
-          const eased = collapse * collapse * (3 - 2 * collapse);
-          state.gap.firstElementChild.style.height = `${snapshot.layoutHeight * (1 - eased)}px`;
-        }
+        // Remove the held slot once at the end; animating table height here
+        // repeatedly laid out every remaining task row on each frame.
         state.frame = window.requestAnimationFrame(frame);
       } catch (error) { removeEffect(effect); reportVisualError(error); }
     }

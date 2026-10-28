@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261028-your-day3",
-    "hash": "e171eb3e97985f5d"
+    "stamp": "20261028-workspace-todos2",
+    "hash": "d530a3ea5b75d6fa"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261028-your-day3",
-    "hash": "51caaddd0e06d7dd"
+    "stamp": "20261028-workspace-todos2",
+    "hash": "2d8b9e6a0a23c2dc"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -396,8 +396,8 @@
     "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20261028-notification-age2",
-    "hash": "f234e0303ba55c98"
+    "stamp": "20261028-notification-age3",
+    "hash": "60b925ee7248e26f"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20261015-formula-cache2",
@@ -460,12 +460,12 @@
     "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20261028-radar-semicircle1",
-    "hash": "c8204d2e9ad32acc"
+    "stamp": "20261028-workspace-todos2",
+    "hash": "62da5ac1b1bc05a3"
   },
   "src/features/workspace/today-dashboard.js": {
-    "stamp": "20260920-home-calm4",
-    "hash": "09255d9fcf4ddf4e"
+    "stamp": "20261028-retire-priorities1",
+    "hash": "f882befdb1655dee"
   },
   "src/features/workspace/today-focus-timer.js": {
     "stamp": "20261004-focus-dismiss-theme1",
@@ -544,8 +544,8 @@
     "hash": "45186a4c913b046f"
   },
   "src/ui/task-completion-effects.js": {
-    "stamp": "20261028-bounded-dust1",
-    "hash": "35529155ddd47c2f"
+    "stamp": "20261028-bounded-dust2",
+    "hash": "d89d70a0710d17d6"
   },
   "src/ui/theme-transition.js": {
     "stamp": "20261024-theme-perf1",
@@ -792,7 +792,7 @@
     "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20261028-radar-semicircle1",
-    "hash": "c30067a11012fed3"
+    "stamp": "20261028-workspace-todos2",
+    "hash": "12d32dcb82e70d05"
   }
 }

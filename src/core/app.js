@@ -18923,6 +18923,8 @@ function populateProgressDashboard() {
             if (!listEl || !emptyEl || !summaryEl) return;
 
             const hasPlan = !!(planData && Array.isArray(planData.items) && planData.items.length);
+            const planDisclosure = document.getElementById('todayPlanDisclosure');
+            if (planDisclosure) { planDisclosure.hidden = !hasPlan; if (hasPlan) planDisclosure.open = true; }
             if (!hasPlan) {
                 listEl.innerHTML = '';
                 emptyEl.style.display = 'block';
@@ -22994,6 +22996,16 @@ function populateProgressDashboard() {
 
         function openDeadlineSource(item) {
             if (!item || !item.source) return;
+            if (item.workspaceTodo && item.source === 'task') {
+                setActiveView('homework');
+                openTaskModal(String(item.sourceId));
+                return;
+            }
+            if (item.workspaceTodo && item.source === 'milestone' && window.SutraAssignmentStudio) {
+                setActiveView('homework');
+                window.SutraAssignmentStudio.open(String(item.sourceId));
+                return;
+            }
             if (item.source === 'review') {
                 try {
                     setActiveView('apstudy');
@@ -23027,7 +23039,7 @@ function populateProgressDashboard() {
                         business: 'business',
                         life: 'life'
                     }[item.source] || 'today');
-                setActiveView(view, { allowDisabled: item.source === 'apexam' });
+                setActiveView(view, { allowDisabled: item.workspaceTodo === true || item.source === 'apexam' });
                 if (item.source === 'college') {
                     if (view === 'college' && item.sourceCollection && typeof setCollegeTab === 'function') {
                         setCollegeTab(item.sourceCollection, { persist: false });
@@ -23614,7 +23626,7 @@ function populateProgressDashboard() {
 
                     ${nextClass && nextClassDue > 0 ? `<button type="button" class="neumo-btn is-quiz" data-quiz-class="${escapeHtml(nextClass.courseId)}" data-quiz-name="${escapeHtml(nextClass.name)}">Quiz me before ${escapeHtml(nextClass.name)} (${nextClassDue})</button>` : ''}
                     ${reviewDue > 0 ? `<button type="button" class="neumo-btn" data-donow-review="1">Review ${reviewDue} card${reviewDue === 1 ? '' : 's'}</button>` : ''}
-                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="All deadlines grouped by timeframe">All deadlines</button>
+                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="Open work across the workspace, including undated tasks">Workspace to-do list</button>
                     <button type="button" class="neumo-btn" data-donow-calendar="1">Add deadlines to calendar</button>
                     ${overloadChip}
                 </div>`;
@@ -23800,11 +23812,25 @@ function populateProgressDashboard() {
             }
         }
 
+        // Modal-only projection: radar, notifications and deadline ranking keep
+        // their dated contracts; this list also includes undated actionable work.
+        function collectWorkspaceTodoItems() {
+            return window.SutraTodayCenter.collectWorkspaceTodos({
+                deadlines: collectWorkspaceDeadlines({ includeBusiness: true }),
+                tasks, completedTaskIds: getDayState(today()).completedTaskIds,
+                homework: readLocalArraySafe('hwTasks:v2'),
+                collegeApp: collegeAppWorkspace, collegeTracker,
+                completedCollegeStatuses: Array.from(COLLEGE_APP_COMPLETED_STATUSES),
+                business: businessWorkspace, life: lifeWorkspace
+            }, new Date());
+        }
+
         function openDeadlineRadar() {
             const modal = document.getElementById('deadlineRadarModal');
             if (!modal) return;
-            const items = collectWorkspaceDeadlines();
-            const groups = groupDeadlinesByTimeframe(items);
+            const items = collectWorkspaceTodoItems();
+            const groups = groupDeadlinesByTimeframe(items.filter(item => item.due));
+            const undated = items.filter(item => !item.due);
             const body = modal.querySelector('.deadline-radar-body');
             if (body) {
                 const renderGroup = (label, arr) => {
@@ -23815,7 +23841,7 @@ function populateProgressDashboard() {
                             <ul>
                                 ${arr.map(i => {
                                     const dueLabel = (() => {
-                                        try { return i.due.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+                                        try { if (!i.due) return 'No due date'; return i.due.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
                                         catch (e) { return ''; }
                                     })();
                                     const extraAction = i.source === 'homework' && i.sourceCourseId
@@ -23826,7 +23852,7 @@ function populateProgressDashboard() {
                                         : '';
                                     return `<li class="deadline-radar-item" data-deadline-id="${escapeHtml(i.id)}">
                                         <div class="deadline-radar-item-main">
-                                            <div class="deadline-radar-item-title">${escapeHtml(i.title)}</div>
+                                            <button type="button" class="deadline-radar-item-title deadline-radar-open-btn" aria-label="Open ${escapeHtml(i.title)}">${escapeHtml(i.title)}</button>
                                             <div class="deadline-radar-item-meta">${escapeHtml(i.source)} · ${escapeHtml(dueLabel)}${i.subtitle ? ' · ' + escapeHtml(i.subtitle) : ''}</div>
                                         </div>
                                         <div class="deadline-radar-item-actions">
@@ -23841,13 +23867,14 @@ function populateProgressDashboard() {
                 };
                 const totalCount = items.length;
                 body.innerHTML = totalCount === 0
-                    ? `<div class="empty-state"><div class="empty-title">No deadlines on file</div><div class="empty-subtitle">Add tasks, homework, AP exams, or college deadlines to see them here.</div></div>`
+                    ? `<div class="empty-state"><div class="empty-title">Nothing left to do</div><div class="empty-subtitle">Add work in To-do, College, Life, or Business to see it here.</div></div>`
                     : [
                         renderGroup('Overdue', groups.overdue),
                         renderGroup('Today', groups.today),
                         renderGroup('Tomorrow', groups.tomorrow),
                         renderGroup('This week', groups.thisWeek),
-                        renderGroup('Later', groups.later)
+                        renderGroup('Later', groups.later),
+                        renderGroup('No due date', undated)
                     ].filter(Boolean).join('');
                 // Keep individual completed deadlines recoverable without changing
                 // the submission status of the school or losing its dates.
@@ -24059,7 +24086,7 @@ function populateProgressDashboard() {
         }
 
         function recoveryCanMarkDone(item) {
-            return !!item && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline' || item.source === 'apexam'
+            return !!item && !item.todoOpenOnly && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline' || item.source === 'apexam'
                 || (item.source === 'college' && (['essays', 'checklist', 'deadlines'].includes(item.sourceCollection) || (item.sourceView === 'collegeapp'
                     && ['essayOrganizer', 'recommenders', 'collegeTracker', 'scholarships'].includes(item.sourceCollection)))));
         }
@@ -24126,9 +24153,11 @@ function populateProgressDashboard() {
                 if (item.source === 'task' && typeof tasks !== 'undefined' && Array.isArray(tasks)) {
                     const row = tasks.find(t => String(t.id) === sourceId);
                     if (!row) return false;
+                    const previousCompleted = row.completed, previousDueDate = row.dueDate;
                     if (change.done) row.completed = true;
                     if (change.dueDate) row.dueDate = change.dueDate;
-                    try { persistAppData && persistAppData(); } catch (e) { /* non-critical */ }
+                    try { persistAppData && persistAppData(); }
+                    catch (error) { row.completed = previousCompleted; row.dueDate = previousDueDate; throw error; }
                     try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
                     return true;
                 }

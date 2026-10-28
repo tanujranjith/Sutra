@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-28T21:10:27.804Z",
-  "reviewedReason": "Respect legacy day-state completion in Your day presentation",
-  "maxBytes": 5005924,
-  "maxLines": 86956
+  "blessedAt": "2026-10-28T22:15:18.566Z",
+  "reviewedReason": "Open source-owned workspace todos through existing navigation and remove redundant priorities",
+  "maxBytes": 5007840,
+  "maxLines": 86985
 }

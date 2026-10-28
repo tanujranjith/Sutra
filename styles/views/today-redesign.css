@@ -1710,3 +1710,6 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .tnu-actions .tnu-primar
 /* Geometry and task positions use the same 2:1 stage, so every band is circular. */
 #view-today.today-redesign .radar-mount { flex:none; min-height:0; }
 #view-today.today-redesign .radar-stage { flex:none; width:100%; height:auto; min-height:0; aspect-ratio:2 / 1; }
+.deadline-radar-open-btn { background:none; border:0; padding:0; color:inherit; text-align:left; font:inherit; cursor:pointer; }
+.deadline-radar-open-btn:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.today-plan-results[hidden] { display:none; }

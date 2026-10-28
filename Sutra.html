@@ -610,6 +610,9 @@
                                 <button type="button" role="menuitem" id="toggleAllTasksBtn" class="today-hero-menu-item"><i class="fas fa-list-check"></i><span>All tasks</span></button>
                                 <button type="button" role="menuitem" class="today-hero-menu-item" onclick="bindCommandPaletteInput(); openCommandPalette('')"><i class="fas fa-terminal"></i><span>Command palette (Ctrl/⌘+Shift+P)</span></button>
                                 <button type="button" role="menuitem" id="todayPasteImportBtn" class="today-hero-menu-item"><i class="fas fa-file-import"></i><span>Paste assignments / syllabus</span></button>
+                                <button type="button" role="menuitem" class="today-hero-menu-item" onclick="openDeadlineRadar()">Workspace to-do list</button>
+                                <button type="button" role="menuitem" class="today-hero-menu-item" data-plan-preview="day">Suggest plan</button>
+                                <button type="button" role="menuitem" class="today-hero-menu-item" data-plan-preview="week">Plan week</button>
                                 <button type="button" role="menuitem" id="todayWeeklyReviewBtn" class="today-hero-menu-item"><i class="fas fa-calendar-check"></i><span>Weekly review</span></button>
                                 <button type="button" role="menuitem" class="today-hero-menu-item" data-open-today-dashboard><i class="fas fa-sliders" aria-hidden="true"></i><span>Customize Home</span></button>
                                 <button type="button" role="menuitem" id="applyPlanTimelineBtn" class="today-hero-menu-item"><i class="fas fa-calendar-plus"></i><span>Apply plan to calendar</span></button>
@@ -792,29 +795,9 @@
                                 <div class="tac-items" id="tccBackupList"><div class="tac-empty">Checking local save health…</div></div>
                                 <button class="tac-footer-link" id="tccBackupOpenBtn" type="button">Open Data Health →</button>
                             </section>
-                            <!-- ── 3. FOCUS / PRIORITIES ── -->
-                            <section class="today-plan-section" aria-label="Priorities and day plan">
-                                <div class="today-split">
-                                    <section class="glass-card today-focus" aria-labelledby="todayFocusHeading">
-                                        <div class="today-focus-head">
-                                            <div class="today-focus-titles">
-                                                <div class="eyebrow">Focus</div>
-                                                <h3 id="todayFocusHeading">Priorities</h3>
-                                            </div>
-                                            <div class="today-focus-cta">
-                                                <span class="neumo-chip today-focus-chip" id="todayPriorityCount">0 items</span>
-                                                <button id="todayNextActionBtn" class="neumo-btn today-next-action-btn today-focus-primary" type="button">Shape My Day</button>
-                                                <button class="neumo-btn today-plan-suggest-btn" type="button" data-plan-preview="day" title="Preview suggested study blocks — nothing is added until you approve each one">Suggest plan</button>
-                                                <button class="neumo-btn today-plan-suggest-btn" type="button" data-plan-preview="week" title="Preview suggested study blocks for the week">Plan week</button>
-                                            </div>
-                                        </div>
-                                        <p class="today-focus-sub" id="todayNextActionState">Commit a few priorities or plan your day to get started.</p>
-                                        <div id="today-priority-list" class="task-list today-priority-list"></div>
-                                        <div id="today-priority-empty" class="empty-state today-focus-empty">
-                                            <div class="empty-title">Your day is clear</div>
-                                            <div class="empty-subtitle">Add a task or commit 1–3 priorities to stay focused.</div>
-                                        </div>
-                                        <details class="today-plan-disclosure" id="todayPlanDisclosure">
+                        </div>
+                    </section>
+                                        <details class="today-plan-disclosure today-plan-results" id="todayPlanDisclosure" hidden>
                                             <summary>
                                                 <span class="today-plan-disclosure-label"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> Recommended sequence</span>
                                                 <span class="neumo-chip" id="todayPlanSummary">No plan yet</span>
@@ -828,11 +811,6 @@
                                                 <button class="neumo-btn today-plan-suggest-btn" type="button" data-plan-repair="1" title="Check the next 7 days for overlaps, missing buffers, overloaded days, and unscheduled priorities">Check my plan</button>
                                             </div>
                                         </details>
-                                    </section>
-                                </div>
-                            </section>
-                        </div>
-                    </section>
 
                     <!-- ── 4. ATELIER SIGNALS ── -->
                     <section class="today-signals-section" aria-label="Sutra signals">
@@ -5417,8 +5395,8 @@
             <div class="deadline-radar-head">
                 <div>
                     <div class="eyebrow">Deadline Radar</div>
-                    <h3 id="deadlineRadarTitle">All upcoming deadlines</h3>
-                    <p class="deadline-radar-help">Tasks, homework, AP exams, College, Timeline, and (if enabled) Business, grouped by timeframe.</p>
+                    <h3 id="deadlineRadarTitle">Workspace to-do list</h3>
+                    <p class="deadline-radar-help">Open work across Tasks, Homework, College, Life, Business, and Timeline — including items with no due date.</p>
                 </div>
                 <button type="button" class="neumo-btn" onclick="closeDeadlineRadar()" aria-label="Close">Close</button>
             </div>
@@ -7574,11 +7552,11 @@
          Pure data, no logic; the app.js controller previews + applies on demand. -->
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
-    <script src="src/features/workspace/today-command-center.js?v=20261028-radar-semicircle1"></script>
+    <script src="src/features/workspace/today-command-center.js?v=20261028-workspace-todos2"></script>
     <!-- Today dashboard composition — pure preference normalization + accessible
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
-    <script src="src/features/workspace/today-dashboard.js?v=20260920-home-calm4"></script>
+    <script src="src/features/workspace/today-dashboard.js?v=20261028-retire-priorities1"></script>
     <script src="src/features/workspace/canvas-workbench.js?v=20260807-canvas2"></script>
     <script src="src/features/assistant/surface-assistant-actions.js?v=20260807-surfaces2"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
@@ -7609,11 +7587,11 @@
     <script src="src/features/search/global-search-engine.js?v=20261015-search-typos4"></script>
     <script src="src/features/search/global-search-modal.js?v=20261015-search-keyboard3"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261028-your-day3"></script>
+    <script src="src/core/app.js?v=20261028-workspace-todos2"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
-    <script src="src/ui/task-completion-effects.js?v=20261028-bounded-dust1"></script>
+    <script src="src/ui/task-completion-effects.js?v=20261028-bounded-dust2"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
          migration/normalization seam handles startup and workspace imports. -->
     <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
@@ -7624,7 +7602,7 @@
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/ui/theme-transition.js?v=20261024-theme-perf1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261028-your-day3"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261028-workspace-todos2"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20261028-your-day-height1"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7655,7 +7633,7 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1"></script>
-    <script src="src/features/workspace/notifications.js?v=20261028-notification-age2"></script>
+    <script src="src/features/workspace/notifications.js?v=20261028-notification-age3"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
@@ -8064,7 +8042,7 @@
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/backup-progress.css?v=20261001-backup-progress1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20261028-radar-semicircle1">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20261028-workspace-todos2">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">

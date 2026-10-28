@@ -593,9 +593,9 @@
                     + missed.map(_renderRow).join('')
                     + (rest.length ? '<div class="notif-group-head">Up next</div>' : '')
                 : '';
-            list.innerHTML = missedHtml + rest.map(_renderRow).join('')
+            global.SutraDOMSafety.setTrustedHTML(list, missedHtml + rest.map(_renderRow).join('')
                 + (!toShow.length ? '<div class="notif-empty-sub">No notifications from the past week.</div>' : '')
-                + (ages.older.length ? '<details class="notif-older"' + (wasExpanded ? ' open' : '') + '><summary>Older notifications (' + ages.older.length + ')</summary>' + ages.older.map(_renderRow).join('') + '</details>' : '');
+                + (ages.older.length ? '<details class="notif-older"' + (wasExpanded ? ' open' : '') + '><summary>Older notifications (' + ages.older.length + ')</summary>' + ages.older.map(_renderRow).join('') + '</details>' : ''));
         }
 
         _updateBadge();

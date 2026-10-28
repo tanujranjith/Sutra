@@ -24,7 +24,6 @@
         { id: 'tests', label: 'Tests & quizzes', description: 'Upcoming assessments and study entry points.', group: 'glance', selector: '#tccUpcomingTests', container: '.today-info-grid', sizes: SIZE_KEYS },
         { id: 'tonight', label: 'Tonight plan', description: 'Evening availability for a study block.', group: 'glance', selector: '#tccTonightPlan', container: '.today-info-grid', sizes: SIZE_KEYS },
         { id: 'backup', label: 'Save & backup', description: 'Local save and backup confidence.', group: 'glance', selector: '#tccBackupHealth', container: '.today-info-grid', sizes: SIZE_KEYS },
-        { id: 'priorities', label: 'Priorities', description: 'Committed work and Shape My Day controls.', group: 'glance', selector: '.today-plan-section', container: '.today-info-grid', sizes: ['wide'] },
         { id: 'habits', label: 'Habits', description: 'Daily routines alongside schoolwork.', group: 'signals', selector: '.today-panel-habits', container: '.today-signals-grid', sizes: ['standard', 'wide'] },
         { id: 'tracker', label: 'Tracker summary', description: 'A compact summary of life trackers.', group: 'signals', selector: '#todayTrackerSummary', container: '.today-signals-grid', sizes: ['standard', 'wide'] },
         { id: 'completed', label: 'Completed today', description: 'A collapsible record of finished work.', group: 'fixed', selector: '.today-completed-strip', container: '.today-signals-section', sizes: ['standard'], movable: false },
@@ -42,24 +41,24 @@
     var PRESETS = {
         calm: {
             label: 'Calm',
-            description: 'Next up, Radar, priorities, quick task capture, and save confidence without duplicate cards.',
+            description: 'Your day, Radar, quick task capture, and save confidence without duplicate cards.',
             order: WIDGET_IDS.slice(),
             hidden: ['today-plan', 'assignments', 'calendar', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
-            sizes: { 'next-up': 'standard', 'upcoming-radar': 'standard', 'priorities': 'wide' }
+            sizes: { 'next-up': 'standard', 'upcoming-radar': 'standard' }
         },
         study: {
             label: 'Study',
             description: 'Assignments, review, tests, and planning lead the page.',
-            order: ['next-up', 'upcoming-radar', 'assignments', 'review', 'tests', 'today-plan', 'calendar', 'priorities', 'tasks', 'backup', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
+            order: ['next-up', 'upcoming-radar', 'assignments', 'review', 'tests', 'today-plan', 'calendar', 'tasks', 'backup', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
             hidden: ['tasks', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
-            sizes: { assignments: 'wide', review: 'standard', tests: 'standard', priorities: 'wide' }
+            sizes: { assignments: 'wide', review: 'standard', tests: 'standard' }
         },
         everything: {
             label: 'Everything',
             description: 'Show every Home widget and advanced section.',
             order: WIDGET_IDS.slice(),
             hidden: [],
-            sizes: { priorities: 'wide' }
+            sizes: {  }
         }
     };
 
