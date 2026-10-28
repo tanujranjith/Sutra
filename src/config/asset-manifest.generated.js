@@ -259,7 +259,7 @@
     "./src/features/study/math-render.js?v=20260620-math1",
     "./src/features/study/review.js?v=20260913-content-limits-review1",
     "./src/features/workspace/activation-metrics.js?v=20260702-activation1",
-    "./src/features/workspace/audit-fixes.js?v=20261022-investigation1",
+    "./src/features/workspace/audit-fixes.js?v=20261028-your-day-height1",
     "./src/features/workspace/backup-confidence.js?v=20260915-cloud1",
     "./src/features/workspace/backup-progress.js?v=20261001-backup-progress1",
     "./src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1",
@@ -380,7 +380,7 @@
     "./styles/views/settings-redesign.css?v=20261022-investigation1",
     "./styles/views/timeline-calendar.css?v=20261001-mobile-agenda1",
     "./styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1",
-    "./styles/views/today-redesign.css?v=20261028-your-day3"
+    "./styles/views/today-redesign.css?v=20261028-your-day-height1"
   ],
   "optional": [
     "./assets/brand/sutra/generated/favicon.ico?v=20261025-white1",

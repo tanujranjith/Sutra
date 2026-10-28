@@ -35,6 +35,14 @@
     function refreshUndatedTaskCue() {
         var host = document.getElementById('todayDailyBrief');
         if (!host || cueUpdating) return;
+        // Your day owns capture and links to To-do; do not append a second
+        // featured card from this legacy observer (or touch saved tasks).
+        if (host.closest('.your-day-panel')) {
+            var duplicate = host.querySelector('.audit-undated-task-cue');
+            if (duplicate) duplicate.remove();
+            cueTaskId = '';
+            return;
+        }
         var task = getTasks().find(function (item) {
             return item && !item.completed && item.isActive !== false && !item.dueDate;
         });

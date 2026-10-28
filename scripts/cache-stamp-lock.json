@@ -308,8 +308,8 @@
     "hash": "987666d734d79136"
   },
   "src/features/workspace/audit-fixes.js": {
-    "stamp": "20261022-investigation1",
-    "hash": "b6ff6487dd3b13a1"
+    "stamp": "20261028-your-day-height1",
+    "hash": "038172a9a5ec4c9e"
   },
   "src/features/workspace/backup-confidence.js": {
     "stamp": "20260915-cloud1",
@@ -792,7 +792,7 @@
     "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20261028-your-day3",
-    "hash": "8ca1c3e9e515504f"
+    "stamp": "20261028-your-day-height1",
+    "hash": "81c9ae0f5e3fbe1a"
   }
 }
