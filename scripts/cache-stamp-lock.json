@@ -396,8 +396,8 @@
     "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20261018-alert-toggle2",
-    "hash": "8c07ee6b36dc690d"
+    "stamp": "20261028-notification-age2",
+    "hash": "f234e0303ba55c98"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20261015-formula-cache2",
@@ -544,8 +544,8 @@
     "hash": "45186a4c913b046f"
   },
   "src/ui/task-completion-effects.js": {
-    "stamp": "20261027-smooth1",
-    "hash": "2ad7ca52dda6440a"
+    "stamp": "20261028-bounded-dust1",
+    "hash": "35529155ddd47c2f"
   },
   "src/ui/theme-transition.js": {
     "stamp": "20261024-theme-perf1",
@@ -656,8 +656,8 @@
     "hash": "f4cae96a29fa89ae"
   },
   "styles/features/notifications.css": {
-    "stamp": "20260723-mobilemodal2",
-    "hash": "9ab16713e512d32f"
+    "stamp": "20261028-notification-age1",
+    "hash": "2faf37fd48d8097f"
   },
   "styles/features/pdf-workspace.css": {
     "stamp": "20261001-authoring4",

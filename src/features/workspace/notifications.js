@@ -554,6 +554,19 @@
         return document.getElementById('notifList');
     }
 
+    // Use the event/deadline date, not the time an overdue reminder is rebuilt.
+    // Calendar subtraction keeps the seven-day boundary local across DST.
+    function _partitionNotificationAges(items, now) {
+        var cutoff = new Date(now || Date.now());
+        cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - 7);
+        var recent = [], older = [];
+        (items || []).forEach(function (item) {
+            var date = item && item.due != null ? new Date(item.due) : null;
+            (date && Number.isFinite(date.getTime()) && date < cutoff ? older : recent).push(item);
+        });
+        return { recent: recent, older: older };
+    }
+
     function _renderPanel() {
         var list = _getList();
         if (!list) return;
@@ -570,6 +583,9 @@
                 + '<button class="notif-empty-action" type="button" onclick="if(typeof setActiveView===\'function\') setActiveView(\'today\')">Open Home →</button>'
                 + '</div>';
         } else {
+            var ages = _partitionNotificationAges(toShow);
+            var wasExpanded = !!list.querySelector('.notif-older[open]');
+            toShow = ages.recent;
             var missed = toShow.filter(function (n) { return n.missedWhileAway && !n.read; });
             var rest = toShow.filter(function (n) { return missed.indexOf(n) === -1; });
             var missedHtml = missed.length
@@ -577,7 +593,9 @@
                     + missed.map(_renderRow).join('')
                     + (rest.length ? '<div class="notif-group-head">Up next</div>' : '')
                 : '';
-            list.innerHTML = missedHtml + rest.map(_renderRow).join('');
+            list.innerHTML = missedHtml + rest.map(_renderRow).join('')
+                + (!toShow.length ? '<div class="notif-empty-sub">No notifications from the past week.</div>' : '')
+                + (ages.older.length ? '<details class="notif-older"' + (wasExpanded ? ' open' : '') + '><summary>Older notifications (' + ages.older.length + ')</summary>' + ages.older.map(_renderRow).join('') + '</details>' : '');
         }
 
         _updateBadge();
@@ -630,7 +648,7 @@
         if (!bell) return;
         var badge = bell.querySelector('.notif-bell-badge');
         if (!badge) return;
-        var unread = _notifications.filter(function (n) { return !n.read; }).length;
+        var unread = _partitionNotificationAges(_notifications).recent.filter(function (n) { return !n.read; }).length;
         badge.textContent = unread > 99 ? '99+' : String(unread || '');
         badge.setAttribute('data-count', String(unread));
         var label = unread > 0
@@ -649,7 +667,7 @@
     function _updatePanelCount() {
         var el = document.getElementById('notifPanelCount');
         if (!el) return;
-        var unread = _notifications.filter(function (n) { return !n.read; }).length;
+        var unread = _partitionNotificationAges(_notifications).recent.filter(function (n) { return !n.read; }).length;
         el.textContent = unread > 0 ? String(unread) : '';
         el.setAttribute('data-count', String(unread));
     }
@@ -916,7 +934,7 @@
 
     function _showNewUrgentToasts(prev, current) {
         var prevKeys = new Set(prev.map(function (n) { return n.key; }));
-        current.forEach(function (n) {
+        _partitionNotificationAges(current).recent.forEach(function (n) {
             if (!prevKeys.has(n.key) && (n.priority === 'urgent' || n.priority === 'overdue')) {
                 showToast({
                     title: n.title,
@@ -935,6 +953,7 @@
 
     // ---- OS / browser notifications (only while Sutra is open) ----------------
     function _sendBrowserNotification(n) {
+        if (_partitionNotificationAges([n]).older.length) return false;
         try {
             if (!_state.prefs.enabled || !_state.prefs.browserNotificationsEnabled) return false;
             if (!('Notification' in global) || Notification.permission !== 'granted') return false;

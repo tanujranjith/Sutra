@@ -4,6 +4,7 @@ import test from 'node:test';
 import { extractFunction } from '../helpers/extract-function.mjs';
 
 const source = readFileSync(new URL('../../src/features/workspace/notifications.js', import.meta.url), 'utf8');
+const ageHelper = extractFunction(source, '_partitionNotificationAges').body;
 
 test('browser alerts require opt-in and granted permission, deduplicate and open their source', () => {
   const sent = [], opened = [], read = [];
@@ -14,7 +15,7 @@ test('browser alerts require opt-in and granted permission, deduplicate and open
   const global = { Notification, focus() {} };
   const state = { prefs: { enabled: true, browserNotificationsEnabled: false } };
   const notify = new Function('global', 'Notification', '_state', '_browserNotifiedKeys', 'markRead', '_openSourceItem',
-    extractFunction(source, '_sendBrowserNotification').body + '; return _sendBrowserNotification;')(
+    ageHelper + extractFunction(source, '_sendBrowserNotification').body + '; return _sendBrowserNotification;')(
     global, Notification, state, {}, key => read.push(key), (...args) => opened.push(args));
   const item = { key: 'deadline-1', title: 'Lab due', subtitle: 'Chemistry', relativeTime: 'Today', source: 'homework', sourceId: 'task-1' };
   notify(item);
@@ -38,7 +39,7 @@ test('browser alerts require opt-in and granted permission, deduplicate and open
 });
 
 function compile(name, dependencies) {
-  return new Function(...Object.keys(dependencies), extractFunction(source, name).body + `; return ${name};`)(...Object.values(dependencies));
+  return new Function(...Object.keys(dependencies), ageHelper + extractFunction(source, name).body + `; return ${name};`)(...Object.values(dependencies));
 }
 
 test('constructor failure does not suppress a later retry and master Off prevents alerts', () => {

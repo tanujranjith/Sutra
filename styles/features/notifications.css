@@ -668,3 +668,7 @@ body.motion-off .notif-row.notif-row--removing {
     transition: none !important;
     animation: none !important;
 }
+
+.notif-older { border-top:1px solid var(--surface-border); margin-top:8px; }
+.notif-older>summary { cursor:pointer; color:var(--text-secondary); padding:12px 16px; min-height:44px; font-size:.82rem; }
+.notif-older>summary:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
