@@ -39,3 +39,21 @@ the existing College tracker row, leaving other deadlines and submission status
 unchanged. Open **Completed College deadlines** in the Radar to restore one.
 Changing a deadline date makes the new date active again. Markers travel with
 College tracker backups and its atomic Sync record; unknown row fields remain.
+## Your day panel
+
+The Home left surface presents the existing Next Best Action recommendation as
+Focus next. The tasks-today subtitle counts open task/homework deadline records
+for the local day, deduplicated by normalized item ID. Also today excludes the
+featured record, shows at most three remaining tasks, and offers View all for
+additional work. Checkboxes use the existing completion action and day-state
+semantics; rendering does not change priorities or deadlines.
+
+Overdue Review opens the existing recovery workflow. Other task and planning
+actions remain in More and Planning tools disclosures. The existing confirmed-
+save quick-task form now lives inside Your day; captured records remain in
+To-do and normal persistence/Sync paths. The old separate Tasks widget is hidden
+on Home. No workspace schema or storage identifiers change.
+
+On phones, the daily panel and the existing radar stack within the Home content;
+canonical mobile navigation stays intact. Navbar markup, radar renderer/filter,
+focus timer, and floating controls are unchanged.

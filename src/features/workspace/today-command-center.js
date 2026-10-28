@@ -693,6 +693,18 @@
         mount.appendChild(buildLegend());
     }
 
+    // Legacy one-off tasks record completion in day state / isActive rather
+    // than completed. Respect that existing state in the panel only.
+    function getYourDayItems(items, tasks, completedIds) {
+        var byId = new Map(safeItems(tasks).map(function (task) { return [String(task.id), task]; }));
+        var completed = new Set((completedIds || []).map(String));
+        return safeItems(items).filter(function (item) {
+            if (item.source !== 'task') return true;
+            var task = byId.get(String(item.sourceId));
+            return !task || (!task.completed && !completed.has(String(task.id)) && !(task.scheduleType === 'once' && task.isActive === false));
+        });
+    }
+
     // Presentation only: the caller supplies the existing ranked recommendation.
     function getYourDayTasks(items, featured, now, limit) {
         var seen = new Set();
@@ -718,6 +730,7 @@
         getTodayAgenda: getTodayAgenda,
         getUpcomingRadarItems: getUpcomingRadarItems,
         computeRadarLayout: computeRadarLayout,
+        getYourDayItems: getYourDayItems,
         getYourDayTasks: getYourDayTasks,
         renderRadar: renderRadar
     };

@@ -21884,7 +21884,7 @@ function populateProgressDashboard() {
                 if (form.dataset.saving === 'true') return;
                 const submittedTitle = input.value.trim();
                 if (!submittedTitle) {
-                    if (status) status.textContent = 'Enter a task title.';
+                    if (status && !status.textContent.startsWith('Added ')) status.textContent = 'Enter a task title.';
                     input.focus();
                     return;
                 }
@@ -23470,7 +23470,7 @@ function populateProgressDashboard() {
         function renderTodayDailyBrief() {
             const container = document.getElementById('todayDailyBrief');
             if (!container) return;
-            const items = collectWorkspaceDeadlines();
+            const items = window.SutraTodayCenter.getYourDayItems(collectWorkspaceDeadlines(), tasks, getDayState(today()).completedTaskIds);
             const groups = groupDeadlinesByTimeframe(items);
             const nba = pickNextBestAction(groups);
             const mode = getActiveWorkspaceMode();
@@ -23566,7 +23566,7 @@ function populateProgressDashboard() {
                         <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">${escapeHtml(nba.item.title)}</div>
                         <div class="today-brief-nba-meta tnu-meta">
-                            
+
                             <span>${nba.item.subtitle ? escapeHtml(nba.item.subtitle) + ' · ' : ''}${escapeHtml(status.label)}${dueLabel ? ' · ' + escapeHtml(dueLabel) : ''}</span>
                         </div>
                         <div class="today-brief-actions tnu-actions">
@@ -23611,7 +23611,7 @@ function populateProgressDashboard() {
 
             const smartRow = `
                 <div class="today-brief-smartrow tnu-smartrow">
-                    
+
                     ${nextClass && nextClassDue > 0 ? `<button type="button" class="neumo-btn is-quiz" data-quiz-class="${escapeHtml(nextClass.courseId)}" data-quiz-name="${escapeHtml(nextClass.name)}">Quiz me before ${escapeHtml(nextClass.name)} (${nextClassDue})</button>` : ''}
                     ${reviewDue > 0 ? `<button type="button" class="neumo-btn" data-donow-review="1">Review ${reviewDue} card${reviewDue === 1 ? '' : 's'}</button>` : ''}
                     <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="All deadlines grouped by timeframe">All deadlines</button>

@@ -204,7 +204,7 @@
     "./src/components/icons/index.js?v=20260809-audit-icons1",
     "./src/config/feature-manifest.js?v=20261025-todo-classes1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20261028-your-day1",
+    "./src/core/app.js?v=20261028-your-day3",
     "./src/core/credential-vault-bridge.js?v=20260831-revoke4",
     "./src/core/credential-vault.js?v=20260831-revoke4",
     "./src/core/dom-safety.js?v=20261012-native-paste1",
@@ -275,7 +275,7 @@
     "./src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2",
     "./src/features/workspace/folder-workspace.js?v=20261001-folders4",
     "./src/features/workspace/handwriting.js?v=20260601-handwriting",
-    "./src/features/workspace/help-docs-refresh.js?v=20261028-college-deadlines1",
+    "./src/features/workspace/help-docs-refresh.js?v=20261028-your-day3",
     "./src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2",
     "./src/features/workspace/html-pages.js?v=20261022-create-split3",
     "./src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1",
@@ -296,7 +296,7 @@
     "./src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1",
     "./src/features/workspace/timeline-calendar.js?v=20261001-mobile-agenda1",
     "./src/features/workspace/timeline-drag.js?v=20260913-content-limits-timeline1",
-    "./src/features/workspace/today-command-center.js?v=20261028-your-day1",
+    "./src/features/workspace/today-command-center.js?v=20261028-your-day3",
     "./src/features/workspace/today-dashboard.js?v=20260920-home-calm4",
     "./src/features/workspace/today-focus-timer.js?v=20261004-focus-dismiss-theme1",
     "./src/features/workspace/workspace-entity-adapters.js?v=20261025-course-types1",
@@ -380,7 +380,7 @@
     "./styles/views/settings-redesign.css?v=20261022-investigation1",
     "./styles/views/timeline-calendar.css?v=20261001-mobile-agenda1",
     "./styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1",
-    "./styles/views/today-redesign.css?v=20261028-your-day1"
+    "./styles/views/today-redesign.css?v=20261028-your-day3"
   ],
   "optional": [
     "./assets/brand/sutra/generated/favicon.ico?v=20261025-white1",
