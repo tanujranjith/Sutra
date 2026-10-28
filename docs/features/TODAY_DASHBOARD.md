@@ -29,3 +29,9 @@ is not rearranged by desktop widget preferences.
 Reordering uses visible buttons in addition to pointer controls, presets are
 real buttons with pressed state, and the modal delegates focus containment,
 Escape handling, scroll locking, and focus restoration to `SutraModalManager`.
+
+Deadline Radar can mark tasks, homework, timeline blocks, AP exams, College
+essay milestones, and College application tracker, essay, recommender, and
+scholarship records done using their existing fields. Final essays and submitted
+scholarships no longer appear as open deadlines. Checklist and date-only rows
+without an individual completion field still open their source for editing.

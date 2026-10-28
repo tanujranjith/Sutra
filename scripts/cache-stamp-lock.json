@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261027-college-night1",
-    "hash": "f39fccd044dad8a0"
+    "stamp": "20261027-radar-done1",
+    "hash": "382959e2f1c987b0"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -768,8 +768,8 @@
     "hash": "23882a93ae06f7c4"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261025-centered-nav1",
-    "hash": "fd34efb27a468ff2"
+    "stamp": "20261027-page-tree1",
+    "hash": "999526e967fd2878"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",

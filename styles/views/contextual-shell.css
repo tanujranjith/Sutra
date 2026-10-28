@@ -101,6 +101,9 @@ body[data-context-sidebar="none"] #sidebarToggle {
   display: none !important;
 }
 
+/* The page tree belongs only to Create, including during shell transitions. */
+body[data-view]:not([data-view="notes"]) #pagesList { display: none !important; }
+
 .global-app-brand {
   position: static;
   z-index: 2;

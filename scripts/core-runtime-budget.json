@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-15T01:25:18.995Z",
-  "reviewedReason": "Prevent Assistant reference-link double rendering; retain reviewed live proposals and canonical citation navigation",
-  "maxBytes": 4996222,
-  "maxLines": 87454
+  "blessedAt": "2026-10-28T03:15:42.547Z",
+  "reviewedReason": "Support existing College and AP completion actions in Deadline Radar",
+  "maxBytes": 4997931,
+  "maxLines": 86868
 }

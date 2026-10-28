@@ -22376,7 +22376,7 @@ function populateProgressDashboard() {
             });
 
             (Array.isArray(appWorkspace.essayOrganizer) ? appWorkspace.essayOrganizer : []).forEach(row => {
-                if (!row || !String(row.dueDate || '').trim()) return;
+                if (!row || row.draftStatus === 'final' || !String(row.dueDate || '').trim()) return;
                 const school = trimCollegeDeadlineLabel(row.school, 'Essay');
                 const promptLabel = trimCollegeDeadlineLabel(row.prompt, 'Essay draft', 56);
                 pushCollegeDeadlineItem(out, current, {
@@ -22405,7 +22405,7 @@ function populateProgressDashboard() {
             (Array.isArray(appWorkspace.scholarships) ? appWorkspace.scholarships : []).forEach(row => {
                 if (!row) return;
                 const normalizedStatus = String(row.status || '').toLowerCase();
-                if (normalizedStatus === 'won' || normalizedStatus === 'not_awarded') return;
+                if (normalizedStatus === 'submitted' || normalizedStatus === 'won' || normalizedStatus === 'not_awarded') return;
                 const dueDate = String(row.deadline || '').trim();
                 if (!dueDate) return;
                 const name = trimCollegeDeadlineLabel(row.name, 'Scholarship');
@@ -23988,7 +23988,9 @@ function populateProgressDashboard() {
         }
 
         function recoveryCanMarkDone(item) {
-            return !!item && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline');
+            return !!item && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline' || item.source === 'apexam'
+                || (item.source === 'college' && (item.sourceCollection === 'essays' || (item.sourceView === 'collegeapp'
+                    && ['essayOrganizer', 'recommenders', 'collegeTracker', 'scholarships'].includes(item.sourceCollection)))));
         }
 
         function recoveryCanReschedule(item) {
@@ -24003,6 +24005,24 @@ function populateProgressDashboard() {
             const sourceId = String(item.sourceId || '');
             if (!sourceId) return false;
             try {
+                if (item.source === 'apexam' && change.done === true && typeof _setExamTaken === 'function') {
+                    if (!apStudyWorkspace || !Array.isArray(apStudyWorkspace.subjects) || !apStudyWorkspace.subjects.some(subject => String(subject.id) === sourceId)) return false;
+                    return _setExamTaken(item.id, true) === true;
+                }
+                if (item.source === 'college' && change.done === true && recoveryCanMarkDone(item)) {
+                    const collection = item.sourceCollection;
+                    const workspace = item.sourceView === 'collegeapp' ? collegeAppWorkspace : collegeTracker;
+                    const row = workspace && Array.isArray(workspace[collection]) && workspace[collection].find(value => String(value.id) === sourceId);
+                    if (!row) return false;
+                    if (collection === 'essays') {
+                        const field = { firstDraftBy: 'firstDraftDone', reviewBy: 'reviewSubmitted', revisionBy: 'revisionSubmitted', finalBy: 'finalDraft' }[String(item.id).split(':').pop()];
+                        if (!field) return false;
+                        row[field] = true;
+                    } else if (collection === 'essayOrganizer') row.draftStatus = 'final';
+                    else row.status = 'submitted';
+                    persistAppData();
+                    return true;
+                }
                 if (item.source === 'homework') {
                     const raw = readLocalArraySafe('hwTasks:v2');
                     const row = Array.isArray(raw) ? raw.find(t => String(t.id) === sourceId) : null;
