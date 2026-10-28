@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261028-college-deadlines2",
-    "hash": "dcce4260d8b621ce"
+    "stamp": "20261028-home-redesign5",
+    "hash": "8b4909008b94dff0"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261028-college-deadlines1",
-    "hash": "ff06200f1390e237"
+    "stamp": "20261028-home-redesign4",
+    "hash": "637dbe390858473b"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -460,8 +460,8 @@
     "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20260721-radar-consolidation1",
-    "hash": "9000432533f4d577"
+    "stamp": "20261028-home-redesign4",
+    "hash": "b6ae9c1d2b36b929"
   },
   "src/features/workspace/today-dashboard.js": {
     "stamp": "20260920-home-calm4",
@@ -792,7 +792,7 @@
     "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260816-home-quick-task1",
-    "hash": "f9966d763806dff1"
+    "stamp": "20261028-home-redesign4",
+    "hash": "66b564b2375a158b"
   }
 }

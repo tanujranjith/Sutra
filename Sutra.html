@@ -597,6 +597,7 @@
                     <div class="today-hero-date">
                         <div class="eyebrow" id="todayStreakRibbon">&nbsp;</div>
                         <h2 id="todayLabel">Tuesday, Jan 2</h2>
+                        <p id="homeCalendarDate" class="home-calendar-date"></p>
                         <p class="today-tagline" id="todayTagline">Focus is a choice. Make today count.</p>
                     </div>
                     <div class="today-header-actions">
@@ -642,6 +643,7 @@
 
                     <!-- ── 1. HERO ROW: NEXT UP + UPCOMING RADAR ── -->
                     <div class="today-hero-row">
+                        <div class="home-task-column">
                         <section class="today-nextup-card glass-card" aria-label="Next up">
                             <section class="today-daily-brief" id="todayDailyBrief" aria-label="Next up"></section>
                             <div class="today-nextup-footer" role="group" aria-label="Deadline counts">
@@ -656,9 +658,11 @@
                                 </button>
                             </div>
                         </section>
+                        <section id="homeTodayTasks" class="home-tasks-panel glass-card" aria-label="Today’s tasks"></section>
+                        </div>
                         <section class="today-radar-card glass-card" aria-labelledby="upcomingRadarHeading">
                             <div class="radar-head">
-                                <h3 class="today-section-title radar-title" id="upcomingRadarHeading">Upcoming Radar</h3>
+                                <h3 class="today-section-title radar-title" id="upcomingRadarHeading">Upcoming radar</h3>
                                 <select id="upcomingRadarFilter" class="radar-filter" aria-label="Filter radar items">
                                     <option value="all">All Items</option>
                                     <option value="tasks">Tasks</option>
@@ -669,6 +673,7 @@
                                     <option value="undated">No date</option>
                                 </select>
                             </div>
+                            <p class="home-radar-subtitle">A quick view of what’s coming up. Closer = sooner.</p>
                             <div id="upcomingRadarMount" class="radar-mount"></div>
                         </section>
                     </div>
@@ -678,7 +683,7 @@
                     <section class="today-focus-timer-card glass-card" id="todayFocusTimerCard" aria-labelledby="todayFocusTimerHeading">
                         <div class="today-focus-timer-copy">
                             <div class="today-focus-timer-eyebrow"><i class="fas fa-clock" aria-hidden="true"></i> Focus timer</div>
-                            <h3 id="todayFocusTimerHeading">Work in one clear block</h3>
+                            <h3 id="todayFocusTimerHeading">Focus Session</h3>
                             <p id="todayFocusTimerStatus" aria-live="polite">Ready when you are.</p>
                         </div>
                         <div class="today-focus-timer-clock" aria-live="off">
@@ -7573,7 +7578,7 @@
          Pure data, no logic; the app.js controller previews + applies on demand. -->
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
-    <script src="src/features/workspace/today-command-center.js?v=20260721-radar-consolidation1"></script>
+    <script src="src/features/workspace/today-command-center.js?v=20261028-home-redesign4"></script>
     <!-- Today dashboard composition — pure preference normalization + accessible
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
@@ -7608,7 +7613,7 @@
     <script src="src/features/search/global-search-engine.js?v=20261015-search-typos4"></script>
     <script src="src/features/search/global-search-modal.js?v=20261015-search-keyboard3"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261028-college-deadlines2"></script>
+    <script src="src/core/app.js?v=20261028-home-redesign5"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7623,7 +7628,7 @@
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/ui/theme-transition.js?v=20261024-theme-perf1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261028-college-deadlines1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261028-home-redesign4"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20261022-investigation1"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -8063,7 +8068,7 @@
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/backup-progress.css?v=20261001-backup-progress1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20261028-home-redesign4">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">

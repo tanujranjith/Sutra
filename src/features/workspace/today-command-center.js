@@ -474,7 +474,7 @@
             var step = slots > 1 ? (endDeg - startDeg) / (slots - 1) : 0;
             var radius = zoneRadius[zone.key] || 0.9;
             for (var s = 0; s < slots; s++) {
-                var deg = slots === 1 ? 90 : startDeg + step * s;
+                var deg = slots === 1 ? 67 : startDeg + step * s;
                 var rad = deg * Math.PI / 180;
                 var x = 0.5 + (radius * 0.52) * Math.cos(rad) * -1; // mirror so earliest reads left→right
                 var y = 1 - radius * 0.88 * Math.sin(rad);
@@ -494,7 +494,7 @@
                         statusKey: zone.key === 'undated' ? 'undated' : status.key,
                         xPct: x * 100, yPct: y * 100,
                         label: String(item.title || 'Untitled'),
-                        meta: chipTimeLabel(item, now),
+                        meta: (item.due ? item.due.toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'}) + ' · ' : '') + chipTimeLabel(item, now) + (item.subtitle ? ' · ' + item.subtitle : ''),
                         overflowCount: 0
                     });
                 }
@@ -567,6 +567,7 @@
         var body = el('span', 'radar-chip-body');
         body.appendChild(el('span', 'radar-chip-title', chip.label));
         if (chip.meta) body.appendChild(el('span', 'radar-chip-meta', chip.meta));
+        body.classList.add('radar-tooltip');
         btn.appendChild(body);
         if (chip.item) {
             var statusText = chip.meta ? ' — ' + chip.meta : '';
@@ -576,6 +577,7 @@
                 if (handlers.onOpen) handlers.onOpen(chip.item);
             });
         } else {
+            btn.appendChild(el('span', '', '+' + chip.overflowCount));
             btn.setAttribute('aria-label', chip.overflowCount + ' more items in the ' + (HORIZON_LABELS[chip.zone] || chip.zone) + ' zone. Open the full list.');
             btn.addEventListener('click', function () {
                 if (handlers.onOverflow) handlers.onOverflow(chip.zone);
@@ -658,13 +660,13 @@
         opts = opts || {};
         var now = toDate(opts.now) || new Date();
         var handlers = { onOpen: opts.onOpen, onOverflow: opts.onOverflow };
-        var data = getUpcomingRadarItems(items, { now: now, filter: opts.filter });
+        var data = getUpcomingRadarItems(items, { now: now, filter: opts.filter, maxPerZone: mount.clientWidth > 0 && mount.clientWidth < 480 ? {today: 2, tomorrow: 2, thisWeek: 3, later: 3} : undefined });
 
         while (mount.firstChild) mount.removeChild(mount.firstChild);
 
         var useList = !!opts.forceList
             || opts.filter === 'undated'
-            || (typeof mount.clientWidth === 'number' && mount.clientWidth > 0 && mount.clientWidth < 480);
+;
 
         if (useList) {
             mount.appendChild(buildRadarList(data, now, handlers));
@@ -691,6 +693,54 @@
         });
         mount.appendChild(stage);
         mount.appendChild(buildLegend());
+        mount.appendChild(buildUpcomingAgenda(items, opts, now, handlers));
+    }
+
+
+    function homeTaskRow(item, now, handlers) {
+        var row = el('div', 'home-task-row radar-chip-' + getUrgencyStatus(item, now).key);
+        if (handlers.onComplete && handlers.canComplete(item)) {
+            var check = el('button', 'home-task-check'); check.type = 'button';
+            check.setAttribute('aria-label', 'Mark done: ' + item.title);
+            check.addEventListener('click', function () { handlers.onComplete(item); }); row.appendChild(check);
+        } else { var dot = el('span', 'radar-chip-dot'); dot.setAttribute('aria-hidden', 'true'); row.appendChild(dot); }
+        var open = el('button', 'home-task-open'); open.type = 'button';
+        open.appendChild(el('span', 'home-task-title', item.title || 'Untitled'));
+        if (item.subtitle) open.appendChild(el('span', 'home-task-category', item.subtitle));
+        open.addEventListener('click', function () { if (handlers.onOpen) handlers.onOpen(item); }); row.appendChild(open);
+        row.appendChild(el('span', 'home-task-date', item.due ? chipTimeLabel(item, now) : 'No date'));
+        return row;
+    }
+    function buildUpcomingAgenda(items, opts, now, handlers) {
+        var section = el('section', 'home-upcoming'), head = el('div', 'home-section-head');
+        head.appendChild(el('h4', '', 'Upcoming'));
+        var timeline = el('button', 'home-text-button', 'View timeline →'); timeline.type = 'button';
+        timeline.addEventListener('click', function () { if (opts.onTimeline) opts.onTimeline(); });
+        head.appendChild(timeline); section.appendChild(head);
+        var filter = RADAR_FILTERS.find(function (f) { return f.key === (opts.filter || 'all'); }) || RADAR_FILTERS[0];
+        var upcoming = safeItems(items).filter(function (item) {
+            var d = daysUntil(item, now);
+            return !item.completed && item.status !== 'done' && filter.match(item) && d !== null && d >= 0;
+        }).sort(function (a,b) { return a.due-b.due || String(a.id).localeCompare(String(b.id)); }).slice(0,5);
+        upcoming.forEach(function (item) { section.appendChild(homeTaskRow(item, now, {onOpen:handlers.onOpen})); });
+        if (!upcoming.length) section.appendChild(el('p', 'home-empty', 'No upcoming items in this filter.'));
+        return section;
+    }
+    function renderHomeTasks(mount, items, opts) {
+        if (!mount) return;
+        var expanded = Array.from(mount.querySelectorAll('details[open]')).map(function(d){return d.dataset.group;});
+        mount.replaceChildren(); var now = opts.now || new Date();
+        var groups = groupItemsByTimeHorizon(safeItems(items).filter(function(i){return !i.completed && i.status !== 'done';}),now);
+        var head=el('div','home-section-head'); head.appendChild(el('h3','',"Today's tasks"));
+        var all=el('button','home-text-button','View all →'); all.type='button'; all.addEventListener('click',opts.onAll); head.appendChild(all); mount.appendChild(head);
+        groups.today.forEach(function(item){mount.appendChild(homeTaskRow(item,now,opts));});
+        if(!groups.today.length) mount.appendChild(el('p','home-empty','Nothing due today. Choose a next step or capture new work.'));
+        [['overdue','Overdue',groups.overdue],['upcoming','Upcoming',groups.tomorrow.concat(groups.thisWeek,groups.later)],['captured','Captured tasks',groups.undated]].forEach(function(group){
+            var details=el('details','home-task-group'); details.dataset.group=group[0]; details.open=expanded.indexOf(group[0])>=0;
+            details.appendChild(el('summary','',group[1]+' · '+group[2].length));
+            group[2].forEach(function(item){details.appendChild(homeTaskRow(item,now,opts));});
+            if(!group[2].length) details.appendChild(el('p','home-empty','Nothing here.')); mount.appendChild(details);
+        });
     }
 
     window.SutraTodayCenter = {
@@ -705,6 +755,7 @@
         getTodayAgenda: getTodayAgenda,
         getUpcomingRadarItems: getUpcomingRadarItems,
         computeRadarLayout: computeRadarLayout,
+        renderHomeTasks: renderHomeTasks,
         renderRadar: renderRadar
     };
 })();

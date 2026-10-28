@@ -39,3 +39,17 @@ the existing College tracker row, leaving other deadlines and submission status
 unchanged. Open **Completed College deadlines** in the Radar to restore one.
 Changing a deadline date makes the new date active again. Markers travel with
 College tracker backups and its atomic Sync record; unknown row fields remain.
+## Restrained task and radar layout
+
+Home uses a 40/60 task/radar layout on desktop and stacks the same canonical
+controls on phones. Next Up retains the existing ranking policy; completion
+uses the existing deadline mutation path. Additional actions remain in the
+Next Up menu and Planning tools disclosure. Today's tasks groups overdue,
+upcoming, and undated captured work inline without creating another store.
+
+Radar markers and the chronological Upcoming agenda share the canonical
+normalized deadline source and selected category filter. Markers retain fixed
+time bands, bounded density, overflow access, and source-opening callbacks.
+Hover or keyboard focus reveals item details. The agenda is titled Upcoming
+because it may include dates beyond seven days. The focus panel continues to
+use the canonical timer command/update bridge.
