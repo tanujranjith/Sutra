@@ -83176,7 +83176,7 @@ function parseQuickCaptureText(text, options) {
 
     const homeworkNightIntent = !!out.dueDate && /\bnight\b/i.test(temporalText);
     if ((tonightDateIntent || deadlineNightIntent || homeworkNightIntent) && !explicitTimeSpecified
-        && (deadlineNightIntent || out.type === 'homework' || out.type === 'test' || captureType === 'homework')) {
+        && (deadlineNightIntent || out.type === 'homework' || out.type === 'test' || out.type === 'college' || captureType === 'homework')) {
         // Night deadlines use end of day; study blocks keep evening time.
         out.dueTime = '23:59';
     }
