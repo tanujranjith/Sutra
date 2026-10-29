@@ -17,8 +17,12 @@ const responsiveTestMatch = [
 
 const playwrightPort = Number(process.env.PLAYWRIGHT_PORT || 5173);
 // Keep earlier CI preflight traces when another Playwright invocation starts.
+// Worker processes inherit the same run identity when they load this config.
+if (process.env.CI && !process.env.SUTRA_CI_PLAYWRIGHT_RUN_ID) {
+  process.env.SUTRA_CI_PLAYWRIGHT_RUN_ID = `${Date.now()}-${process.pid}`;
+}
 const playwrightOutputDir = process.env.PLAYWRIGHT_OUTPUT_DIR
-  || (process.env.CI ? `.tmp/playwright-results/run-${Date.now()}-${process.pid}` : '.tmp/playwright-results');
+  || (process.env.CI ? `.tmp/playwright-results/run-${process.env.SUTRA_CI_PLAYWRIGHT_RUN_ID}` : '.tmp/playwright-results');
 const playwrightTrace = process.env.PLAYWRIGHT_TRACE === 'off' ? 'off' : 'retain-on-failure';
 
 export default defineConfig({
