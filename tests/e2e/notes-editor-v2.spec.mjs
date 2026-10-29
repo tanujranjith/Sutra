@@ -56,7 +56,8 @@ test('the full Assistant tab hides the docked sidebar and releases its space', a
   await openApp(page); await openNotesView(page); await stageWritingProvider(page);
   await page.locator('#chatbotBtn').click();
   await expect(page.locator('#chatbotPanel')).toBeVisible();
-  await page.locator('#tabAssistantView').click();
+  await page.locator('#moreViewsToggle').click();
+  await page.getByRole('menuitem', { name: 'Assistant', exact: true }).click();
   await expect(page.locator('#view-assistantview')).toHaveClass(/active/);
   await expect(page.locator('#chatbotPanel')).toBeHidden();
   await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
@@ -1559,7 +1560,7 @@ test('all Create comparison surfaces save through the host without replacing the
   await frame.getByRole('button', { name: 'New slide', exact: true }).click();
   await expect(frame.getByRole('complementary', { name: 'Slide order', exact: true })).toContainText('2 of 2');
   await choice.selectOption(ids.folder);
-  await expect(frame.getByRole('button', { name: '📄 Child', exact: true })).toBeVisible();
+  await expect(frame.getByRole('button', { name: /Child$/ })).toBeVisible();
   expect(await page.locator('.create-split-frame').evaluate(el =>
     el.contentWindow.flowAtelier.pages === window.flowAtelier.pages)).toBe(true);
   expect(await page.locator('.create-split-frame').evaluate(el =>
