@@ -9835,7 +9835,9 @@
         });
         if (!ready) {
             container.querySelectorAll('select').forEach(select => { select.disabled = true; });
-            renderAssistantPermissionStatus(status, 'Workspace access is unavailable. Reload Sutra to restore its permission controls.');
+            renderAssistantPermissionStatus(status, assistantEnabled
+                ? 'Workspace access is unavailable. Reload Sutra to restore its permission controls.'
+                : 'Enable Sutra Assistant to manage workspace access.');
             return;
         }
         const permissions = privacy.getPermissions();
