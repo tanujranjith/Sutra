@@ -287,6 +287,9 @@ test('Homework effort prompt follows the active theme surface and button tokens'
 });
 
 test('By Class keeps overdue work in classes, separates only completed work, and preserves filters and menus', async ({ page }) => {
+  // This audit covers completed-group keyboard/menu behavior, filtering, edit,
+  // and responsive geometry across four viewport widths.
+  test.setTimeout(120_000);
   await openSeededHomework(page);
   await page.evaluate(() => {
     const chemistry = window.SutraHomework.addCourse('Chemistry');
