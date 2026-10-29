@@ -229,7 +229,8 @@ test('the body-portaled Split View Note selector closes when its owner becomes i
   await expect(menu).toHaveClass(/is-open/);
   await expect(menu).not.toHaveAttribute('aria-hidden', 'true');
   expect(await menu.evaluate(element => element.inert)).toBe(false);
-  await expect(menu.locator('.nf-select-option').filter({ hasText: 'Portal owner primary' })).toHaveCount(1);
+  // The current primary cannot be selected as its own split partner.
+  await expect(menu.locator('.nf-select-option').filter({ hasText: 'Portal owner primary' })).toHaveCount(0);
   await expect(menu.locator('.nf-select-option').filter({ hasText: 'Portal owner secondary' })).toHaveCount(1);
 
   // This follows the app lifecycle path directly so the test exercises the
