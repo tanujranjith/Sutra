@@ -48,6 +48,11 @@ featured record, shows at most three remaining tasks, and offers View all for
 additional work. Checkboxes use the existing completion action and day-state
 semantics; rendering does not change priorities or deadlines.
 
+Focus actions retain the selected task or Homework projection and seed other
+deadline sessions with their title. Choosing a different titled item replaces
+the previous session context; opening Focus without a selected item resumes
+the existing context. All entry points continue using the one canonical timer.
+
 Overdue Review opens the existing recovery workflow. Other task and planning
 actions remain in More and Planning tools disclosures. The existing confirmed-
 save quick-task form now lives inside Your day; captured records remain in

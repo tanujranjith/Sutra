@@ -23407,7 +23407,7 @@ function populateProgressDashboard() {
                         const title = btn.getAttribute('data-rn-title') || 'Focus Session';
                         const seconds = Math.max(60, Math.floor(Number(btn.getAttribute('data-rn-focus-seconds')) || 0));
                         const options = { plannedDurationSeconds: seconds, autostart: true, title };
-                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(sid, options);
+                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(src === 'homework' ? `hw_v2_${sid}` : sid, options);
                         else if (typeof startFocusSession === 'function') startFocusSession(null, options);
                     } else if (action === 'rightnow-open') {
                         const id = btn.getAttribute('data-rn-itemid');
@@ -23744,9 +23744,10 @@ function populateProgressDashboard() {
                 const src = focusBtn.getAttribute('data-donow-source');
                 const label = focusBtn.getAttribute('data-donow-title') || 'Focus';
                 try {
-                    if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') { startFocusSession(sid); return; }
-                    if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') { window.flowAtelier.startFocusSession({ label, taskTitle: label }); return; }
-                    if (typeof startFocusSession === 'function') { startFocusSession(); }
+                    const options = { title: label };
+                    if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') { startFocusSession(src === 'homework' ? `hw_v2_${sid}` : sid, options); return; }
+                    if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') { window.flowAtelier.startFocusSession(null, options); return; }
+                    if (typeof startFocusSession === 'function') { startFocusSession(null, options); }
                 } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-focus', 'warning'); }
             });
 
@@ -30010,11 +30011,12 @@ function buildOnboardingPlanPreview() {
         function cwFocusInboxItem(source, sourceId, milestoneId) {
             const item = cwFindInboxItem(source, sourceId, milestoneId);
             const title = item ? item.title : '';
+            const taskId = sourceId && (source === 'homework' ? `hw_v2_${sourceId}` : source === 'task' ? sourceId : null);
             if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') {
-                try { window.flowAtelier.startFocusSession({ label: title, taskTitle: title }); showToast('Focus session started.'); return true; } catch (e) { /* fall through */ }
+                try { window.flowAtelier.startFocusSession(taskId || null, { title }); showToast('Focus session started.'); return true; } catch (e) { /* fall through */ }
             }
             if (typeof startFocusSession === 'function') {
-                try { startFocusSession(null, { label: title }); showToast('Focus session started.'); return true; } catch (e) { try { startFocusSession(); return true; } catch (e2) { /* fall through */ } }
+                try { startFocusSession(taskId || null, { title }); showToast('Focus session started.'); return true; } catch (e) { try { startFocusSession(); return true; } catch (e2) { /* fall through */ } }
             }
             setActiveView('today');
             return false;
@@ -86966,7 +86968,10 @@ function startFocusSession(taskId, opts) {
     // If there is already a matching session, reuse its context but always
     // refresh it from the one timer. This also makes the sidebar launch button
     // a pure full-screen view of the timer the student already configured.
-    if (_fsSession && _fsSession.id && (!taskId || _fsSession.taskId === taskId)) {
+    var resumeContext = !taskId && !opts.title && !opts.note;
+    var sameContext = _fsSession && (taskId ? _fsSession.taskId === taskId
+        : !_fsSession.taskId && _fsSession.taskTitle === opts.title && _fsSession.taskNote === (opts.note || ''));
+    if (_fsSession && _fsSession.id && (resumeContext || sameContext)) {
         _fsSyncFromCanonicalTimer();
         if (opts.autostart) _fsApplyTimerSnapshot(_fsTimerCommand('start'));
         _fsOpenOverlay();
