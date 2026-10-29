@@ -62950,6 +62950,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 try { sutraSyncRuntime.engine.setVaultKey(null); } catch (error) {}
                 try { sutraSyncRuntime.engine.stop(); } catch (error) {}
             }
+            mountSutraRevokedScreen('This device was revoked. Sutra is securely removing local user data.');
             try { await persistenceCommitQueue; } catch (error) {}
             try { workspaceCoordinator.close(); } catch (error) {}
             try { workspaceDb.close(); } catch (error) {}
@@ -62967,7 +62968,6 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             } catch (error) {}
             try { courseAttachmentCache.clear(); } catch (error) {}
             _importAttachmentWrites = [];
-            mountSutraRevokedScreen('This device was revoked. Sutra is securely removing local user data.');
         }
 
         function clearSutraRevokedInMemoryData(options = {}) {

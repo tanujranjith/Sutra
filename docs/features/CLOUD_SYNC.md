@@ -148,7 +148,8 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
   and pauses sync while keeping the local workspace.
 - **Revoke & wipe another device** blocks that device's RPC, key, snapshot, and
   asset access immediately and marks a wipe pending. On its next verified
-  connection, every Sutra tab in that browser deletes local workspace,
+  connection, every Sutra tab in that browser locks and conceals its workspace
+  before waiting for pending local saves to settle. It then deletes local workspace,
   attachments, Assistant history/memory, compatibility mirrors, sync/auth state,
   and other Sutra origin storage, then acknowledges completion. Unsynchronized
   work on that device is lost. A browser that stays offline or powered off cannot

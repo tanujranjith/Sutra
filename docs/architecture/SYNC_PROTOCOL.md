@@ -530,7 +530,9 @@ failure, offline/DNS/timeout/CSP errors, malformed JSON, other origins, and
 generic `revoked` errors remain locked/non-destructive.
 
 After verification, all tabs block writes, cancel pending saves, clear vault
-material, close IndexedDB handles, and coordinate over
+material, and conceal rendered workspace content before waiting for in-flight
+persistence work. Handles close only after the corresponding pending work settles;
+tabs coordinate over
 `sutra-sync-events-v1`. The canonical wipe deletes this origin's local/session
 storage plus `noteflow_atelier_db`, `noteflow_attachments_db`, `sutra_sync_db`,
 `sutra-drive-sync-keys`, `sutra-fs-config`, and `sutra_share_target_db`, verifies
