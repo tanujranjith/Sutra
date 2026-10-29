@@ -25,6 +25,11 @@ on:
         required: false
         type: string
         default: ""
+      regression_repeat_each:
+        description: "Repeat each desktop test in a diagnostic-only run (1-10)"
+        required: false
+        type: string
+        default: "1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -37,6 +42,7 @@ env:
   NODE_VERSION: "24"
   SUTRA_REGRESSION_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.regression_only && '1' || '0' }}
   SUTRA_REGRESSION_FILTER: ${{ inputs.regression_filter }}
+  SUTRA_REGRESSION_REPEAT_EACH: ${{ inputs.regression_repeat_each || '1' }}
 
 jobs:
   build-and-check:
@@ -97,8 +103,12 @@ jobs:
         # overloading the shared GitHub runner during cold startup.
         run: |
           if [ "$SUTRA_REGRESSION_ONLY" = "1" ]; then
+            if ! [[ "$SUTRA_REGRESSION_REPEAT_EACH" =~ ^([1-9]|10)$ ]]; then
+              echo "Diagnostic repeats must be an integer from 1 to 10."
+              exit 1
+            fi
             mapfile -t specs < tests/ci-regressions.txt
-            npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --repeat-each="$SUTRA_REGRESSION_REPEAT_EACH" --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             exit 0
           fi
           if [ "${{ matrix.shard }}" = "2" ]; then
@@ -240,11 +250,16 @@ jobs:
           SUTRA_SERVE_ROOT: .deploy
         run: |
           if [ "$SUTRA_REGRESSION_ONLY" = "1" ]; then
+            if ! [[ "$SUTRA_REGRESSION_REPEAT_EACH" =~ ^([1-9]|10)$ ]]; then
+              echo "Diagnostic repeats must be an integer from 1 to 10."
+              exit 1
+            fi
             mapfile -t specs < tests/ci-regressions.txt
             if [ "${{ matrix.id }}" = "responsive" ]; then
+              # Keep the responsive smoke check single-pass during desktop flake diagnostics.
               npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --workers=1 ${{ matrix.project_args }}
             else
-              npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
+              npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --repeat-each="$SUTRA_REGRESSION_REPEAT_EACH" --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
             fi
             exit 0
           fi

@@ -25,6 +25,10 @@ requests, scheduled runs, and deployment checks retain their full coverage.
 An optional `regression_filter` title regex narrows a diagnostic iteration;
 leaving it empty runs every test in the listed specs. The filter is passed as
 a quoted CLI argument through an environment variable, never evaluated as code.
+For intermittent desktop failures, `regression_repeat_each` repeats every selected
+desktop test 1–10 times (default 1); responsive smoke coverage stays single-pass.
+The repeat setting is validated and applies only to diagnostic runs. Full release
+runs keep their normal test count and assertions.
 
 | Command | What it guards |
 | --- | --- |
