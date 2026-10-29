@@ -1439,6 +1439,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
     const A = await openAuthedDevice(browser, server, 'A');
     const B = await openAuthedDevice(browser, server, 'B');
     const marker = 'revoked-device-private-marker-716';
+    const reconnectHandles = new Set();
     try {
       await seedBaseline(A.page);
       await seedBaseline(B.page);
@@ -1485,35 +1486,44 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(secondTab);
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toHaveCount(0);
       expect(await B.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
-      const captureSyncAttempt = async page => {
-        try {
-          return await page.evaluate(async () => {
-            const safeToken = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value)
-              ? value
-              : null;
-            const readState = () => {
-              try { return safeToken(window.SutraSync && window.SutraSync.status().state); }
-              catch (error) { return null; }
-            };
-            try {
-              const outcome = await window.SutraSync.syncNow();
-              return {
-                kind: outcome && outcome.error ? 'error' : outcome && outcome.skipped ? 'skipped' : 'completed',
-                state: readState(),
-                errorCode: safeToken(outcome && outcome.error && outcome.error.code),
-                errorName: safeToken(outcome && outcome.error && outcome.error.name),
-                skipped: outcome && outcome.skipped === true,
-                reason: safeToken(outcome && outcome.reason)
-              };
-            } catch (error) {
-              return {
-                kind: 'threw',
-                state: readState(),
-                errorCode: safeToken(error && error.code),
-                errorName: safeToken(error && error.name)
-              };
-            }
+      const beginSyncAttempt = page => page.evaluateHandle(() => {
+        const safeToken = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value)
+          ? value
+          : null;
+        const readState = () => {
+          try { return safeToken(window.SutraSync && window.SutraSync.status().state); }
+          catch (error) { return null; }
+        };
+        const summarize = (outcome, thrown) => {
+          const error = thrown || outcome && outcome.error;
+          return {
+            kind: thrown ? 'threw' : error ? 'error' : outcome && outcome.skipped ? 'skipped' : 'completed',
+            state: readState(),
+            errorCode: safeToken(error && error.code),
+            errorName: safeToken(error && error.name),
+            skipped: outcome && outcome.skipped === true,
+            reason: safeToken(outcome && outcome.reason)
+          };
+        };
+        const record = { settled: false, outcome: null, promise: null };
+        // Return the plain record immediately. The promise continues the real
+        // Sync cycle, but does not hold Playwright's WebKit evaluation open
+        // while the page needs to mount and paint the revoke screen.
+        record.promise = Promise.resolve()
+          .then(() => window.SutraSync.syncNow())
+          .then(outcome => summarize(outcome, null), error => summarize(null, error))
+          .then(outcome => {
+            record.outcome = outcome;
+            record.settled = true;
+            return outcome;
           });
+        return record;
+      });
+      const captureSyncAttempt = async page => {
+        let handle = null;
+        try {
+          handle = await beginSyncAttempt(page);
+          return await handle.evaluate(record => record.promise);
         } catch (error) {
           return {
             kind: 'evaluate-error',
@@ -1521,8 +1531,15 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
               ? error.name
               : 'unavailable'
           };
+        } finally {
+          if (handle) await Promise.allSettled([handle.dispose()]);
         }
       };
+      const readSyncAttempt = handle => handle.evaluate(record => ({
+        settled: record.settled,
+        outcome: record.outcome
+      }));
+      const awaitSyncAttempt = handle => handle.evaluate(record => record.promise);
       const lastAttemptByTab = { primary: null, secondTab: null };
       await expect.poll(async () => {
         // The primary tab may currently own the single-flight lease. Drive
@@ -1538,23 +1555,70 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }, { timeout: 15000 }).toBe(true);
       B.net.down = false;
       // Restoring the mock route flag does not emit a browser `online` event.
-      // Drive both eligible tabs without making the screen assertion await
-      // the full syncNow promise: verified revocation resolves that promise
-      // only after database cleanup and server acknowledgement have finished.
+      // Drive both eligible tabs without keeping a Playwright evaluation open
+      // for the full syncNow promise: WebKit may delay DOM queries/painting
+      // while that evaluation is awaiting database cleanup and server ack.
       const pendingReconnectAttempts = new Map();
-      const driveReconnect = (name, page) => {
-        if (pendingReconnectAttempts.has(name)) return;
+      const completedReconnectAttempts = new Map();
+      const shouldRearmReconnect = outcome => outcome && outcome.skipped === true
+        && ['busy', 'lock-held'].includes(outcome.reason);
+      const driveReconnect = async (name, page) => {
+        if (pendingReconnectAttempts.has(name) || completedReconnectAttempts.has(name)) return;
         lastAttemptByTab[name] = { phase: 'reconnect', kind: 'pending' };
-        const attempt = captureSyncAttempt(page).then(outcome => {
-          lastAttemptByTab[name] = { phase: 'reconnect', ...outcome };
-        }).finally(() => pendingReconnectAttempts.delete(name));
-        pendingReconnectAttempts.set(name, attempt);
+        try {
+          const handle = await beginSyncAttempt(page);
+          reconnectHandles.add(handle);
+          pendingReconnectAttempts.set(name, handle);
+        } catch (error) {
+          lastAttemptByTab[name] = {
+            phase: 'reconnect',
+            kind: 'evaluate-error',
+            errorName: typeof error?.name === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(error.name)
+              ? error.name
+              : 'unavailable'
+          };
+        }
+      };
+      const observeReconnect = async name => {
+        const handle = pendingReconnectAttempts.get(name);
+        if (!handle) return;
+        let snapshot;
+        try {
+          snapshot = await readSyncAttempt(handle);
+        } catch (error) {
+          lastAttemptByTab[name] = {
+            phase: 'reconnect',
+            kind: 'evaluate-error',
+            errorName: typeof error?.name === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(error.name)
+              ? error.name
+              : 'unavailable'
+          };
+          return;
+        }
+        if (!snapshot.settled) return;
+        const outcome = snapshot.outcome || { kind: 'unavailable', state: null };
+        lastAttemptByTab[name] = { phase: 'reconnect', ...outcome };
+        pendingReconnectAttempts.delete(name);
+        if (shouldRearmReconnect(outcome)) {
+          // A busy or single-flight skip can clear on the next attempt. A
+          // stale tab requires reload, so its outcome stays terminal here.
+          reconnectHandles.delete(handle);
+          await Promise.allSettled([handle.dispose()]);
+          return;
+        }
+        completedReconnectAttempts.set(name, handle);
       };
       try {
         await expect.poll(async () => {
           if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
-          driveReconnect('primary', B.page);
-          driveReconnect('secondTab', secondTab);
+          await Promise.all([
+            driveReconnect('primary', B.page),
+            driveReconnect('secondTab', secondTab)
+          ]);
+          await Promise.all([
+            observeReconnect('primary'),
+            observeReconnect('secondTab')
+          ]);
           return (await secondTab.locator('#sutraRevokedDeviceScreen').count()) > 0;
         }, { timeout: 20000 }).toBe(true);
       } catch (error) {
@@ -1646,9 +1710,19 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
       await expect(B.page.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
-      // Screen locking and completed deletion are separate guarantees. Await
-      // the tracked cycles before auditing acknowledgement and every store.
-      await Promise.all(pendingReconnectAttempts.values());
+      // Screen locking and completed deletion are separate guarantees. Only
+      // after both screens are visible, await all retained cycles to prove
+      // their local wipes and server acknowledgements finished.
+      const reconnectAttempts = new Map([...completedReconnectAttempts, ...pendingReconnectAttempts]);
+      const reconnectOutcomes = await Promise.all([...reconnectAttempts].map(async ([name, handle]) => [
+        name,
+        await awaitSyncAttempt(handle)
+      ]));
+      for (const [name, outcome] of reconnectOutcomes) {
+        lastAttemptByTab[name] = { phase: 'reconnect', ...outcome };
+      }
+      await Promise.allSettled([...reconnectHandles].map(handle => handle.dispose()));
+      reconnectHandles.clear();
       // An already scheduled offline retry can own the cycle instead of an
       // explicit attempt. Its successful acknowledgement is required too.
       await expect.poll(() => Boolean(server.state.devices[bDeviceId].wipeAcknowledgedAt), { timeout: 20000 }).toBe(true);
@@ -1676,6 +1750,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).not.toContainText(marker);
       await secondTab.close();
     } finally {
+      await Promise.allSettled([...reconnectHandles].map(handle => handle.dispose()));
       await Promise.allSettled([A.context.close(), B.context.close()]);
     }
   });
