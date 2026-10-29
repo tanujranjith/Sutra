@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      regression_only:
+        description: "Diagnostic run of the current CI regressions; does not replace the full release gate"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -25,6 +30,7 @@ permissions:
 
 env:
   NODE_VERSION: "24"
+  SUTRA_REGRESSION_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.regression_only && '1' || '0' }}
 
 jobs:
   build-and-check:
@@ -84,6 +90,11 @@ jobs:
         # context. Two workers keep the three shards parallel without
         # overloading the shared GitHub runner during cold startup.
         run: |
+          if [ "$SUTRA_REGRESSION_ONLY" = "1" ]; then
+            mapfile -t specs < tests/ci-regressions.txt
+            npx playwright test "${specs[@]}" --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            exit 0
+          fi
           if [ "${{ matrix.shard }}" = "2" ]; then
             # Surface paper-boundary regressions before the longer editor shard.
             npx playwright test tests/e2e/notes-page-layout.spec.mjs --workers=1 --project=chromium
@@ -222,6 +233,15 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
           SUTRA_SERVE_ROOT: .deploy
         run: |
+          if [ "$SUTRA_REGRESSION_ONLY" = "1" ]; then
+            mapfile -t specs < tests/ci-regressions.txt
+            if [ "${{ matrix.id }}" = "responsive" ]; then
+              npx playwright test "${specs[@]}" --workers=1 ${{ matrix.project_args }}
+            else
+              npx playwright test "${specs[@]}" --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
+            fi
+            exit 0
+          fi
           if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "2" ]; then
             # Report Drive prompt/lock regressions before the longer WebKit shard.
             npx playwright test tests/e2e/google-drive-sync.spec.mjs --grep 'locking Drive sync|Drive restore rejects wrong password' --workers=1 --project=webkit
