@@ -11,6 +11,7 @@
 
   var STORAGE_KEY = 'sutra:workspaceLock:v1';
   var SIGNAL_KEY = 'sutra:workspaceLockSignal:v1';
+  var CONFIG_LOCK_NAME = 'sutra-workspace-lock-config-v1';
   // A local privacy gate must remain responsive on slower WebKit devices.
   // This is deliberately not presented as encryption-at-rest protection; the
   // per-device count is persisted so it can be raised for future verifiers.
@@ -202,30 +203,48 @@
     return Number.isInteger(minutes) && minutes >= MIN_CUSTOM_TIMEOUT && minutes <= MAX_CUSTOM_TIMEOUT || minutes === 0;
   }
 
-  function writeConfig(next, expectedCurrent) {
+  function writeConfig(next, expectedCurrent, expectedRevision) {
     var normalized = normalizeConfig(next);
     var storage = safeStorage();
     if (!normalized || !storage) return { ok: false, error: 'Browser storage is unavailable.' };
-    if (expectedCurrent) {
-      var currentStored;
-      try { currentStored = readConfig(); }
-      catch (error) { report(error, 'config-readback'); }
-      if (!configMatches(expectedCurrent, currentStored)) {
-        if (currentStored) adoptChangedStoredConfig(currentStored);
-        return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
-      }
+    var currentStored;
+    try { currentStored = readConfig(); }
+    catch (error) { report(error, 'config-readback'); return { ok: false, error: 'Lock settings could not be read. Try again.' }; }
+    var sameStored = expectedCurrent ? configMatches(expectedCurrent, currentStored) : !currentStored;
+    var sameLocal = expectedCurrent ? configMatches(expectedCurrent, config) : !config;
+    if (!sameStored || !sameLocal || expectedRevision !== lockRevision) {
+      if (currentStored) adoptChangedStoredConfig(currentStored);
+      return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
     }
     var result = storage.set(STORAGE_KEY, normalized, { importance: 'important', label: 'workspace lock configuration' });
     if (!result || result.ok !== true) return { ok: false, error: 'Sutra could not verify this device can save the lock configuration.' };
     var readback = readConfig();
     if (!configMatches(normalized, readback)) {
-      storage.remove(STORAGE_KEY, { importance: 'important', label: 'workspace lock configuration' });
-      return { ok: false, error: 'Sutra could not verify the saved lock configuration. The lock was not enabled.' };
+      // Another tab may have replaced our write. Never remove the readback:
+      // doing so could erase its newer verifier and unlock future reloads.
+      if (readback) adoptChangedStoredConfig(readback);
+      if (config && config.enabled) lock('configuration-unverified', false);
+      return { ok: false, error: 'Sutra could not verify the saved lock configuration. Check the lock settings and try again.' };
     }
     config = readback;
     lockRevision += 1;
     resetPinFailures();
     return { ok: true, config: readback };
+  }
+
+  async function commitConfig(next, expectedCurrent, expectedRevision) {
+    var locks = global.navigator && global.navigator.locks;
+    if (!locks || typeof locks.request !== 'function') {
+      return { ok: false, error: 'This browser cannot safely change workspace lock settings across tabs. Update it to a version with Web Locks support; your existing PIN still works here.' };
+    }
+    try {
+      return await locks.request(CONFIG_LOCK_NAME, { mode: 'exclusive' }, function () {
+        return writeConfig(next, expectedCurrent, expectedRevision);
+      });
+    } catch (error) {
+      report(error, 'config-lock');
+      return { ok: false, error: 'Sutra could not coordinate lock settings across tabs. Try again.' };
+    }
   }
 
   function broadcast(type) {
@@ -320,9 +339,12 @@
   }
 
   async function enable(pin, timeout) {
+    if (config && config.enabled) return { ok: false, error: 'The workspace lock is already enabled. Enter the current PIN to change it.' };
+    var snapshot = config;
+    var revision = lockRevision;
     var built = await makeConfig(pin, timeout, true);
     if (!built.ok) return built;
-    var saved = writeConfig(built.config);
+    var saved = await commitConfig(built.config, snapshot, revision);
     if (!saved.ok) return saved;
     broadcast('config');
     lock('enabled', false);
@@ -338,7 +360,7 @@
     var built = await makeConfig(newPin, snapshot.inactivityTimeout, true);
     if (!built.ok) return built;
     if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
-    var saved = writeConfig(built.config, snapshot);
+    var saved = await commitConfig(built.config, snapshot, verified.revision);
     if (!saved.ok) return saved;
     broadcast('config');
     lock('pin-changed', false);
@@ -354,7 +376,7 @@
     if (!verified.ok) return { ok: false, error: verified.error };
     if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
     var next = Object.assign({}, snapshot, { inactivityTimeout: nextMinutes });
-    var saved = writeConfig(next, snapshot);
+    var saved = await commitConfig(next, snapshot, verified.revision);
     if (!saved.ok) return saved;
     broadcast('config');
     lock('timeout-changed', false);
@@ -367,7 +389,7 @@
     var verified = await verifyPinAttempt(currentPin, snapshot);
     if (!verified.ok) return { ok: false, error: verified.error };
     if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
-    var saved = writeConfig(Object.assign({}, snapshot, { enabled: false }), snapshot);
+    var saved = await commitConfig(Object.assign({}, snapshot, { enabled: false }), snapshot, verified.revision);
     if (!saved.ok) return saved;
     locked = false;
     lockRevision += 1;

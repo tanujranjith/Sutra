@@ -22,22 +22,30 @@ function makeConfig({ enabled = true, saltByte = 7, verifierByte = 1, inactivity
 
 function createHarness(options = {}) {
   let now = 1000;
-  let storedConfig = options.config || makeConfig();
+  const shared = options.shared || { storedConfig: options.config || makeConfig() };
   let kdfCalls = 0;
   let nextDeriveGate = null;
+  let afterNextConfigWrite = null;
   let timerId = 0;
   const listeners = new Map();
   const storage = {
     get(key) {
-      if (key !== 'sutra:workspaceLock:v1' || !storedConfig) return null;
-      return JSON.parse(JSON.stringify(storedConfig));
+      if (key !== 'sutra:workspaceLock:v1' || !shared.storedConfig) return null;
+      return JSON.parse(JSON.stringify(shared.storedConfig));
     },
     set(key, value) {
-      if (key === 'sutra:workspaceLock:v1') storedConfig = JSON.parse(JSON.stringify(value));
+      if (key === 'sutra:workspaceLock:v1') {
+        shared.storedConfig = JSON.parse(JSON.stringify(value));
+        if (afterNextConfigWrite) {
+          const callback = afterNextConfigWrite;
+          afterNextConfigWrite = null;
+          callback();
+        }
+      }
       return { ok: true };
     },
     remove(key) {
-      if (key === 'sutra:workspaceLock:v1') storedConfig = null;
+      if (key === 'sutra:workspaceLock:v1') shared.storedConfig = null;
       return { ok: true };
     }
   };
@@ -58,6 +66,7 @@ function createHarness(options = {}) {
   };
   const window = {
     SutraSafeStorage: storage,
+    navigator: { locks: Object.hasOwn(options, 'locks') ? options.locks : { request(_name, _options, work) { return Promise.resolve().then(work); } } },
     crypto: {
       subtle,
       getRandomValues(bytes) { bytes.fill(9); return bytes; }
@@ -100,7 +109,9 @@ function createHarness(options = {}) {
   return {
     api: window.SutraWorkspaceLock,
     get kdfCalls() { return kdfCalls; },
-    setStoredConfig(value) { storedConfig = JSON.parse(JSON.stringify(value)); },
+    getStoredConfig() { return shared.storedConfig === null ? null : JSON.parse(JSON.stringify(shared.storedConfig)); },
+    setStoredConfig(value) { shared.storedConfig = JSON.parse(JSON.stringify(value)); },
+    afterNextConfigWrite(callback) { afterNextConfigWrite = callback; },
     advance(milliseconds) { now += milliseconds; },
     holdNextDerive() {
       let release;
@@ -236,6 +247,121 @@ test('a stale current-PIN management check cannot overwrite changed lock setting
   assert.match(result.error, /settings changed/i);
   assert.equal(harness.api.getStatus().locked, true);
   assert.equal(harness.api.getStatus().inactivityTimeout, 15, 'the external configuration must remain authoritative');
+});
+
+test('a newer lock verifier between write and readback is retained and enforced after reload', async () => {
+  for (const operation of ['changeTimeout', 'disable']) {
+    const harness = createHarness();
+    assert.equal((await harness.api.unlock('2468')).ok, true);
+    const newerConfig = makeConfig({ saltByte: 8, verifierByte: 3, inactivityTimeout: 15 });
+    harness.afterNextConfigWrite(() => harness.setStoredConfig(newerConfig));
+
+    const result = operation === 'changeTimeout'
+      ? await harness.api.changeTimeout('2468', 10)
+      : await harness.api.disable('2468');
+    assert.equal(result.ok, false, `${operation} must not report an unverified write as successful`);
+    assert.deepEqual(harness.getStoredConfig(), newerConfig, 'another tab\'s verifier must not be removed');
+    assert.equal(harness.api.getStatus().locked, true);
+    assert.equal(harness.api.getStatus().inactivityTimeout, 15);
+
+    const reloaded = createHarness({ config: harness.getStoredConfig() });
+    assert.equal(reloaded.api.getStatus().locked, true, 'the newer verifier still locks a fresh document');
+    assert.equal((await reloaded.api.unlock('2468')).ok, false);
+    assert.equal((await reloaded.api.unlock('8642')).ok, true);
+  }
+});
+
+test('concurrent tab mutations recheck their authorization under the shared lock', async () => {
+  let release;
+  let queue = new Promise(resolve => { release = resolve; });
+  const requests = [];
+  const locks = {
+    request(name, options, work) {
+      requests.push({ name, options });
+      const result = queue.then(work);
+      queue = result.catch(() => {});
+      return result;
+    }
+  };
+  const shared = { storedConfig: makeConfig() };
+  const first = createHarness({ shared, locks });
+  const second = createHarness({ shared, locks });
+  const changed = first.api.changePin('2468', '8642');
+  for (let i = 0; i < 30 && requests.length < 1; i += 1) await Promise.resolve();
+  assert.equal(requests.length, 1);
+  const disabled = second.api.disable('2468');
+  for (let i = 0; i < 30 && requests.length < 2; i += 1) await Promise.resolve();
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].name, requests[1].name);
+  assert.equal(requests[0].options.mode, 'exclusive');
+  release();
+  assert.equal((await changed).ok, true);
+  assert.equal((await disabled).ok, false, 'old authorization cannot disable the new verifier');
+  assert.equal(shared.storedConfig.enabled, true);
+  const reloaded = createHarness({ config: shared.storedConfig });
+  assert.equal(reloaded.api.getStatus().locked, true);
+  assert.equal((await reloaded.api.unlock('2468')).ok, false);
+  assert.equal((await reloaded.api.unlock('8642')).ok, true);
+});
+
+test('without Web Locks, settings mutations fail without weakening the existing gate', async () => {
+  const original = makeConfig();
+  const harness = createHarness({ config: original, locks: null });
+  assert.equal((await harness.api.unlock('2468')).ok, true, 'normal unlock remains available');
+  for (const result of [
+    await harness.api.changeTimeout('2468', 10),
+    await harness.api.changePin('2468', '8642'),
+    await harness.api.disable('2468')
+  ]) {
+    assert.equal(result.ok, false);
+    assert.match(result.error, /Web Locks/);
+  }
+  assert.deepEqual(harness.getStoredConfig(), original);
+  const reloaded = createHarness({ config: harness.getStoredConfig(), locks: null });
+  assert.equal(reloaded.api.getStatus().locked, true);
+  assert.equal((await reloaded.api.unlock('2468')).ok, true);
+  const disabled = createHarness({ config: makeConfig({ enabled: false }), locks: null });
+  const enableResult = await disabled.api.enable('1357', 5);
+  assert.equal(enableResult.ok, false);
+  assert.match(enableResult.error, /Web Locks/);
+  assert.equal(disabled.getStoredConfig().enabled, false);
+});
+
+test('a queued enable from a stale disabled tab cannot replace a newer PIN change', async () => {
+  let release;
+  let queue = new Promise(resolve => { release = resolve; });
+  let requests = 0;
+  const locks = { request(_name, _options, work) {
+    requests += 1;
+    const result = queue.then(work);
+    queue = result.catch(() => {});
+    return result;
+  } };
+  const shared = { storedConfig: makeConfig({ enabled: false }) };
+  const staleTab = createHarness({ shared, locks });
+  // Another tab has enabled the lock, but the stale tab has not processed its event.
+  shared.storedConfig = makeConfig();
+  const activeTab = createHarness({ shared, locks });
+  const changed = activeTab.api.changePin('2468', '8642');
+  for (let i = 0; i < 30 && requests < 1; i += 1) await Promise.resolve();
+  assert.equal(requests, 1);
+  const staleEnable = staleTab.api.enable('1357', 5);
+  for (let i = 0; i < 30 && requests < 2; i += 1) await Promise.resolve();
+  assert.equal(requests, 2);
+  release();
+  assert.equal((await changed).ok, true);
+  assert.equal((await staleEnable).ok, false);
+  const reloaded = createHarness({ config: shared.storedConfig });
+  assert.equal(reloaded.api.getStatus().locked, true);
+  assert.equal((await reloaded.api.unlock('1357')).ok, false);
+  assert.equal((await reloaded.api.unlock('8642')).ok, true);
+});
+
+test('enable cannot replace an enabled verifier without the current PIN', async () => {
+  const harness = createHarness();
+  const original = harness.getStoredConfig();
+  assert.equal((await harness.api.enable('8642', 5)).ok, false);
+  assert.deepEqual(harness.getStoredConfig(), original);
 });
 
 test('a lock transition during a KDF invalidates the pending unlock', async () => {

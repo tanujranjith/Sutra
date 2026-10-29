@@ -32,6 +32,11 @@ Several store names are **legacy-named compatibility identifiers** — retained
 unchanged across the rename to Sutra so existing installs keep working. The name
 is only an identifier; the data is always local.
 
+The device-local workspace PIN is a privacy screen, not encryption. Lock setup
+and changes to its PIN or timeout use a cross-tab Web Lock so a stale tab cannot
+overwrite a newer verifier. If Web Locks are unavailable, these settings changes
+are paused with an explanation; an existing PIN can still unlock the workspace.
+
 ### Primary store — the workspace (IndexedDB)
 
 Before defaults and feature normalizers run, stored workspaces pass through the

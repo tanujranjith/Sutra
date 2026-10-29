@@ -356,6 +356,13 @@ test('workspace privacy gate verifies PINs, refresh-locks, crosses tabs, and ref
   await openApp(page);
 
   const enabled = await page.evaluate(() => window.SutraWorkspaceLock.enable('2468', 5));
+  const supportsConfigLock = await page.evaluate(() => typeof navigator.locks?.request === 'function');
+  if (!supportsConfigLock) {
+    expect(enabled.ok).toBe(false);
+    expect(enabled.error).toContain('Web Locks');
+    expect(await page.evaluate(() => localStorage.getItem('sutra:workspaceLock:v1'))).toBeNull();
+    return;
+  }
   expect(enabled.ok).toBe(true);
   await expect(page.locator('#sutraWorkspaceLockScreen')).toBeVisible();
   await expect(page.locator('.app-container')).toHaveAttribute('inert', '');
@@ -427,6 +434,14 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   await expect(page.locator('[data-lock-current]')).toBeHidden();
   await expect(page.locator('[data-lock-new]')).toBeVisible();
   await expect(page.locator('[data-lock-confirm]')).toBeVisible();
+  if (!await page.evaluate(() => typeof navigator.locks?.request === 'function')) {
+    await page.locator('[data-lock-new]').fill('2468');
+    await page.locator('[data-lock-confirm]').fill('2468');
+    await page.locator('[data-lock-submit]').click();
+    await expect(page.locator('[data-lock-dialog-error]')).toContainText('Web Locks');
+    expect(await page.evaluate(() => localStorage.getItem('sutra:workspaceLock:v1'))).toBeNull();
+    return;
+  }
   await page.locator('[data-lock-cancel]').click();
 
   await page.evaluate(() => window.SutraWorkspaceLock.enable('2468', 5));
