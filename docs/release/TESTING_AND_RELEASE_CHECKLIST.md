@@ -22,6 +22,9 @@ in `tests/ci-regressions.txt` across the existing browser/device lanes. Static,
 unit, build, and deploy-artifact gates still run. This diagnostic subset does
 not replace a complete run with `regression_only: false`; normal pushes, pull
 requests, scheduled runs, and deployment checks retain their full coverage.
+An optional `regression_filter` title regex narrows a diagnostic iteration;
+leaving it empty runs every test in the listed specs. The filter is passed as
+a quoted CLI argument through an environment variable, never evaluated as code.
 
 | Command | What it guards |
 | --- | --- |
