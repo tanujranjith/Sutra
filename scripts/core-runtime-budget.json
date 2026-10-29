@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-29T04:10:06.730Z",
-  "reviewedReason": "Confirm-local-Assistant-turns-before-visible-completion",
-  "maxBytes": 5008464,
-  "maxLines": 86992
+  "blessedAt": "2026-10-29T10:35:29.706Z",
+  "reviewedReason": "Preserve-user-selected-focus-during-cloud-password-entry-and-cancel",
+  "maxBytes": 5008623,
+  "maxLines": 86995
 }

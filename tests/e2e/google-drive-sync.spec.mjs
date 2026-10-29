@@ -290,6 +290,17 @@ async function fillCloudPassword(page, pass = PASS, confirm = true) {
     const submit = page.locator('#sutraCloudSyncPasswordSubmitBtn');
 
     await expect(modal).toHaveClass(/active/, { timeout: 20_000 });
+    // The app focuses this field on a short timer, while the dialog backdrop
+    // and content still have finite entrance animations. Wait for both
+    // readiness signals before filling so WebKit's delayed focus/autofill
+    // handling cannot race the second field's fill.
+    await expect.poll(() => page.evaluate(() => {
+      const modalEl = document.getElementById('sutraCloudSyncPasswordModal');
+      const passEl = document.getElementById('sutraCloudSyncPassphraseInput');
+      if (!modalEl || !passEl || !modalEl.classList.contains('active')) return false;
+      return document.activeElement === passEl
+        && modalEl.getAnimations({ subtree: true }).every(animation => animation.playState === 'finished');
+    }), { timeout: 5_000, message: 'cloud password dialog should finish opening and focus its password field' }).toBe(true);
     if (!confirm) await expect(confirmField).toBeHidden();
     await passInput.fill(pass);
     if (confirm) await confirmInput.fill(pass);

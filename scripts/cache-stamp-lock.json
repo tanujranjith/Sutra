@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261029-ci-revoke-lock1",
-    "hash": "bc9b588a78ebcec3"
+    "stamp": "20261029-ci-password-focus1",
+    "hash": "bb982826066e47a6"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

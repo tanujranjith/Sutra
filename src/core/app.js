@@ -54177,7 +54177,10 @@ function getActiveEditor() {
                 modal.classList.add('active');
                 try { document.body.classList.add('modal-open'); } catch (error) {}
                 validate();
-                setTimeout(() => { try { passInput.focus(); } catch (error) {} }, 30);
+                setTimeout(() => {
+                    if (resolved || !modal.classList.contains('active') || modal.contains(document.activeElement)) return;
+                    try { passInput.focus(); } catch (error) {}
+                }, 30);
             });
         }
 
