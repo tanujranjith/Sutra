@@ -1440,36 +1440,6 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
     const B = await openAuthedDevice(browser, server, 'B');
     const marker = 'revoked-device-private-marker-716';
     const reconnectHandles = new Set();
-    const mountTimingHandles = new Map();
-    const readMountTiming = async ([name, handle]) => {
-      if (!handle) return { tab: name, snapshot: 'instrumentation-unavailable' };
-      let timer = null;
-      try {
-        return await Promise.race([
-          handle.evaluate(record => record.snapshot()).then(
-            value => ({ tab: name, ...value }),
-            error => ({ tab: name, snapshot: 'unavailable', errorName: /^[A-Za-z0-9_.:-]{1,64}$/.test(error?.name || '') ? error.name : 'unavailable' })
-          ),
-          new Promise(resolve => { timer = setTimeout(() => resolve({ tab: name, snapshot: 'diagnostic-timeout' }), 10000); })
-        ]);
-      } finally {
-        if (timer !== null) clearTimeout(timer);
-      }
-    };
-    const restoreMountTiming = async handle => {
-      if (!handle) return;
-      let timer = null;
-      try {
-        await Promise.race([
-          handle.evaluate(record => record.restore()),
-          new Promise(resolve => { timer = setTimeout(resolve, 1000); })
-        ]);
-      } catch (error) { /* context close discards any remaining wrapper */ }
-      finally {
-        if (timer !== null) clearTimeout(timer);
-        await Promise.allSettled([handle.dispose()]);
-      }
-    };
     try {
       await seedBaseline(A.page);
       await seedBaseline(B.page);
@@ -1607,222 +1577,6 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         ]);
         return states.includes('offline');
       }, { timeout: 15000 }).toBe(true);
-
-      // Install narrow, reversible timing wrappers before reconnecting. They
-      // collect only durations/counts for the revoke overlay's DOM operations;
-      // they never read workspace content or write page globals/storage.
-      const installRevocationMountTiming = page => page.evaluateHandle(() => {
-        const body = document.body;
-        const head = document.head;
-        const screenId = 'sutraRevokedDeviceScreen';
-        const titleId = 'sutraRevokedDeviceTitle';
-        const concealmentStyleId = 'sutraRevocationConcealmentStyle';
-        const phaseNames = [
-          'guardStorageWrite', 'revokeStartBroadcast', 'syncStatusDispatch',
-          'screenAppend', 'concealmentStyleAppend', 'bodyChildHidden', 'bodyChildDisplay',
-          'bodyChildInert', 'bodyChildAriaHidden', 'titleFocus'
-        ];
-        const metrics = Object.fromEntries(phaseNames.map(name => [name, {
-          count: 0, totalMs: 0, maxMs: 0, firstAtMs: null, lastAtMs: null
-        }]));
-        const installed = {};
-        const restorers = [];
-        const startedAt = performance.now();
-        const startedAtEpochMs = Date.now();
-        let restored = false;
-
-        const round = value => Math.round(value * 10) / 10;
-        const measure = (name, call) => {
-          const started = performance.now();
-          try { return call(); }
-          finally {
-            const ended = performance.now();
-            const item = metrics[name];
-            const elapsed = Math.max(0, ended - started);
-            item.count += 1;
-            item.totalMs = round(item.totalMs + elapsed);
-            item.maxMs = Math.max(item.maxMs, round(elapsed));
-            if (item.firstAtMs === null) item.firstAtMs = round(started - startedAt);
-            item.lastAtMs = round(ended - startedAt);
-          }
-        };
-        const isBodyContentChild = element => !!(
-          body && element && element !== body && element.parentNode === body
-          && element.id !== screenId && body.classList.contains('sutra-revocation-locked')
-        );
-        const bodyChildStyles = new Set(Array.from(body ? body.children : [])
-          .filter(element => element.id !== screenId)
-          .map(element => element.style));
-        const findDescriptor = (prototype, name) => {
-          for (let owner = prototype; owner; owner = Object.getPrototypeOf(owner)) {
-            const descriptor = Object.getOwnPropertyDescriptor(owner, name);
-            if (descriptor) return { owner, descriptor };
-          }
-          return null;
-        };
-        const patchMethod = (prototype, name, wrap) => {
-          const found = findDescriptor(prototype, name);
-          if (!found || !found.descriptor.configurable || typeof found.descriptor.value !== 'function') return false;
-          try {
-            Object.defineProperty(found.owner, name, {
-              ...found.descriptor,
-              value: wrap(found.descriptor.value)
-            });
-            restorers.push(() => Object.defineProperty(found.owner, name, found.descriptor));
-            return true;
-          } catch (error) { return false; }
-        };
-        const patchSetter = (prototype, name, shouldMeasure, phase) => {
-          const found = findDescriptor(prototype, name);
-          if (!found || !found.descriptor.configurable || typeof found.descriptor.set !== 'function') return false;
-          const originalSet = found.descriptor.set;
-          try {
-            Object.defineProperty(found.owner, name, {
-              ...found.descriptor,
-              set(value) {
-                if (shouldMeasure(this, value)) return measure(phase, () => originalSet.call(this, value));
-                return originalSet.call(this, value);
-              }
-            });
-            restorers.push(() => Object.defineProperty(found.owner, name, found.descriptor));
-            return true;
-          } catch (error) { return false; }
-        };
-        const patchInstanceAppend = (parent, id, phase) => {
-          if (!parent) return false;
-          const ownDescriptor = Object.getOwnPropertyDescriptor(parent, 'appendChild');
-          const originalAppend = parent.appendChild;
-          if (typeof originalAppend !== 'function') return false;
-          try {
-            Object.defineProperty(parent, 'appendChild', {
-              configurable: true,
-              enumerable: ownDescriptor ? !!ownDescriptor.enumerable : false,
-              writable: true,
-              value(node) {
-                if (node && node.id === id) return measure(phase, () => originalAppend.call(this, node));
-                return originalAppend.call(this, node);
-              }
-            });
-            restorers.push(() => {
-              if (ownDescriptor) Object.defineProperty(parent, 'appendChild', ownDescriptor);
-              else delete parent.appendChild;
-            });
-            return true;
-          } catch (error) { return false; }
-        };
-        const patchInstanceMethod = (target, name, wrap) => {
-          if (!target) return false;
-          const ownDescriptor = Object.getOwnPropertyDescriptor(target, name);
-          const original = target[name];
-          if (typeof original !== 'function') return false;
-          try {
-            Object.defineProperty(target, name, {
-              configurable: true,
-              enumerable: ownDescriptor ? !!ownDescriptor.enumerable : false,
-              writable: true,
-              value: wrap(original)
-            });
-            restorers.push(() => {
-              if (ownDescriptor) Object.defineProperty(target, name, ownDescriptor);
-              else delete target[name];
-            });
-            return true;
-          } catch (error) { return false; }
-        };
-
-        installed.guardStorageWrite = typeof Storage !== 'undefined'
-          && patchMethod(Storage.prototype, 'setItem', original => function (key, value) {
-            if (key === 'sutra:revocationWipeGuard:v1') {
-              return measure('guardStorageWrite', () => original.call(this, key, value));
-            }
-            return original.call(this, key, value);
-          });
-        installed.revokeStartBroadcast = typeof BroadcastChannel !== 'undefined'
-          && patchMethod(BroadcastChannel.prototype, 'postMessage', original => function (message) {
-            if (message && message.type === 'revoke-wipe-start') {
-              return measure('revokeStartBroadcast', () => original.call(this, message));
-            }
-            return original.call(this, message);
-          });
-        installed.syncStatusDispatch = patchInstanceMethod(window, 'dispatchEvent', original => function (event) {
-          if (event && event.type === 'sutra:sync-status') {
-            return measure('syncStatusDispatch', () => original.call(this, event));
-          }
-          return original.call(this, event);
-        });
-        installed.screenAppend = patchInstanceAppend(body, screenId, 'screenAppend');
-        installed.concealmentStyleAppend = patchInstanceAppend(head, concealmentStyleId, 'concealmentStyleAppend');
-        installed.hidden = patchSetter(HTMLElement.prototype, 'hidden',
-          (element, value) => value === true && isBodyContentChild(element), 'bodyChildHidden');
-        installed.display = typeof CSSStyleDeclaration !== 'undefined'
-          && patchMethod(CSSStyleDeclaration.prototype, 'setProperty', original => function (name, value, priority) {
-            if (name === 'display' && value === 'none' && priority === 'important'
-              && bodyChildStyles.has(this) && body && body.classList.contains('sutra-revocation-locked')) {
-              return measure('bodyChildDisplay', () => original.call(this, name, value, priority));
-            }
-            return original.call(this, name, value, priority);
-          });
-        installed.inert = patchSetter(HTMLElement.prototype, 'inert',
-          (element, value) => value === true && isBodyContentChild(element), 'bodyChildInert');
-        installed.ariaHidden = patchMethod(Element.prototype, 'setAttribute', original => function (name, value) {
-          if (typeof name === 'string' && name.toLowerCase() === 'aria-hidden'
-            && typeof value === 'string' && value.toLowerCase() === 'true'
-            && isBodyContentChild(this)) {
-            return measure('bodyChildAriaHidden', () => original.call(this, name, value));
-          }
-          return original.call(this, name, value);
-        });
-        installed.titleFocus = patchMethod(HTMLElement.prototype, 'focus', original => function () {
-          if (this && this.id === titleId) return measure('titleFocus', () => original.apply(this, arguments));
-          return original.apply(this, arguments);
-        });
-
-        const snapshot = () => {
-          const elapsedMs = round(performance.now() - startedAt);
-          const summary = {};
-          for (const name of phaseNames) {
-            const item = metrics[name];
-            summary[name] = {
-              count: item.count,
-              totalMs: item.totalMs,
-              maxMs: round(item.maxMs),
-              firstAtMs: item.firstAtMs,
-              lastAtMs: item.lastAtMs
-            };
-          }
-          let syncState = null;
-          try {
-            const state = window.SutraSync && window.SutraSync.status().state;
-            syncState = typeof state === 'string' && /^[a-z-]{1,32}$/.test(state) ? state : null;
-          } catch (error) { /* diagnostics remain bounded and content-free */ }
-          return {
-            startedAtEpochMs,
-            elapsedMs,
-            bodyLocked: !!(body && body.classList.contains('sutra-revocation-locked')),
-            screenPresent: !!document.getElementById(screenId),
-            titleFocused: document.activeElement && document.activeElement.id === titleId,
-            syncState,
-            installed: { ...installed },
-            phases: summary
-          };
-        };
-        const restore = () => {
-          if (restored) return;
-          restored = true;
-          for (let index = restorers.length - 1; index >= 0; index -= 1) {
-            try { restorers[index](); } catch (error) { /* page teardown also discards wrappers */ }
-          }
-        };
-        return { snapshot, restore };
-      });
-      const installTimingForTab = async (name, page) => {
-        try { mountTimingHandles.set(name, await installRevocationMountTiming(page)); }
-        catch (error) { mountTimingHandles.set(name, null); }
-      };
-      await Promise.all([
-        installTimingForTab('primary', B.page),
-        installTimingForTab('secondTab', secondTab)
-      ]);
       B.net.down = false;
       // Restoring the mock route flag does not emit a browser `online` event.
       // Drive both eligible tabs without keeping a Playwright evaluation open
@@ -1947,10 +1701,8 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
             if (timer !== null) clearTimeout(timer);
           }
         };
-        const timingSnapshotPromise = Promise.all([...mountTimingHandles].map(readMountTiming));
         try {
-          const [mountTimingSnapshots, primaryTab, secondTabSnapshot] = await Promise.all([
-            timingSnapshotPromise,
+          const [primaryTab, secondTabSnapshot] = await Promise.all([
             readTabSnapshot(B.page),
             readTabSnapshot(secondTab)
           ]);
@@ -1964,7 +1716,6 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           console.error('[revoke-wipe diagnostics]', JSON.stringify({
             expectedDeviceId: bDeviceId,
             lastSyncAttemptByTab: lastAttemptByTab,
-            mountTiming: mountTimingSnapshots,
             tabs: { primary: primaryTab, secondTab: secondTabSnapshot },
             networkDown: B.net.down === true,
             server: {
@@ -2044,11 +1795,6 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await expect.poll(() => Boolean(server.state.devices[bDeviceId].wipeAcknowledgedAt), { timeout: 20000 }).toBe(true);
       await expect(B.page.locator('#sutraRevokedDeviceMessage')).toContainText('removed');
 
-      const successfulMountTiming = await Promise.all([...mountTimingHandles].map(readMountTiming));
-      console.info('[revoke-wipe mount timing]', JSON.stringify(successfulMountTiming));
-      await Promise.allSettled([...mountTimingHandles.values()].filter(Boolean).map(restoreMountTiming));
-      mountTimingHandles.clear();
-
       const audit = await B.page.evaluate(async () => ({
         localKeys: Object.keys(localStorage),
         sessionKeys: Object.keys(sessionStorage),
@@ -2072,8 +1818,6 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await secondTab.close();
     } finally {
       await Promise.allSettled([...reconnectHandles].map(handle => handle.dispose()));
-      await Promise.allSettled([...mountTimingHandles.values()].filter(Boolean).map(restoreMountTiming));
-      mountTimingHandles.clear();
       await Promise.allSettled([A.context.close(), B.context.close()]);
     }
   });
