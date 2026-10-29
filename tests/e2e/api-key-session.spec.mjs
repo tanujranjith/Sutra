@@ -57,6 +57,8 @@ test('a saved API key survives a same-tab reload and is never written to localSt
 });
 
 test('a fresh browser context (new tab/window) does NOT inherit the session key', async ({ browser }) => {
+  // This isolation check boots Sutra twice in separate browser contexts.
+  test.setTimeout(120_000);
   const ctxA = await browser.newContext();
   const pageA = await ctxA.newPage();
   await openApp(pageA);
