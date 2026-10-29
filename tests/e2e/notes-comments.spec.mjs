@@ -202,6 +202,13 @@ test('comments reflow the desktop document and remain usable in the phone drawer
   await page.keyboard.type('Review layout');
   await selectParagraph(page);
   await addComment(page, 'Read alongside the document');
+  await page.locator('#commentsPanel').evaluate(async panel => {
+    const openingAnimations = panel.getAnimations().filter(animation => {
+      const finite = Number.isFinite(animation.effect?.getComputedTiming?.().endTime);
+      return finite && (animation.playState === 'running' || animation.playState === 'pending');
+    });
+    await Promise.all(openingAnimations.map(animation => animation.finished.catch(() => {})));
+  });
   const geometry = await page.evaluate(() => {
     const doc = document.getElementById('editorV2Host').getBoundingClientRect();
     const panel = document.getElementById('commentsPanel').getBoundingClientRect();
