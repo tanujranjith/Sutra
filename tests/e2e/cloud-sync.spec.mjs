@@ -1475,6 +1475,8 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }, PASSPHRASE);
 
       B.net.down = true;
+      A.net.captureSyncRpcTrace = true;
+      B.net.captureSyncRpcTrace = true;
       const revoked = await A.page.evaluate(async (target) => window.SutraSync.revokeDevice(target), bDeviceId);
       expect(revoked).toBe(true);
       expect(server.state.devices[bDeviceId].wipeRequired).toBe(true);
@@ -1497,11 +1499,130 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }, { timeout: 15000 }).toBe(true);
       B.net.down = false;
       await secondTab.evaluate(() => window.SutraSync.resume());
-      await expect.poll(async () => {
-        if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
-        await secondTab.evaluate(() => window.SutraSync.syncNow()).catch(() => null);
-        return (await secondTab.locator('#sutraRevokedDeviceScreen').count()) > 0;
-      }, { timeout: 20000 }).toBe(true);
+      let lastReconnectAttempt = null;
+      try {
+        await expect.poll(async () => {
+          if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
+          try {
+            lastReconnectAttempt = await secondTab.evaluate(async () => {
+              const safeToken = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value)
+                ? value
+                : null;
+              const readState = () => {
+                try { return safeToken(window.SutraSync && window.SutraSync.status().state); }
+                catch (error) { return null; }
+              };
+              try {
+                const outcome = await window.SutraSync.syncNow();
+                return {
+                  state: readState(),
+                  errorCode: safeToken(outcome && outcome.error && outcome.error.code),
+                  skipped: outcome && outcome.skipped === true,
+                  skipReason: safeToken(outcome && outcome.reason)
+                };
+              } catch (error) {
+                return {
+                  state: readState(),
+                  errorCode: safeToken(error && error.code),
+                  errorName: safeToken(error && error.name)
+                };
+              }
+            });
+          } catch (error) {
+            lastReconnectAttempt = {
+              evaluateErrorName: typeof error?.name === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(error.name)
+                ? error.name
+                : 'unavailable'
+            };
+          }
+          return (await secondTab.locator('#sutraRevokedDeviceScreen').count()) > 0;
+        }, { timeout: 20000 }).toBe(true);
+      } catch (error) {
+        const readTabSnapshot = async page => {
+          let timer = null;
+          try {
+            return await Promise.race([
+              page.evaluate((expectedDeviceId) => {
+                const safeToken = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value)
+                  ? value
+                  : null;
+                const allowedGuardStates = new Set([
+                  'verified', 'cleaning', 'local-verified', 'local-unverified',
+                  'complete', 'complete-unverified', 'cleanup-error', 'guard-read-error'
+                ]);
+                let syncState = null;
+                let statusErrorCode = null;
+                try {
+                  const status = window.SutraSync && window.SutraSync.status();
+                  syncState = safeToken(status && status.state);
+                  statusErrorCode = safeToken(status && status.lastErrorCode);
+                } catch (error) { /* keep the snapshot bounded and redacted */ }
+                let guard = { readable: true, present: false, status: null, version: null };
+                try {
+                  const raw = localStorage.getItem('sutra:revocationWipeGuard:v1');
+                  guard.present = raw !== null;
+                  if (raw !== null) {
+                    const parsed = JSON.parse(raw);
+                    guard.version = Number(parsed && parsed.version) === 1 ? 1 : null;
+                    guard.status = allowedGuardStates.has(parsed && parsed.status) ? parsed.status : 'unknown';
+                  }
+                } catch (error) {
+                  guard = { readable: false, present: null, status: null, version: null };
+                }
+                return {
+                  expectedDeviceId,
+                  syncState,
+                  statusErrorCode,
+                  revokedScreenCount: document.querySelectorAll('#sutraRevokedDeviceScreen').length,
+                  guard
+                };
+              }, bDeviceId),
+              new Promise(resolve => {
+                timer = setTimeout(() => resolve({ expectedDeviceId: bDeviceId, snapshot: 'timed-out' }), 1500);
+              })
+            ]);
+          } catch (snapshotError) {
+            return {
+              expectedDeviceId: bDeviceId,
+              snapshot: 'unavailable',
+              errorName: typeof snapshotError?.name === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(snapshotError.name)
+                ? snapshotError.name
+                : 'unavailable'
+            };
+          } finally {
+            if (timer !== null) clearTimeout(timer);
+          }
+        };
+        try {
+          const [primaryTab, secondTabSnapshot] = await Promise.all([
+            readTabSnapshot(B.page),
+            readTabSnapshot(secondTab)
+          ]);
+          const rpcTrace = [
+            ...A.net.syncRpcTrace.map(entry => ({ context: 'A', ...entry })),
+            ...B.net.syncRpcTrace.map(entry => ({ context: 'B', ...entry }))
+          ].filter(entry => entry.deviceId === bDeviceId || entry.targetDeviceId === bDeviceId)
+            .sort((left, right) => left.at - right.at)
+            .slice(-80);
+          const revokedDevice = server.state.devices[bDeviceId] || {};
+          console.error('[revoke-wipe diagnostics]', JSON.stringify({
+            expectedDeviceId: bDeviceId,
+            lastReconnectAttempt,
+            tabs: { primary: primaryTab, secondTab: secondTabSnapshot },
+            networkDown: B.net.down === true,
+            server: {
+              revoked: Boolean(revokedDevice.revokedAt),
+              wipeRequired: revokedDevice.wipeRequired === true,
+              wipeAcknowledged: Boolean(revokedDevice.wipeAcknowledgedAt)
+            },
+            rpcTrace
+          }));
+        } catch (diagnosticError) {
+          console.error('[revoke-wipe diagnostics unavailable]', typeof diagnosticError?.name === 'string'
+            && /^[A-Za-z0-9_.:-]{1,64}$/.test(diagnosticError.name) ? diagnosticError.name : 'unavailable');
+        }
+        throw error;
+      }
 
       await expect(B.page.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
