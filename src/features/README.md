@@ -24,6 +24,10 @@ Failed downloads are evicted so the next explicit enable/configure attempt can
 retry without a reload. Stylesheet retries preserve the original cascade slot
 and attributes; successful scripts are not executed again. Successful enablement
 clears an earlier load error. No background network retry is introduced.
+An existing static stylesheet is reusable only with readable, nonempty rules;
+a failed request can still expose an empty sheet. Unverified sheets are loaded
+again with listeners attached first. An observed successful load is cached even
+when the stylesheet is intentionally empty.
 
 `workspace/create-split-surface.js` loads after the native Create editors. It
 registers a controller with the existing contextual-shell API and mounts a

@@ -86,11 +86,11 @@ test('an Assistant shell stylesheet that fails before lazy loading can be retrie
     return {
       state: window.SutraFeatureRegistry?.getState('assistant'),
       styleCount: styles.length,
-      loaded: Boolean(styles[0]?.sheet)
+      ruleCount: styles[0]?.sheet?.cssRules.length ?? 0
     };
   });
   expect(result.state).toMatchObject({ enabled: true, loaded: true, initialized: true });
   expect(result.styleCount).toBe(1);
-  expect(result.loaded).toBe(true);
   expect(requestCount).toBe(2);
+  expect(result.ruleCount).toBeGreaterThan(0);
 });

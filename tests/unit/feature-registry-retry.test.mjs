@@ -19,8 +19,8 @@ function harness({ existingStyle = false, existingStyleLoaded = false } = {}) {
       remove() { const index = nodes.indexOf(this); if (index >= 0) nodes.splice(index, 1); },
       replaceWith(next) { nodes.splice(nodes.indexOf(this), 1, next); requested.push(next); },
       cloneNode() { return Object.assign(node(tag), { href: this.href, rel: this.rel, nonce: this.nonce, media: this.media }); },
-      emit(type) {
-        if (type === 'load' && tag === 'link') this.sheet = {};
+      emit(type, rules = [{}]) {
+        if (type === 'load' && tag === 'link') this.sheet = { cssRules: rules };
         this['on' + type]?.();
         listeners.get(type)?.();
       }
@@ -34,7 +34,7 @@ function harness({ existingStyle = false, existingStyleLoaded = false } = {}) {
   };
   const existing = existingStyle ? Object.assign(node('link'), {
     href: 'retry.css', rel: 'stylesheet', nonce: 'local-nonce', media: 'screen',
-    sheet: existingStyleLoaded ? {} : null
+    sheet: existingStyleLoaded ? { cssRules: [{}] } : null
   }) : null;
   if (existing) nodes.push(existing);
   let initialized = 0;
@@ -83,6 +83,7 @@ test('an existing style that failed before enable is replaced and loaded in its 
   const after = { tag: 'link', href: 'later.css' };
   h.nodes.push(after);
   h.existing.emit('error');
+  h.existing.sheet = { cssRules: [] }; // Chromium can expose a sheet after failure.
   const first = h.registry.configure({ retry: true });
   await until(() => h.requested.length === 1);
   const replacement = h.requested[0];
@@ -156,4 +157,27 @@ test('an already-loaded existing stylesheet is reused', async () => {
   await h.registry.enable('retry');
   assert.equal(h.existing.disabled, false);
   assert.equal(h.requested.length, 0);
+});
+
+test('an unverified empty existing stylesheet is replaced, but a successful empty replacement is reused', async () => {
+  const h = harness({ existingStyle: true });
+  h.existing.sheet = { cssRules: [] };
+  const pending = h.registry.enable('retry');
+  await until(() => h.requested.length === 1);
+  h.requested[0].emit('load', []);
+  assert.equal((await pending).loaded, true);
+  await h.registry.disable('retry');
+  await h.registry.enable('retry');
+  assert.equal(h.requested.length, 1, 'an observed successful load is cached even for empty CSS');
+  assert.equal(h.requested[0].disabled, false);
+});
+
+test('an unreadable existing stylesheet is revalidated using its own load event', async () => {
+  const h = harness({ existingStyle: true });
+  h.existing.sheet = { get cssRules() { throw new Error('unreadable'); } };
+  const pending = h.registry.enable('retry');
+  await until(() => h.requested.length === 1);
+  assert.notEqual(h.requested[0], h.existing);
+  h.requested[0].emit('load');
+  assert.equal((await pending).loaded, true);
 });

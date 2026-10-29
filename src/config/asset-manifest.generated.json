@@ -244,7 +244,7 @@
     "./src/features/assistant/writing-commands.js?v=20261024-writing-session1",
     "./src/features/customization/customization.js?v=20260816-home-labels1",
     "./src/features/customization/plugin-system.js?v=20260601-plugins",
-    "./src/features/feature-registry.js?v=20261029-quality-retry2",
+    "./src/features/feature-registry.js?v=20261029-quality-retry3",
     "./src/features/notes/authoring-tools.js?v=20261024-writing-session1",
     "./src/features/notes/editor-v2.js?v=20261016-ci-page-flow2",
     "./src/features/notes/inline-ai-assist.js?v=20261028-ci-writing1",

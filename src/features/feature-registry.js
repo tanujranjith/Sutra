@@ -27,6 +27,11 @@
       return null;
     }
 
+    function hasVerifiedStyleRules(node) {
+      try { return !!(node && node.sheet && node.sheet.cssRules.length > 0); }
+      catch (error) { return false; }
+    }
+
     return {
       script: function (src) {
         if (loadedScripts[src]) return loadedScripts[src];
@@ -52,14 +57,15 @@
         }
         var record = {};
         var existing = findExistingStyle(href);
-        if (existing && existing.sheet) {
-          // A sheet is ready to reuse. A link without a sheet may still be
-          // loading, or may have failed before we could attach a listener.
-          // Replace it in place and bind our handlers before insertion so both
-          // cases produce an observable load/error event without losing order.
+        if (hasVerifiedStyleRules(existing)) {
+          // A readable, nonempty sheet is ready to reuse. A missing, empty, or
+          // unreadable sheet may still be loading or may have failed before
+          // we could attach a listener (a failed link can have a sheet object).
           record.node = existing;
           record.promise = Promise.resolve(href);
         } else {
+          // Replace it in place and bind our handlers before insertion to
+          // observe a load/error event without losing cascade order.
           record.promise = new Promise(function (resolve, reject) {
             var node = existing ? existing.cloneNode(false) : document.createElement('link');
             record.node = node;
