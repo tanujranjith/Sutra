@@ -107,7 +107,7 @@ test.describe('Accessibility: keyboard navigation', () => {
 
     test('Enter activates the Today add-task button', async ({ page }) => {
         await page.evaluate(() => window.setActiveView('today'));
-        const addTask = page.locator('#addTaskBtn');
+        const addTask = page.locator('#topAddTaskBtn');
         await expect(addTask).toBeVisible();
         await expect(addTask).toBeEnabled();
         await addTask.focus();
