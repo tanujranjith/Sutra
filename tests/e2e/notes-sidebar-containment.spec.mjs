@@ -210,6 +210,10 @@ test('the body-portaled Split View Note selector closes when its owner becomes i
       hooks.createNoteInActiveSpace('Portal owner secondary', '<p>Secondary note.</p>').id
     ];
   });
+  // Creating fixtures through the test hook does not change the current page.
+  // The first page after a fresh workspace may still be protected Help & Docs,
+  // which cannot own a split pair; load the ordinary note as the split owner.
+  await page.evaluate(primaryPageId => window.loadPage(primaryPageId), ids[0]);
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('split-note-portal-seed'));
 
   const menu = page.locator('#splitNoteSelect-menu');
