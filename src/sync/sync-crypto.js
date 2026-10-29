@@ -54,15 +54,23 @@
       && !!getCanonicalRecordKeyInfo(value);
   }
 
+  // Match sync-projection.js's usableId without changing the stored payload.
+  // Existing/imported IDs can have surrounding whitespace even though their
+  // projection keys use the trimmed value.
+  function matchesCollectionRecordId(record, parsed) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+    var id = record.id;
+    if (typeof id === 'number' && Number.isFinite(id)) id = String(id);
+    if (typeof id !== 'string') return false;
+    id = id.trim();
+    return id.length > 0 && id === parsed.id;
+  }
+
   function hasCanonicalOpRecord(op) {
     var parsed = op && getCanonicalRecordKeyInfo(op.recordKey);
     if (!parsed) return false;
     if (op.kind !== 'upsert' || parsed.type !== 'collection') return true;
-    if (!op.payload || typeof op.payload !== 'object' || Array.isArray(op.payload)) return false;
-    var id = op.payload.id;
-    var validId = (typeof id === 'string' && id.length > 0)
-      || (typeof id === 'number' && Number.isFinite(id));
-    return validId && String(id) === parsed.id;
+    return matchesCollectionRecordId(op.payload, parsed);
   }
 
   function createIntegrityError(stage, identifier) {
@@ -365,13 +373,7 @@
       }
       if (parsedKey.type === 'collection') {
         var record = snapshot.records[recordKeys[i]];
-        if (!record || typeof record !== 'object' || Array.isArray(record)) {
-          throw createIntegrityError('snapshot');
-        }
-        var recordId = record.id;
-        var validRecordId = (typeof recordId === 'string' && recordId.length > 0)
-          || (typeof recordId === 'number' && Number.isFinite(recordId));
-        if (!validRecordId || String(recordId) !== parsedKey.id) {
+        if (!matchesCollectionRecordId(record, parsedKey)) {
           throw createIntegrityError('snapshot');
         }
       }

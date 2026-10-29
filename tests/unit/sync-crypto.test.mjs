@@ -6,6 +6,7 @@ import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const syncCrypto = require('../../src/sync/sync-crypto.js');
 const protocol = require('../../src/sync/sync-protocol.js');
+const projection = require('../../src/sync/sync-projection.js');
 
 function sampleOp(overrides = {}) {
   return {
@@ -130,6 +131,9 @@ test('collection operation keys and payload IDs must be canonical and match', as
   const key = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
   const malformedOps = [
     { ...sampleOp(), payload: { id: 'different-page' } },
+    { ...sampleOp(), payload: { id: ' different-page ' } },
+    { ...sampleOp(), payload: { id: '  ' } },
+    { ...sampleOp(), recordKey: protocol.collectionKey('pages', ' page-1 '), payload: { id: ' page-1 ' } },
     { ...sampleOp(), recordKey: 'c/pages/%70age-1' },
     { ...sampleOp(), payload: { title: 'missing id' } },
     { ...sampleOp(), payload: { id: true } },
@@ -224,6 +228,9 @@ test('authenticated malformed snapshot plaintext and invalid collection records 
     '{malformed json',
     JSON.stringify({ records: [] }),
     JSON.stringify({ records: { 'c/pages/p1': { id: 'another-page' } } }),
+    JSON.stringify({ records: { 'c/pages/p1': { id: ' another-page ' } } }),
+    JSON.stringify({ records: { 'c/pages/p1': { id: '  ' } } }),
+    JSON.stringify({ records: { [protocol.collectionKey('pages', ' p1 ')]: { id: ' p1 ' } } }),
     JSON.stringify({ records: { 'c/pages/%70age-1': { id: 'page-1' } } }),
     JSON.stringify({ records: { 'c/pages/p1': { id: null } } }),
     JSON.stringify({ records: { 'c/pages/p1': { id: true } } }),
@@ -258,6 +265,30 @@ test('snapshot accepts canonical escaped long collection IDs and preserves other
   const envelope = await syncCrypto.encryptSnapshotEnvelope(key, snapshot, { cursor: 4, schemaVersion: 5 });
   assert.deepEqual(await syncCrypto.decryptSnapshotEnvelope(key, envelope), snapshot,
     'unknown collection fields, ordering arrays, and atomic values remain lossless');
+});
+
+test('projected whitespace and numeric collection IDs round-trip through operations and snapshots', async () => {
+  const key = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const workspace = {
+    pages: [
+      { id: '  page-leading-and-trailing  ', unknownField: { retained: true } },
+      { id: '\tpage-tabs\n', unknownField: ['retained'] }
+    ],
+    tasks: [{ id: 42, unknownField: 'retained' }]
+  };
+  const projected = projection.buildProjection(workspace);
+  const expectedKeys = ['c/pages/page-leading-and-trailing', 'c/pages/page-tabs', 'c/tasks/42'];
+  for (const recordKey of expectedKeys) {
+    const payload = projected.records[recordKey];
+    assert.ok(payload, `projection should contain ${recordKey}`);
+    const op = sampleOp({ recordKey, payload });
+    const envelope = await syncCrypto.encryptOpEnvelope(key, op);
+    assert.deepEqual(await syncCrypto.decryptOpEnvelope(key, envelope), op,
+      'operation preserves the original ID and unknown fields');
+  }
+  const snapshotEnvelope = await syncCrypto.encryptSnapshotEnvelope(key, projected, { cursor: 4, schemaVersion: 5 });
+  assert.deepEqual(await syncCrypto.decryptSnapshotEnvelope(key, snapshotEnvelope), projected,
+    'snapshot preserves the original IDs and unknown fields');
 });
 
 test('asset bytes round-trip and are bound to their content hash', async () => {
