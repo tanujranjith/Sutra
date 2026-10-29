@@ -210,3 +210,37 @@ for (const mode of ['off', 'master-off', 'on', 'disabled-during-registration']) 
       : [['unregister', 'sutra-daily-reminder']]);
   });
 }
+
+for (const initiallyEnabled of [false, true]) {
+  test(`background reminder reconciliation follows the final preference after ${initiallyEnabled ? 'on-to-off' : 'off-to-on'} overlap`, async () => {
+    const state = { prefs: { enabled: true, browserNotificationsEnabled: initiallyEnabled } };
+    const calls = [];
+    let release, started, registered = initiallyEnabled;
+    const gate = new Promise(resolve => { release = resolve; });
+    const entered = new Promise(resolve => { started = resolve; });
+    async function change(kind) {
+      calls.push(kind);
+      if (calls.length === 1) { started(); await gate; }
+      registered = kind === 'register';
+    }
+    const registration = { periodicSync: {
+      register: async () => change('register'),
+      unregister: async () => change('unregister')
+    } };
+    const Notification = { permission: 'granted' };
+    const reconcile = compile('registerBackgroundReminders', {
+      _state: state, global: { Notification }, Notification,
+      navigator: { serviceWorker: { ready: Promise.resolve(registration) },
+        permissions: { query: async () => ({ state: 'granted' }) } }
+    });
+    const first = reconcile();
+    await entered;
+    state.prefs.browserNotificationsEnabled = !initiallyEnabled;
+    const second = reconcile();
+    assert.equal(calls.length, 1, 'the later operation waits for the in-flight browser mutation');
+    release();
+    await Promise.all([first, second]);
+    assert.equal(registered, !initiallyEnabled, 'the final browser state matches the latest preference');
+    assert.equal(calls.at(-1), initiallyEnabled ? 'unregister' : 'register');
+  });
+}

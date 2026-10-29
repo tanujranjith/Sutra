@@ -1330,7 +1330,11 @@
                 return !!(_state.prefs && _state.prefs.enabled && _state.prefs.browserNotificationsEnabled
                     && ('Notification' in global) && Notification.permission === 'granted');
             };
-            return navigator.serviceWorker.ready.then(function (reg) {
+            // The browser's registration is shared across requests. Serialize
+            // changes in this document so a slow unregister cannot finish
+            // after a newer opt-in has already registered the reminder.
+            _state.backgroundReminderQueue = (_state.backgroundReminderQueue || Promise.resolve()).catch(function () {}).then(function () {
+              return navigator.serviceWorker.ready.then(function (reg) {
                 if (!reg || !reg.periodicSync) return;
                 var cancel = function () {
                     return reg.periodicSync.unregister('sutra-daily-reminder').catch(function () { /* unsupported */ });
@@ -1349,7 +1353,9 @@
                 } else {
                     return doRegister();
                 }
-            }).catch(function () { /* no SW */ });
+              }).catch(function () { /* no SW */ });
+            });
+            return _state.backgroundReminderQueue;
         } catch (e) { /* unsupported */ }
     }
 
@@ -1840,6 +1846,7 @@
         if (Object.prototype.hasOwnProperty.call(raw, 'lastWeeklyReviewAt')) _state.lastWeeklyReviewAt = raw.lastWeeklyReviewAt;
         if (Object.prototype.hasOwnProperty.call(raw, 'lastWeeklyNudge')) _state.lastWeeklyNudge = raw.lastWeeklyNudge;
         _saveState();
+        registerBackgroundReminders();
         refresh();
     }
 
