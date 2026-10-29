@@ -1793,7 +1793,72 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       // An already scheduled offline retry can own the cycle instead of an
       // explicit attempt. Its successful acknowledgement is required too.
       await expect.poll(() => Boolean(server.state.devices[bDeviceId].wipeAcknowledgedAt), { timeout: 20000 }).toBe(true);
-      await expect(B.page.locator('#sutraRevokedDeviceMessage')).toContainText('removed');
+      try {
+        await expect(B.page.locator('#sutraRevokedDeviceMessage')).toContainText('removed');
+      } catch (error) {
+        const readCompletionState = async page => {
+          let timer = null;
+          try {
+            return await Promise.race([
+              page.evaluate(() => {
+                let guard = null;
+                let localStorageKeyCount = null;
+                const localStorageKeys = [];
+                let sessionStorageKeyCount = null;
+                try {
+                  localStorageKeyCount = localStorage.length;
+                  for (let index = 0; index < Math.min(localStorageKeyCount, 40); index += 1) {
+                    const key = localStorage.key(index);
+                    if (typeof key === 'string') localStorageKeys.push(key.slice(0, 120));
+                  }
+                  const rawGuard = localStorage.getItem('sutra:revocationWipeGuard:v1');
+                  guard = rawGuard === null ? null : JSON.parse(rawGuard);
+                } catch (storageError) { /* Do not expose storage values. */ }
+                try { sessionStorageKeyCount = sessionStorage.length; } catch (storageError) {}
+
+                const detail = guard && typeof guard.detail === 'string' ? guard.detail : '';
+                const guardCause = detail.startsWith('Cannot finalize revocation cleanup from state:')
+                  ? 'guard-state'
+                  : detail.startsWith('Local cleanup verification found remaining browser storage')
+                    ? 'remaining-storage'
+                    : 'other';
+                const message = document.getElementById('sutraRevokedDeviceMessage')?.textContent || '';
+                return {
+                  messageKind: message.startsWith('Cleanup is incomplete') ? 'cleanup-incomplete' : /removed/i.test(message) ? 'removed' : 'other',
+                  guardStatus: guard && typeof guard.status === 'string' && /^[a-z-]{1,32}$/.test(guard.status)
+                    ? guard.status : guard === null ? 'unavailable' : 'unknown',
+                  guardCause,
+                  localStorageKeyCount,
+                  localStorageKeys,
+                  sessionStorageKeyCount
+                };
+              }),
+              new Promise(resolve => {
+                timer = setTimeout(() => resolve({ snapshot: 'timed-out' }), 1500);
+              })
+            ]);
+          } catch (diagnosticError) {
+            return {
+              snapshot: 'unavailable',
+              errorName: typeof diagnosticError?.name === 'string'
+                && /^[A-Za-z0-9_.:-]{1,64}$/.test(diagnosticError.name)
+                ? diagnosticError.name
+                : 'unavailable'
+            };
+          } finally {
+            if (timer !== null) clearTimeout(timer);
+          }
+        };
+
+        try {
+          const [primary, secondTabState] = await Promise.all([
+            readCompletionState(B.page),
+            readCompletionState(secondTab)
+          ]);
+          console.error('[revoke-wipe completion diagnostics]', JSON.stringify({ primary, secondTab: secondTabState }));
+        } catch (diagnosticError) { /* Preserve the original assertion failure. */ }
+        throw error;
+      }
 
       const audit = await B.page.evaluate(async () => ({
         localKeys: Object.keys(localStorage),
