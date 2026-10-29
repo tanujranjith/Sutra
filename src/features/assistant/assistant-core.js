@@ -103,7 +103,7 @@
     trigger.setAttribute('aria-controls', card.id);
     var header = doc.createElement('div'); header.className = 'assistant-response-card-header';
     var heading = doc.createElement('strong'); heading.textContent = 'Response details';
-    var close = doc.createElement('button'); close.type = 'button'; close.className = 'assistant-response-card-close'; close.textContent = '×'; close.setAttribute('aria-label', 'Close response details');
+    var close = doc.createElement('button'); close.type = 'button'; close.className = 'assistant-response-card-close'; close.tabIndex = 0; close.textContent = '×'; close.setAttribute('aria-label', 'Close response details');
     header.append(heading, close);
     var tabs = doc.createElement('div'); tabs.className = 'assistant-response-card-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Response detail sections');
     var body = doc.createElement('div'); body.className = 'assistant-response-card-body';
