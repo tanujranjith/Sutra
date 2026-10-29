@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
 // Student-language regression coverage for the shared, local-only date parser
 // and Quick Capture's routing hints. These assertions use a fixed clock so they
@@ -26,6 +27,8 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  // Static script globals can exist before IndexedDB restore and final routing.
+  await waitForAppHydrated(page);
   await completeOnboarding(page);
   await page.waitForFunction(() =>
     !!window.SutraStudentDateParser && typeof window.parseQuickCaptureText === 'function'
@@ -154,7 +157,10 @@ test('empty Homework teaches one primary action to add homework', async ({ page 
     window.setActiveView('homework');
     window.SutraHomework.render();
   });
-  await page.locator('[data-todo-category="homework"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'homework');
+  const homeworkCategory = page.locator('[data-todo-category="homework"]');
+  await expect(homeworkCategory).toBeVisible();
+  await homeworkCategory.click();
   const emptyState = page.locator('#view-homework .hw-empty-redesign');
   const primary = emptyState.locator('.hw-btn-primary');
   await expect(primary).toHaveCount(1);
