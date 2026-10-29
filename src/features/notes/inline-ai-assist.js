@@ -121,11 +121,23 @@
         if (!session.panel) return;
         session.panel.classList.remove('sutra-inline-ai-mode');
         if (session.root && session.root.parentNode) session.root.parentNode.removeChild(session.root);
-        if (session.restoreFullscreen && assistantPanelIsVisible(session.panel)) {
+        if (session.restoreFullscreen && (assistantPanelIsVisible(session.panel) || session.fullAssistantView)) {
             session.panel.classList.add('fullscreen');
         }
+        if (session.closePanelAfterReview && session.panel.style.display === 'flex') {
+            var bridge = global.flowAtelier;
+            var toggle = bridge && typeof bridge.toggleChat === 'function' ? bridge.toggleChat : global.toggleChat;
+            try { if (typeof toggle === 'function') toggle(); } catch (error) { /* restore the captured closed state below */ }
+            // toggleChat may be unavailable while Assistant is being disabled.
+            // Restore the exact pre-review hidden state and its shell affordances.
+            session.panel.style.display = session.panelDisplayBeforeReview;
+            if (session.panelAriaHiddenBeforeReview == null) session.panel.removeAttribute('aria-hidden');
+            else session.panel.setAttribute('aria-hidden', session.panelAriaHiddenBeforeReview);
+            if (session.launcher) session.launcher.style.display = session.launcherDisplayBeforeReview;
+            if (doc.body) doc.body.classList.toggle('assistant-panel-open', session.bodyPanelOpenBeforeReview);
+        }
         var focusTarget = session.returnFocus;
-        var canRestoreFocus = assistantPanelIsVisible(session.panel) && ownerIsCurrent(session);
+        var canRestoreFocus = (assistantPanelIsVisible(session.panel) || session.fullAssistantView) && ownerIsCurrent(session);
         if (canRestoreFocus && focusTarget && focusTarget.isConnected && typeof focusTarget.focus === 'function') {
             try { if (global.getComputedStyle && global.getComputedStyle(focusTarget).display === 'none') return; } catch (error) { /* best-effort visibility check */ }
             try { focusTarget.focus({ preventScroll: true }); } catch (error) { try { focusTarget.focus(); } catch (_) {} }
@@ -397,12 +409,25 @@
         } catch (error) { return true; }
     }
 
-    function openAssistantPanel(panel) {
+    function isFullAssistantView() {
+        return !!(doc.body && doc.body.dataset.view === 'assistantview')
+            || !!doc.querySelector('#view-assistantview.active');
+    }
+
+    function openAssistantPanel(panel, allowFullAssistantReview) {
+        var addedReviewMode = allowFullAssistantReview && !panel.classList.contains('sutra-inline-ai-mode');
+        if (addedReviewMode) panel.classList.add('sutra-inline-ai-mode');
         if (assistantPanelIsVisible(panel)) return true;
         var bridge = global.flowAtelier;
         var toggle = bridge && typeof bridge.toggleChat === 'function' ? bridge.toggleChat : global.toggleChat;
-        if (typeof toggle !== 'function') return false;
-        if (doc.body && doc.body.classList.contains('focus-mode')) return false;
+        if (typeof toggle !== 'function') {
+            if (addedReviewMode) panel.classList.remove('sutra-inline-ai-mode');
+            return false;
+        }
+        if (doc.body && doc.body.classList.contains('focus-mode')) {
+            if (addedReviewMode) panel.classList.remove('sutra-inline-ai-mode');
+            return false;
+        }
         var oldDisplay = panel.style.display;
         var oldAriaHidden = panel.getAttribute('aria-hidden');
         var launcher = doc.getElementById('chatbotBtn');
@@ -415,6 +440,7 @@
         else panel.setAttribute('aria-hidden', oldAriaHidden);
         if (launcher) launcher.style.display = oldLauncherDisplay;
         if (doc.body) doc.body.classList.toggle('assistant-panel-open', hadLayoutOpen);
+        if (addedReviewMode) panel.classList.remove('sutra-inline-ai-mode');
         return false;
     }
 
@@ -442,7 +468,14 @@
         if (!current) return Promise.resolve(null);
 
         var panel = doc.getElementById('chatbotPanel');
-        if (!panel || !openAssistantPanel(panel)) {
+        var fullAssistantView = isFullAssistantView();
+        var panelDisplayBeforeReview = panel ? panel.style.display : '';
+        var panelWasOpenBeforeReview = panelDisplayBeforeReview === 'flex';
+        var panelAriaHiddenBeforeReview = panel ? panel.getAttribute('aria-hidden') : null;
+        var launcher = doc.getElementById('chatbotBtn');
+        var launcherDisplayBeforeReview = launcher ? launcher.style.display : '';
+        var bodyPanelOpenBeforeReview = !!(doc.body && doc.body.classList.contains('assistant-panel-open'));
+        if (!panel || !openAssistantPanel(panel, fullAssistantView)) {
             try {
                 var notify = global.flowAtelier && global.flowAtelier.showToast || global.showToast;
                 if (typeof notify === 'function') notify('Sutra Assistant is unavailable right now. Enable it in Settings or leave Focus mode, then try again.');
@@ -479,8 +512,15 @@
             hasDraft: false,
             stale: false,
             closed: false,
+            fullAssistantView: fullAssistantView,
+            closePanelAfterReview: fullAssistantView && !panelWasOpenBeforeReview,
+            panelDisplayBeforeReview: panelDisplayBeforeReview,
+            panelAriaHiddenBeforeReview: panelAriaHiddenBeforeReview,
+            launcher: launcher,
+            launcherDisplayBeforeReview: launcherDisplayBeforeReview,
+            bodyPanelOpenBeforeReview: bodyPanelOpenBeforeReview,
             resolve: null,
-            returnFocus: doc.activeElement
+            returnFocus: fullAssistantView ? (doc.getElementById('asstInput') || doc.activeElement) : doc.activeElement
         };
         var promise = new Promise(function (resolve) { session.resolve = resolve; });
 

@@ -8,7 +8,9 @@ choose the command. The selection stays untouched while the menu and review
 are open. At a caret, eligible plain-text note blocks preload into the review;
 the scope identifies included blocks. Links, code, embeds, and mixed-format
 blocks stay untouched. In chat, enter `/grammar your passage`
-(or the other commands), then Send to open the review.
+(or the other commands), then Send to open the review. In the full Assistant view,
+the shared review panel opens temporarily and closes after Cancel or Apply. Cancel
+keeps the command in the composer; Apply returns the reviewed draft there.
 
 Modern Notes removes a typed slash query immediately when its command is
 activated by Enter or click. Cancel leaves the passage unchanged and does not

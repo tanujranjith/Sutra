@@ -61,9 +61,11 @@ body { --sutra-assistant-width: 390px; --sutra-assistant-top: 60px; }
 #chatbotPanel.sutra-assistant-sidebar #chatMicBtn { grid-column: 2; grid-row: 2; width: 36px; min-width: 36px; height: 36px; }
 #chatbotPanel.sutra-assistant-sidebar #chatSendBtn { grid-column: 4; grid-row: 2; width: 44px; min-width: 44px; height: 44px; }
 #chatbotPanel.sutra-assistant-sidebar .chatbot-input [hidden] { display: none !important; }
-body:has(#view-assistantview.active) #chatbotPanel.sutra-assistant-sidebar { display: none !important; }
+/* Full Assistant uses the page canvas; only the shared review workbench may
+   temporarily surface the dock panel there. */
+body:has(#view-assistantview.active) #chatbotPanel.sutra-assistant-sidebar:not(.sutra-inline-ai-mode) { display: none !important; }
 body:has(#view-assistantview.active),body[data-view="assistantview"] { --assistant-panel-reserve: 0px !important; }
-body[data-view="assistantview"] #chatbotPanel.sutra-assistant-sidebar { display: none !important; }
+body[data-view="assistantview"] #chatbotPanel.sutra-assistant-sidebar:not(.sutra-inline-ai-mode) { display: none !important; }
 #mainContent > #view-assistantview.active { width: 100% !important; max-width: 100% !important; transition: none !important; }
 #chatbotPanel.sutra-assistant-sidebar .chatbot-composer-meta { margin: 8px 16px max(12px, env(safe-area-inset-bottom)); padding: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #chatbotPanel.sutra-assistant-sidebar .chatbot-provider-chip,.sutra-sidebar-effort { min-height: 36px; max-width: 100%; padding: 7px 10px; border: 1px solid var(--surface-border); border-radius: 18px; color: var(--text-secondary); background: var(--surface-bg); font: inherit; font-size: 12px; cursor: pointer; }

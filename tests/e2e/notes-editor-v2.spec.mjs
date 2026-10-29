@@ -217,7 +217,10 @@ test('full Assistant writing review returns an editable draft to its composer an
   await stageWritingProvider(page);
   await page.evaluate(() => window.setActiveView('assistantview'));
   const input = page.locator('#asstInput');
+  const panel = page.locator('#chatbotPanel');
   await expect(input).toBeVisible();
+  await expect(panel).toHaveCSS('display', 'none');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--assistant-panel-reserve').trim())).toBe('0px');
 
   await page.locator('#asstCtxBtn').click();
   await page.locator('.asst-ctx-dropdown-item').filter({ hasText: 'Paste custom text' }).click();
@@ -243,6 +246,18 @@ test('full Assistant writing review returns an editable draft to its composer an
   await page.locator('#asstSendBtn').click();
   const review = page.locator('.sutra-inline-ai-workbench');
   await expect(review.getByLabel('Passage to edit')).toHaveValue(passage);
+  await expect(panel).toHaveCSS('display', 'flex');
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => ({
+    panelDisplay: document.getElementById('chatbotPanel').style.display,
+    panelOpen: document.body.classList.contains('assistant-panel-open'),
+    sidebarOpen: document.body.classList.contains('sutra-assistant-sidebar-open'),
+    reserve: getComputedStyle(document.body).getPropertyValue('--assistant-panel-reserve').trim()
+  }))).toEqual({ panelDisplay: 'none', panelOpen: false, sidebarOpen: false, reserve: '0px' });
+  await expect(input).toHaveValue('/grammar ' + passage);
+  await page.locator('#asstSendBtn').click();
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(passage);
   expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
   await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
   const preview = review.getByLabel('Assistant draft — edit before accepting');
@@ -260,6 +275,12 @@ test('full Assistant writing review returns an editable draft to its composer an
 
   await review.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(input).toHaveValue(reviewedText);
+  await expect.poll(() => page.evaluate(() => ({
+    panelDisplay: document.getElementById('chatbotPanel').style.display,
+    panelOpen: document.body.classList.contains('assistant-panel-open'),
+    sidebarOpen: document.body.classList.contains('sutra-assistant-sidebar-open'),
+    reserve: getComputedStyle(document.body).getPropertyValue('--assistant-panel-reserve').trim()
+  }))).toEqual({ panelDisplay: 'none', panelOpen: false, sidebarOpen: false, reserve: '0px' });
   const messagesAfter = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent()
     .messages.map(message => ({ role: message.role, content: message.content })));
   expect(messagesAfter).toEqual(messagesBefore);
