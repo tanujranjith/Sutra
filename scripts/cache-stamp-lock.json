@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261028-ci-investigation2",
-    "hash": "4880b09bf1b3795b"
+    "stamp": "20261029-ci-focus2",
+    "hash": "18ceb9735254f102"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -764,8 +764,8 @@
     "hash": "7bb9325f231114c9"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20261022-assistant-polish3",
-    "hash": "23882a93ae06f7c4"
+    "stamp": "20261029-ci-focus2",
+    "hash": "14660cb63c45d05f"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20261028-ci-nav1",
