@@ -3761,7 +3761,7 @@ function populateProgressDashboard() {
 
         function normalizeSettingChoice(value, allowedValues, fallbackValue) {
             const normalized = String(value || '').trim().toLowerCase();
-            return allowedValues.includes(normalized) ? normalized : fallbackValue;
+            return allowedValues.find(choice => String(choice).toLowerCase() === normalized) ?? fallbackValue;
         }
 
         function clampSettingNumber(value, fallbackValue, minValue, maxValue) {

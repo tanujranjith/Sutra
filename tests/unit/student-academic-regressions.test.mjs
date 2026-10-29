@@ -8,6 +8,17 @@ function load(name, dependencies = {}) {
   return new Function(...Object.keys(dependencies), (source.includes('async function ' + name + '(') ? 'async ' : '') + extractFunction(source, name).body + ';return ' + name + ';')(...Object.values(dependencies));
 }
 
+test('setting choices preserve canonical Current view casing and reject unknown values', () => {
+  const normalize = load('normalizeSettingChoice');
+  const choices = ['minimal', 'currentView', 'workspace'];
+  for (const input of ['currentView', 'currentview', ' CURRENTVIEW ']) {
+    assert.equal(normalize(input, choices, 'workspace'), 'currentView');
+  }
+  assert.equal(normalize('read_everything', choices, 'currentView'), 'currentView');
+  assert.equal(normalize(undefined, choices, 'currentView'), 'currentView');
+  assert.equal(normalize(' HIGH ', ['low', 'medium', 'high'], 'medium'), 'high');
+});
+
 for (const [name, listKey, criteriaKey] of [['computeCollegeAppDecisionScores', 'decisionColleges', 'decisionCriteria'], ['computeMajorDecisionScores', 'majorDecisionMajors', 'majorDecisionCriteria']]) {
   test(name + ' excludes unrated/all-zero and zero-weight-only entries', () => {
     const rows = {

@@ -96,6 +96,9 @@ does not apply the proposal. The proposal still needs its own Apply click.
 Existing saved workspaces are not upgraded automatically. Older missing
 permissions remain Off on load/import; older missing conversation preferences
 retain Current view / Stateless. No new durable field or permission store exists.
+Current view retains its canonical `currentView` value through case-insensitive
+settings normalization; a load, import, or preference read must not widen it to
+Workspace-aware.
 
 Settings → Assistant exposes two separate controls:
 
