@@ -67,13 +67,15 @@ test('Focus preserves canonical task and Homework projection identity and title'
       taskTitle: task.title,
       homeworkSourceId: homework.id,
       homeworkTaskId: `hw_v2_${homework.id}`,
-      homeworkTitle: homework.title
+      homeworkTitle: `${course.name}: ${homework.title}`
     };
   });
 
   await page.waitForFunction(({ homeworkSourceId, homeworkTaskId }) =>
     window.flowAtelier.tasks.some(task => task.id === homeworkTaskId
       && task.homeworkSourceId === homeworkSourceId), seeded);
+  await expect.poll(() => page.evaluate(({ homeworkTaskId }) =>
+    window.flowAtelier.tasks.find(task => task.id === homeworkTaskId)?.title, seeded)).toBe(seeded.homeworkTitle);
 
   for (const expected of [
     { taskId: seeded.taskId, title: seeded.taskTitle },
@@ -133,16 +135,19 @@ test('Home Focus button keeps the selected Homework identity', async ({ page, is
     window.SutraHomework.render();
     await new Promise(resolve => requestAnimationFrame(resolve));
     window.flowAtelier.renderTaskViews();
-    return { id: item.id, title: item.title };
+    return { id: item.id, title: item.title, focusTitle: `${course.name}: ${item.title}` };
   });
 
   const brief = page.locator('#todayDailyBrief');
   await expect(brief.locator('.tnu-title')).toHaveText(homework.title);
+  await expect.poll(() => page.evaluate(id => window.flowAtelier.tasks
+    .find(task => task.id === `hw_v2_${id}` && task.homeworkSourceId === id)?.title, homework.id)).toBe(homework.focusTitle);
   await brief.locator('[data-donow-focus]').click();
   await acceptFocusPreflight(page);
   await expect(page.locator('#focusSessionOverlay')).toBeVisible();
-  await expect(page.locator('#fsTaskTitle')).toHaveText(homework.title);
+  await expect(page.locator('#fsTaskTitle')).toHaveText(homework.focusTitle);
   await expect.poll(async () => (await readActiveFocusContext(page))?.taskId).toBe(`hw_v2_${homework.id}`);
+  await expect.poll(async () => (await readActiveFocusContext(page))?.taskTitle).toBe(homework.focusTitle);
 });
 
 test('All Due Focus button keeps its planner task identity', async ({ page, isMobile }) => {
