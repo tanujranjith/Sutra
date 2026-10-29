@@ -5,6 +5,8 @@ tests/e2e/assistant-local-setup.spec.mjs
 tests/e2e/assistant-source-disclosures.spec.mjs
 tests/e2e/assistant-workspace-investigation.spec.mjs
 tests/e2e/full-app-audit.spec.mjs
+tests/e2e/global-search.spec.mjs
+tests/e2e/homework-course-edit.spec.mjs
 tests/e2e/intelligence-diagnostics.spec.mjs
 tests/e2e/locked-note-privacy.spec.mjs
 tests/e2e/navigation-clarity.spec.mjs
