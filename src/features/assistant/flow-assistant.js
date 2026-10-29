@@ -9670,8 +9670,9 @@
         const privacy = window.SutraAssistantPrivacy;
         const controls = window.SutraAssistantPermissions;
         const ready = privacy && typeof privacy.getPermissions === 'function' && typeof privacy.canRead === 'function' && controls && typeof controls.setMode === 'function' && typeof controls.setArea === 'function';
-        mode.disabled = !ready;
-        if (preset) preset.disabled = !ready || typeof controls.applyPreset !== 'function';
+        const assistantEnabled = getPref('assistant.enabled', true) !== false;
+        mode.disabled = !ready || !assistantEnabled;
+        if (preset) preset.disabled = !ready || !assistantEnabled || typeof controls.applyPreset !== 'function';
         if (!ready) {
             container.querySelectorAll('select').forEach(select => { select.disabled = true; });
             status.textContent = 'Workspace access is unavailable. Reload Sutra to restore its permission controls.';
@@ -9707,9 +9708,13 @@
             });
         }
         container.querySelectorAll('[data-assistant-permission-area]').forEach(select => {
-            select.disabled = false;
+            select.disabled = !assistantEnabled;
             select.value = permissions.areas[select.dataset.assistantPermissionArea] || 'ask';
         });
+        if (!assistantEnabled) {
+            status.textContent = 'Enable Sutra Assistant to manage workspace access.';
+            return;
+        }
         status.textContent = permissions.mode === 'off'
             ? 'Workspace access is off. Workspace-aware changes search scope, not permission.'
             : !privacy.canRead('planning')
@@ -9719,6 +9724,7 @@
     const handleAssistantPermissionChange = (event) => {
         const target = event.target;
         if (!target || !target.matches('[data-assistant-preset], [data-assistant-permission-mode], [data-assistant-permission-area]')) return;
+        if (getPref('assistant.enabled', true) === false) { refreshAssistantPermissionControls(); return; }
         try {
             const controls = window.SutraAssistantPermissions;
             if (target.hasAttribute('data-assistant-preset')) {

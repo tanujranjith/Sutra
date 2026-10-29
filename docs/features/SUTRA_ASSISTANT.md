@@ -113,7 +113,9 @@ College, Life, Business, Other workspace content, and Saved Assistant memory to
 Use access mode, Allow, or Block. Block always excludes that area. Read allowed
 areas requires Allow for each area; the other reading modes permit ordinary
 areas unless blocked. No workspace access denies every area. These controls use
-the existing canonical permissions and persist with the workspace.
+the existing canonical permissions and persist with the workspace. The preset,
+workspace-access, and per-area controls are disabled while Sutra Assistant is
+off; their saved values are retained and available again when it is enabled.
 
 Saved-memory permission is checked before retrieval or usage bookkeeping. Denied
 requests do not read saved memories or update their last-used timestamps, and

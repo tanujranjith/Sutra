@@ -34,6 +34,9 @@ test('local study interview opens a draft, preserves skipped values, and saves o
   await send(page, 'Get to know me', 'What time does school');
   await send(page, '7:30', 'AM or PM');
   await page.reload(); await waitForAppReady(page);
+  const restoredSetupTurns = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent()
+    .messages.filter(message => message.role === 'user').map(message => message.content));
+  expect(restoredSetupTurns).toEqual(expect.arrayContaining(['Get to know me', '7:30']));
   await page.evaluate(() => window.setActiveView('assistantview'));
   await send(page, 'AM', 'usually finish');
   await page.reload(); await waitForAppReady(page);

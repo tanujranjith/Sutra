@@ -177,15 +177,21 @@ test('saving Assistant enablement loads and reinitializes workspace-access contr
   await page.locator('[data-settings-nav="assistant"]').click();
   const toggle = page.locator('[data-pref-path="assistant.enabled"]');
   const mode = page.locator('#assistantWorkspaceAccess');
+  const preset = page.locator('#assistantAccessPreset');
+  const area = page.getByLabel('Tasks & schedule access', { exact: true });
   const status = page.locator('#assistantWorkspaceAccessStatus');
   if (await toggle.isChecked()) {
     await toggle.uncheck({ force: true });
     await saveSettings(page);
   }
   await expect(mode).toBeDisabled();
+  await expect(preset).toBeDisabled();
+  await expect(area).toBeDisabled();
   await toggle.check({ force: true });
   await saveSettings(page);
   await expect(mode).toBeEnabled();
+  await expect(preset).toBeEnabled();
+  await expect(area).toBeEnabled();
   await expect(status).not.toContainText('Enable Sutra Assistant');
   await mode.selectOption('read_only');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('read_only');
@@ -193,10 +199,14 @@ test('saving Assistant enablement loads and reinitializes workspace-access contr
   await toggle.uncheck({ force: true });
   await saveSettings(page);
   await expect(mode).toBeDisabled();
+  await expect(preset).toBeDisabled();
+  await expect(area).toBeDisabled();
   await expect(status).toContainText('Enable Sutra Assistant');
   await toggle.check({ force: true });
   await saveSettings(page);
   await expect(mode).toBeEnabled();
+  await expect(preset).toBeEnabled();
+  await expect(area).toBeEnabled();
   await expect(mode).toHaveValue('read_only');
   await mode.selectOption('ask_per_area');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('ask_per_area');
