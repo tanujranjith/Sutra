@@ -12,7 +12,9 @@ const compile = (name, names = [], values = []) => new Function(...names,
   `${extractFunction(source, name).body}; return ${name};`)(...values);
 const normalizeMode = compile('normalizeChatMemoryMode', ['getPref'], [getPref]);
 const normalizeDepth = compile('normalizeChatMemoryDepth', ['CHAT_MEMORY_DEPTH_OPTIONS'], [[3, 5, 10, 15, 25]]);
-const persistAssistantPermissionMutation = compile('persistAssistantPermissionMutation');
+const persistAssistantPermissionMutation = new Function(
+  'async ' + extractFunction(source, 'persistAssistantPermissionMutation').body + '; return persistAssistantPermissionMutation;'
+)();
 const history = compile('buildConversationMessages',
   ['normalizeChatMemoryMode', 'normalizeChatMemoryDepth', 'getChatMemoryMode', 'getChatMemoryDepth'],
   [normalizeMode, normalizeDepth, () => 'stateful', () => 5]);
