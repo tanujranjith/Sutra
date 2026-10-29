@@ -56,8 +56,13 @@ test('the full Assistant tab hides the docked sidebar and releases its space', a
   await openApp(page); await openNotesView(page); await stageWritingProvider(page);
   await page.locator('#chatbotBtn').click();
   await expect(page.locator('#chatbotPanel')).toBeVisible();
-  await page.locator('#moreViewsToggle').click();
-  await page.getByRole('menuitem', { name: 'Assistant', exact: true }).click();
+  const assistantTab = page.locator('#tabAssistantView');
+  if (await assistantTab.isVisible()) {
+    await assistantTab.click();
+  } else {
+    await page.locator('#moreViewsToggle').click();
+    await page.getByRole('menuitem', { name: 'Assistant', exact: true }).click();
+  }
   await expect(page.locator('#view-assistantview')).toHaveClass(/active/);
   await expect(page.locator('#chatbotPanel')).toBeHidden();
   await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
