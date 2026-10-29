@@ -78538,10 +78538,14 @@ ${cspMeta}
                             deterministicEngines: [cmd.localEngine || (cmd.sources && cmd.sources.length ? 'Product Knowledge' : 'Sutra Intelligence')],
                             actionsProposed: cmd.actionsProposed || []
                         });
-                        appendMessage('assistant', reply, null, null, { userText: text, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         convo.push({ role: 'user', content: text });
                         convo.push({ role: 'assistant', content: reply, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         saveConvo();
+                        // Publish after the turn is durable; save health reports
+                        // failures locally, without falling through to a provider.
+                        try { await flushAppSaveNow('assistant-local-turn'); }
+                        catch (error) { console.warn('Local Assistant history save was not confirmed', error); }
+                        appendMessage('assistant', reply, null, null, { userText: text, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         return;
                     }
                 }
@@ -80807,6 +80811,9 @@ ${cspMeta}
                         });
                         convo.push({ role: 'assistant', content: cmd.message || 'Done.', sources: cmd.sources, grounding: cmd.grounding, claimType: cmd.claimType || (cmd.sources && cmd.sources.length ? 'workspace_fact' : 'deterministic_inference'), memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         saveConvo();
+                        // Save failures remain in the handled local-command path.
+                        try { await flushAppSaveNow('assistant-local-turn'); }
+                        catch (error) { console.warn('Local Assistant history save was not confirmed', error); }
                         asstRenderAll();
                         return;
                     }

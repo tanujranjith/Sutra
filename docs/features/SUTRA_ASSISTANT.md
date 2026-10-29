@@ -99,6 +99,11 @@ retain Current view / Stateless. No new durable field or permission store exists
 Current view retains its canonical `currentView` value through case-insensitive
 settings normalization; a load, import, or preference read must not widen it to
 Workspace-aware.
+Deterministic local chat turns are committed through the canonical readback-
+verified save before their reply is published. A save failure preserves the
+in-memory conversation and the existing save-health warning; it never sends a
+handled local command to a provider as a fallback. The lifecycle flush remains
+a backup for unfinished work, rather than the reply's durability boundary.
 
 Settings → Assistant exposes two separate controls:
 
