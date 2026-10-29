@@ -147,8 +147,14 @@ test('a reported-usage response renders an accessible Response details chip with
   expect(colors.label).toBe('rgb(31, 41, 55)');
   expect(colors.value).toBe('rgb(31, 41, 55)');
 
+  const responseDetails = page.locator('#chatbotMessages').getByRole('dialog', { name: 'Response details', exact: true }).last();
+  const closeDetails = responseDetails.getByRole('button', { name: 'Close response details', exact: true });
+  // The dialog's Close button precedes its selected Usage tab in the DOM.
+  await expect(summary).toBeFocused();
   await page.keyboard.press('Shift+Tab');
+  await expect(closeDetails).toBeFocused();
   await page.keyboard.press('Tab');
+  await expect(summary).toBeFocused();
   const focusStyle = await summary.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(focusStyle).toBe('solid');
 
