@@ -19,7 +19,7 @@
         './src/features/assistant/assistant-safety.js?v=20261015-caveat-fixes6',
         './src/features/assistant/model-capabilities.js?v=20261011-assistant-discovery1',
         './src/features/assistant/intelligence-diagnostics.js?v=20260714-intel1',
-        './src/features/assistant/sutra-product-knowledge.js?v=20261022-everyday2',
+        './src/features/assistant/sutra-product-knowledge.js?v=20261029-ci-permission-docs1',
         './src/features/assistant/sutra-capability-registry.js?v=20261022-assistant-polish3',
         './src/features/assistant/action-system.js?v=20260807-agentplans2',
         './src/features/assistant/note-patch-system.js?v=20260711-note-patch1',

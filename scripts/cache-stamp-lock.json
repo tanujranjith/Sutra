@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261029-ci-permission-save1",
-    "hash": "ec9ba4bbe4cc0718"
+    "stamp": "20261029-ci-permission-docs1",
+    "hash": "cb5b5c75927c3189"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -236,8 +236,8 @@
     "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261022-everyday2",
-    "hash": "90689f9cbbabdfd8"
+    "stamp": "20261029-ci-permission-docs1",
+    "hash": "520373e6a5576e25"
   },
   "src/features/assistant/writing-commands.js": {
     "stamp": "20261024-writing-session1",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261028-workspace-todos2",
-    "hash": "2d8b9e6a0a23c2dc"
+    "stamp": "20261029-ci-permission-docs1",
+    "hash": "2df135461815fdd2"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",

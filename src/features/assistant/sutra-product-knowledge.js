@@ -493,7 +493,7 @@
             summary: 'Settings ▸ Assistant controls workspace access permission, context depth, panel behavior, confirmation mode, conversation memory depth, action previews, and long-term Assistant Memory.',
             body: [
                 'In **Settings ▸ Assistant** you control how the assistant works:',
-                '- **Assistant preset** — new workspaces use Everyday: relevant workspace retrieval, recent conversation context, and reviewed changes with Apply and Undo. Private excludes workspace content and treats messages independently. Advanced keeps your configuration for individual controls. Presets apply immediately after unsaved Settings changes are saved or reverted; existing workspaces are not silently upgraded and area Blocks remain.',
+                '- **Assistant preset** — new workspaces use Everyday: relevant workspace retrieval, recent conversation context, and reviewed changes with Apply and Undo. Private excludes workspace content and treats messages independently. Advanced keeps your configuration for individual controls. Presets apply immediately after unsaved Settings changes are saved or reverted; wait for local save confirmation before reloading. A failed save retains the selected permissions and offers Retry save. Existing workspaces are not silently upgraded and area Blocks remain.',
                 '- **Workspace access** — whether it may read workspace areas. Choose Read workspace for ordinary read access; explicit area blocks remain respected.',
                 '- **Context depth** — where to search for relevant context. Workspace-aware does not grant access when Workspace access is off.',
                 '- **Confirmation & action previews** — whether proposed actions need explicit approval.',
