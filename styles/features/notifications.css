@@ -121,10 +121,13 @@
         max-height: 80dvh;
         border-radius: var(--radius-lg, 22px) var(--radius-lg, 22px) 0 0;
         box-shadow: 0 -18px 54px rgba(0, 0, 0, 0.28);
-        transform: translateY(100%);
+        /* Keep the sheet in its viewport position on the first open frame.
+           WebKit can expose the closed translateY(100%) geometry immediately
+           after aria-hidden changes, before the slide transition advances. */
+        transform: none;
     }
     #notifPanel.notif-panel--open {
-        transform: translateY(0);
+        transform: none;
     }
 
     .notif-panel-header {
