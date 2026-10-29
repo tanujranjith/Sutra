@@ -89,8 +89,10 @@
   function settleSync(view) {
     var resolvedView = normalizeView(view || (document.body && document.body.dataset.view));
     sync(resolvedView);
-    window.requestAnimationFrame(function () { sync(resolvedView); });
-    window.setTimeout(function () { sync(resolvedView); }, 120);
+    // Deferred layout work must follow the live route. A callback from the
+    // previous view must not briefly bring its sidebar back after navigation.
+    window.requestAnimationFrame(function () { sync(); });
+    window.setTimeout(function () { sync(); }, 120);
   }
 
   // The canonical page tree is rendered as a flat list. Its existing inline
