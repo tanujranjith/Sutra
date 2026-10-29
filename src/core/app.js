@@ -24104,12 +24104,22 @@ function populateProgressDashboard() {
         }
 
         // Write a new due date and/or completion onto the underlying record.
-        // Returns true only on a persisted change so callers never report a phantom
-        // success. Homework rides hwTasks:v2; tasks ride appData (.completed).
+        // Returns true once the canonical store/save path accepts the change.
+        // IndexedDB durability remains tracked by the shared save-health surface.
         function mutateDeadlineRecord(item, change) {
             if (!item) return false;
             const sourceId = String(item.sourceId || '');
             if (!sourceId) return false;
+            function commitPatch(row, patch, save) {
+                const fields = Object.keys(patch);
+                const previous = fields.map(field => ({ field, present: Object.prototype.hasOwnProperty.call(row, field), value: row[field] }));
+                const restore = () => previous.forEach(({ field, present, value }) => { if (present) row[field] = value; else delete row[field]; });
+                Object.assign(row, patch);
+                try {
+                    if (save() === false) { restore(); return false; }
+                } catch (error) { restore(); throw error; }
+                return true;
+            }
             try {
                 if (item.source === 'apexam' && change.done === true && typeof _setExamTaken === 'function') {
                     if (!apStudyWorkspace || !Array.isArray(apStudyWorkspace.subjects) || !apStudyWorkspace.subjects.some(subject => String(subject.id) === sourceId)) return false;
@@ -24120,7 +24130,7 @@ function populateProgressDashboard() {
                     const workspace = item.sourceView === 'collegeapp' ? collegeAppWorkspace : collegeTracker;
                     const row = workspace && Array.isArray(workspace[collection]) && workspace[collection].find(value => String(value.id) === sourceId);
                     if (!row) return false;
-                    let previousDeadlineDates;
+                    const patch = {};
                     if (collection === 'checklist' || collection === 'deadlines') {
                         const field = String(item.id).split(':').pop();
                         const allowed = collection === 'checklist'
@@ -24128,23 +24138,14 @@ function populateProgressDashboard() {
                             : ['essaysDoneBy', 'submitBy', 'applicationDeadline'];
                         if (!allowed.includes(field) || !row[field] || String(row[field]).trim() !== String(item.dueDate || '').trim()) return false;
                         if (row.completedDeadlineDates != null && (typeof row.completedDeadlineDates !== 'object' || Array.isArray(row.completedDeadlineDates))) return false;
-                        previousDeadlineDates = row.completedDeadlineDates;
-                        row.completedDeadlineDates = { ...(row.completedDeadlineDates || {}), [field]: String(row[field]).trim() };
+                        patch.completedDeadlineDates = { ...(row.completedDeadlineDates || {}), [field]: String(row[field]).trim() };
                     } else if (collection === 'essays') {
                         const field = { firstDraftBy: 'firstDraftDone', reviewBy: 'reviewSubmitted', revisionBy: 'revisionSubmitted', finalBy: 'finalDraft' }[String(item.id).split(':').pop()];
                         if (!field) return false;
-                        row[field] = true;
-                    } else if (collection === 'essayOrganizer') row.draftStatus = 'final';
-                    else row.status = 'submitted';
-                    try { persistAppData(); }
-                    catch (error) {
-                        if (collection === 'checklist' || collection === 'deadlines') {
-                            if (previousDeadlineDates === undefined) delete row.completedDeadlineDates;
-                            else row.completedDeadlineDates = previousDeadlineDates;
-                        }
-                        throw error;
-                    }
-                    return true;
+                        patch[field] = true;
+                    } else if (collection === 'essayOrganizer') patch.draftStatus = 'final';
+                    else patch.status = 'submitted';
+                    return commitPatch(row, patch, () => persistAppData());
                 }
                 if (item.source === 'homework') {
                     const raw = readLocalArraySafe('hwTasks:v2');
@@ -24154,28 +24155,25 @@ function populateProgressDashboard() {
                     if (change.done) { row.done = true; row.completedAt = new Date().toISOString(); }
                     if (change.dueDate) row.dueDate = change.dueDate;
                     row.updatedAt = new Date().toISOString();
-                    writeLocalArraySafe('hwTasks:v2', raw);
+                    if (!writeLocalArraySafe('hwTasks:v2', raw)) return false;
                     try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
                     return true;
                 }
                 if (item.source === 'task' && typeof tasks !== 'undefined' && Array.isArray(tasks)) {
                     const row = tasks.find(t => String(t.id) === sourceId);
                     if (!row) return false;
-                    const previousCompleted = row.completed, previousDueDate = row.dueDate;
-                    if (change.done) row.completed = true;
-                    if (change.dueDate) row.dueDate = change.dueDate;
-                    try { persistAppData && persistAppData(); }
-                    catch (error) { row.completed = previousCompleted; row.dueDate = previousDueDate; throw error; }
+                    const patch = {};
+                    if (change.done) patch.completed = true;
+                    if (change.dueDate) patch.dueDate = change.dueDate;
+                    if (!commitPatch(row, patch, () => persistAppData())) return false;
                     try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
                     return true;
                 }
                 if (item.source === 'timeline' && typeof timeBlocks !== 'undefined' && Array.isArray(timeBlocks)) {
                     const row = timeBlocks.find(block => String(block && block.id) === sourceId);
                     if (!row || change.done !== true) return false;
-                    row.completed = true;
-                    row.completedAt = new Date().toISOString();
-                    row.updatedAt = row.completedAt;
-                    try { saveTimeBlocks && saveTimeBlocks(); } catch (e) { return false; }
+                    const completedAt = new Date().toISOString();
+                    if (!commitPatch(row, { completed: true, completedAt, updatedAt: completedAt }, () => saveTimeBlocks())) return false;
                     try { renderTimeline && renderTimeline(); } catch (e) { /* non-critical */ }
                     return true;
                 }

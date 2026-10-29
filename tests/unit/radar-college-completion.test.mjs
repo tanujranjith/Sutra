@@ -108,3 +108,91 @@ test('failed saves and unknown completion maps preserve the original data', () =
   assert.equal(row.completedDeadlineDates, 'unrecognized legacy value');
   assert.equal(methods.restoreCollegeDeadlineRecord('checklist', 'one', 'earlyDeadline'), false);
 });
+
+test('failed College completion saves restore every non-map field and preserve unknown data', () => {
+  const cases = [
+    ...[['firstDraftBy', 'firstDraftDone'], ['reviewBy', 'reviewSubmitted'], ['revisionBy', 'revisionSubmitted'], ['finalBy', 'finalDraft']]
+      .map(([deadline, field]) => ({ view: 'college', collection: 'essays', deadline, field, initial: false })),
+    { view: 'collegeapp', collection: 'essayOrganizer', field: 'draftStatus', initial: 'drafting' },
+    { view: 'collegeapp', collection: 'recommenders', field: 'status', initial: 'requested' },
+    { view: 'collegeapp', collection: 'scholarships', field: 'status', initial: 'applying' },
+    { view: 'collegeapp', collection: 'collegeTracker', field: 'status', initial: 'planning' }
+  ];
+  for (const spec of cases) {
+    for (const withField of [false, true]) {
+      const row = { id: 'one', futureData: { keep: ['unknown'] } };
+      if (withField) row[spec.field] = spec.initial;
+      const before = structuredClone(row);
+      const tracker = spec.view === 'college' ? { [spec.collection]: [row] } : {};
+      const app = spec.view === 'collegeapp' ? { [spec.collection]: [row] } : {};
+      const actions = new Function('collegeAppWorkspace', 'collegeTracker', 'persistAppData', 'window', declarations + '; return { mutateDeadlineRecord };')(
+        app, tracker, () => { throw new Error('save failed'); }, {});
+      const item = { source: 'college', sourceView: spec.view, sourceCollection: spec.collection, sourceId: 'one', id: `college:${spec.collection}:one:${spec.deadline || 'record'}` };
+      assert.equal(actions.mutateDeadlineRecord(item, { done: true }), false, spec.collection + ':' + spec.field);
+      assert.deepEqual(row, before, spec.collection + ':' + spec.field + ' must be unchanged');
+    }
+  }
+});
+
+test('a rejected Homework write reports failure and emits no update', () => {
+  for (const change of [{ done: true }, { dueDate: '2026-11-02' }]) {
+    const original = [{ id: 'one', title: 'Lab', done: false, dueDate: '2026-11-01', futureData: { keep: true } }];
+    const events = [];
+    const writes = [];
+    const actions = new Function('readLocalArraySafe', 'writeLocalArraySafe', 'window', 'CustomEvent', declarations + '; return { mutateDeadlineRecord };')(
+      () => structuredClone(original),
+      (key, value) => { writes.push({ key, value }); return false; },
+      { dispatchEvent: event => events.push(event.type) },
+      class { constructor(type) { this.type = type; } }
+    );
+    assert.equal(actions.mutateDeadlineRecord({ source: 'homework', sourceId: 'one' }, change), false);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].key, 'hwTasks:v2');
+    assert.deepEqual(events, []);
+    assert.equal(original[0].done, false);
+    assert.equal(original[0].dueDate, '2026-11-01');
+  }
+});
+
+test('an accepted Homework write emits its update', () => {
+  const events = [];
+  const actions = new Function('readLocalArraySafe', 'writeLocalArraySafe', 'window', 'CustomEvent', declarations + '; return { mutateDeadlineRecord };')(
+    () => [{ id: 'one', done: false }], () => true,
+    { dispatchEvent: event => events.push(event.type) },
+    class { constructor(type) { this.type = type; } }
+  );
+  assert.equal(actions.mutateDeadlineRecord({ source: 'homework', sourceId: 'one' }, { done: true }), true);
+  assert.deepEqual(events, ['homework:updated']);
+});
+
+test('rejected task saves restore changed fields and do not rerender', () => {
+  for (const withFields of [false, true]) {
+    for (const reject of [() => false, () => { throw new Error('save failed'); }]) {
+      const row = { id: 'one', futureData: { keep: true } };
+      if (withFields) Object.assign(row, { completed: false, dueDate: '2026-11-01' });
+      const before = structuredClone(row);
+      let renders = 0;
+      const actions = new Function('tasks', 'persistAppData', 'renderTaskViews', 'window', declarations + '; return { mutateDeadlineRecord };')(
+        [row], reject, () => { renders++; }, {});
+      assert.equal(actions.mutateDeadlineRecord({ source: 'task', sourceId: 'one' }, { done: true, dueDate: '2026-11-02' }), false);
+      assert.deepEqual(row, before);
+      assert.equal(renders, 0);
+    }
+  }
+});
+
+test('rejected Timeline saves restore completion timestamps and do not rerender', () => {
+  for (const withFields of [false, true]) {
+    for (const reject of [() => false, () => { throw new Error('save failed'); }]) {
+      const row = { id: 'one', futureData: { keep: true } };
+      if (withFields) Object.assign(row, { completed: false, completedAt: 'original completion', updatedAt: 'original update' });
+      const before = structuredClone(row);
+      let renders = 0;
+      const actions = new Function('timeBlocks', 'saveTimeBlocks', 'renderTimeline', 'window', declarations + '; return { mutateDeadlineRecord };')(
+        [row], reject, () => { renders++; }, {});
+      assert.equal(actions.mutateDeadlineRecord({ source: 'timeline', sourceId: 'one' }, { done: true }), false);
+      assert.deepEqual(row, before);
+      assert.equal(renders, 0);
+    }
+  }
+});

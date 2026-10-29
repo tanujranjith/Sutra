@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261029-quality-capture1",
-    "hash": "d6cdd3fdaac160ca"
+    "stamp": "20261029-quality-radar1",
+    "hash": "b7ceb3a39a0b1812"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

@@ -59,6 +59,11 @@ save quick-task form now lives inside Your day; captured records remain in
 To-do and normal persistence/Sync paths. The old separate Tasks widget is hidden
 on Home. No workspace schema or storage identifiers change.
 
+Radar and overdue-recovery actions report success only when the canonical
+write path accepts the change. A synchronous rejection restores the affected
+College, task, or Timeline fields and leaves Homework unchanged. The shared
+save-health surface continues to report asynchronous IndexedDB save failures.
+
 Home overflow actions continue bubbling to their canonical document delegates.
 Suggest plan and Plan week open review previews and never apply schedule changes
 until the user confirms them. Closing the overflow does not consume the action.
