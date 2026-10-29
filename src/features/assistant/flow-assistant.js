@@ -5268,7 +5268,7 @@
         if (/\b(?:this|current|open|active)\s+(?:note|page|canvas|slide)|\b(?:selected|highlighted)\s+text\b/i.test(text)) return false;
         return /\b(?:my|our|workspace)\b/i.test(text)
             && /\b(?:find|search|investigate|compare)\b|\blook\s+up\b/i.test(text)
-            && /\b(?:notes?|pages?|tasks?|to[ -]?dos?|homework|assignments?|courses?|classes|grades?|exams?|tests?|schedule|calendar|records?|workspace|materials?|documents?|projects?)\b/i.test(text);
+            && /\b(?:notes?|pages?|tasks?|to[ -]?dos?|homework|assignments?|worksheets?|courses?|classes|grades?|exams?|tests?|midterms?|finals?|schedule|calendar|records?|workspace|materials?|documents?|projects?)\b/i.test(text);
     }
 
     // Search and every subsequent read share this deny-by-default policy. No

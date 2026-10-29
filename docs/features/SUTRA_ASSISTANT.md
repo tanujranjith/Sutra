@@ -154,10 +154,11 @@ evidence without requiring a provider.
 
 ### On-demand workspace investigation
 
-Explicit workspace requests such as “investigate my Orchid assignment notes” or
-“compare my Orchid and Cedar assignment records” can ask the connected provider
-to search and then read additional permitted canonical records. Ordinary factual
-questions retain the existing single-request context selection; greetings, Minimal
+Explicit workspace requests such as “investigate my Orchid assignment notes,”
+“compare my Orchid and Cedar assignment records,” or “compare my Orchid worksheet
+with Biology Midterm” can ask the connected provider to search and then read
+additional permitted canonical records. Ordinary factual questions retain the
+existing single-request context selection; greetings, Minimal
 context, current-note/selected-text requests, attachments, theme creation, and
 one-time PIN reads keep their existing paths. Local note searches still run
 on-device when local routing is enabled.

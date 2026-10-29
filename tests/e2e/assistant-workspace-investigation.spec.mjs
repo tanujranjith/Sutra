@@ -3,6 +3,11 @@ import { waitForAppReady } from './helpers/app-ready.mjs';
 
 test.use({ serviceWorkers: 'block' });
 const tool = data => '```sutra-lookup\n' + JSON.stringify(data) + '\n```';
+async function saveSettings(page) {
+  const topButton = page.locator('#settingsApplyBtnTop');
+  const button = await topButton.isVisible() ? topButton : page.locator('#settingsApplyBtn');
+  await button.click();
+}
 async function open(page, provider = 'openai') {
   await page.addInitScript(() => sessionStorage.setItem('sutra_intro_played', '1'));
   await page.goto('/Sutra.html'); await waitForAppReady(page);
@@ -67,6 +72,41 @@ for (const provider of ['openai', 'gemini']) {
     expect(saved.filter(row => row.role === 'assistant')).toHaveLength(1);
   });
 }
+
+test('workspace classifier recognizes natural worksheet wording and leaves unrelated comparisons alone', async ({ page }) => {
+  await open(page);
+  const result = await page.evaluate(() => {
+    const assistant = window.flowAssistant;
+    const naturalWorkspaceQuestion = assistant.buildRequestEnrichment(
+      'Compare my Orchid protocol worksheet with Biology Midterm.', 'openai', { depth: 'workspace' }
+    );
+    const unrelatedQuestion = assistant.buildRequestEnrichment(
+      'Compare these two writing styles.', 'openai', { depth: 'workspace' }
+    );
+    return {
+      workspaceInvestigation: naturalWorkspaceQuestion?.workspaceInvestigation === true,
+      unrelatedInvestigation: unrelatedQuestion?.workspaceInvestigation === true
+    };
+  });
+  expect(result.workspaceInvestigation).toBe(true);
+  expect(result.unrelatedInvestigation).toBe(false);
+});
+
+test('natural worksheet lookup preserves planning permission checks before task evidence is sent', async ({ page }) => {
+  const requests = [];
+  await mock(page, 'openai', [tool({ search: 'Orchid protocol worksheet Biology Midterm' }), 'Tasks & schedule access is blocked.'], requests);
+  await open(page);
+  await page.evaluate(() => {
+    window.flowAtelier.tasks.push({ id: 'denied-worksheet', title: 'Orchid protocol worksheet', notes: 'DENIED_WORKSHEET_BODY_SENTINEL', completed: false });
+    window.SutraWorkspaceEntityRegistry.invalidate('denied-worksheet-fixture');
+    window.SutraAssistantPermissions.setArea('planning', 'denied');
+  });
+
+  await send(page, 'Compare my Orchid protocol worksheet with Biology Midterm.');
+  await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('Tasks & schedule access is blocked.');
+  expect(requests).toHaveLength(2);
+  expect(JSON.stringify(requests)).not.toContain('DENIED_WORKSHEET_BODY_SENTINEL');
+});
 
 test('same-title ambiguity requires a keyboard-accessible explicit choice before source bodies are sent', async ({ page }) => {
   const requests = [];
@@ -140,22 +180,22 @@ test('saving Assistant enablement loads and reinitializes workspace-access contr
   const status = page.locator('#assistantWorkspaceAccessStatus');
   if (await toggle.isChecked()) {
     await toggle.uncheck({ force: true });
-    await page.locator('#settingsApplyBtnTop').click();
+    await saveSettings(page);
   }
   await expect(mode).toBeDisabled();
   await toggle.check({ force: true });
-  await page.locator('#settingsApplyBtnTop').click();
+  await saveSettings(page);
   await expect(mode).toBeEnabled();
   await expect(status).not.toContainText('Enable Sutra Assistant');
   await mode.selectOption('read_only');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('read_only');
   // Exercise the loaded -> teardown -> reinit path as well as first enable.
   await toggle.uncheck({ force: true });
-  await page.locator('#settingsApplyBtnTop').click();
+  await saveSettings(page);
   await expect(mode).toBeDisabled();
   await expect(status).toContainText('Enable Sutra Assistant');
   await toggle.check({ force: true });
-  await page.locator('#settingsApplyBtnTop').click();
+  await saveSettings(page);
   await expect(mode).toBeEnabled();
   await expect(mode).toHaveValue('read_only');
   await mode.selectOption('ask_per_area');
