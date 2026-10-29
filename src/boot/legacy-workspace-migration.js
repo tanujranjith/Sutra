@@ -419,8 +419,11 @@
         ...originalApi,
         create(options) {
             const requested = options && typeof options === 'object' ? options : {};
+            // Match SutraWorkspaceDB.create's default store so callers that
+            // specify the canonical database alone still receive recovery
+            // journaling and the confirmed-root marker.
             const isCanonicalWorkspace = String(requested.dbName || '') === DB_NAME
-                && String(requested.storeName || '') === STORE_NAME;
+                && String(requested.storeName || STORE_NAME) === STORE_NAME;
             const adapterOptions = isCanonicalWorkspace
                 ? {
                     ...requested,

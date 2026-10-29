@@ -306,6 +306,34 @@ test('onboarding-only repair journals the prior meaningful root', async () => {
   existingTab.close();
 });
 
+test('canonical workspace writes keep recovery journaling when the default store name is omitted', async () => {
+  const prior = {
+    pages: [{ id: 'confirmed-page', title: 'Keep this page' }],
+    settings: { onboarding: { version: 1, completed: true, skipped: false, migratedFromLegacy: true } }
+  };
+  const empty = {
+    pages: [],
+    settings: { onboarding: { version: 1, completed: true, skipped: false, migratedFromLegacy: true } }
+  };
+
+  for (const includeStoreName of [true, false]) {
+    const runtime = makeRuntime({ records: { root: prior } });
+    runtime.run();
+    await runtime.waitForMigration();
+
+    const options = { dbName: 'noteflow_atelier_db', version: 8 };
+    if (includeStoreName) options.storeName = 'workspace';
+    const db = runtime.context.SutraWorkspaceDB.create(options);
+    const result = await db.writeIf('root', empty, current => Array.isArray(current?.pages)
+      && current.pages.some(page => page.id === 'confirmed-page'));
+
+    assert.equal(result.written, true);
+    assert.deepEqual(runtime.rows.get('workspace-last-meaningful'), prior,
+      `the previous root remains journaled with ${includeStoreName ? 'an explicit' : 'the default'} store name`);
+    assert.equal(runtime.rows.get('workspace-confirmed-root').meaningful, false);
+  }
+});
+
 test('a confirmed empty workspace is not replaced by an older recovery journal', async () => {
   const emptyRoot = { pages: [] };
   const runtime = makeRuntime({

@@ -202,6 +202,7 @@ test('Notes and folders stay inside the sidebar list during icon and page-link p
 test('the body-portaled Split View Note selector closes when its owner becomes inactive', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 760 });
   await openApp(page);
+  await page.evaluate(() => window.setActiveView('notes'));
   const ids = await page.evaluate(() => {
     const hooks = window.__sutraPublicBetaTestHooks;
     return [

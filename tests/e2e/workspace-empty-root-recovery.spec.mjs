@@ -246,8 +246,15 @@ test('a canonically confirmed empty workspace does not resurrect its journal', a
       version: Number(window.SutraMigrations?.CURRENT_VERSION) || 8
     });
     try {
-      return await db.writeIf('root', next, current => Array.isArray(current?.pages)
+      const result = await db.writeIf('root', next, current => Array.isArray(current?.pages)
         && current.pages.some(item => item.id === 'intentionally-removed-page'));
+      const journal = await db.read('workspace-last-meaningful');
+      const marker = await db.read('workspace-confirmed-root');
+      return {
+        written: result.written,
+        journalPageIds: Array.isArray(journal?.pages) ? journal.pages.map(item => item.id) : null,
+        markerMeaningful: marker?.meaningful
+      };
     } finally {
       db.close();
     }
@@ -262,10 +269,22 @@ test('a canonically confirmed empty workspace does not resurrect its journal', a
   const userPageIds = stored.pages
     .filter(item => item.id !== 'help_page' && item.systemRole !== 'help-docs' && item.builtInId !== 'help-docs')
     .map(item => item.id);
+  const journalPageIds = Array.isArray(journal?.pages) ? journal.pages.map(item => item.id) : null;
   expect({
     rootStayedEmpty: userPageIds.length === 0,
-    journalRetained: journal.pages.some(item => item.id === 'intentionally-removed-page'),
+    journalAtCommit: committed.journalPageIds,
+    journalAfterReload: journalPageIds,
+    markerAtCommitMeaningful: committed.markerMeaningful,
+    markerAfterReloadMeaningful: marker?.meaningful,
     userPageIds,
     marker
-  }).toEqual({ rootStayedEmpty: true, journalRetained: true, userPageIds: [], marker: expect.any(Object) });
+  }).toEqual({
+    rootStayedEmpty: true,
+    journalAtCommit: ['intentionally-removed-page'],
+    journalAfterReload: ['intentionally-removed-page'],
+    markerAtCommitMeaningful: false,
+    markerAfterReloadMeaningful: false,
+    userPageIds: [],
+    marker: expect.any(Object)
+  });
 });
