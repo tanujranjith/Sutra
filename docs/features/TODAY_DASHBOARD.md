@@ -22,9 +22,9 @@ deadline and schedule snapshots, secondary signals, and advanced planners remain
 available through the Study and Everything presets or Home customization; they
 are not deleted. An older saved Calm snapshot migrates to the current
 essentials-only composition, while custom layouts retain their explicit choices.
-Desktop users can customize from the Home toolbar or More actions menu. The
-dedicated phone Home shell remains the canonical compact mobile experience and
-is not rearranged by desktop widget preferences.
+Desktop users can customize from the Home toolbar or More actions menu. On
+phones the shared Your day and radar surfaces stack above canonical bottom
+navigation; the older duplicate phone Home shell remains hidden.
 
 Reordering uses visible buttons in addition to pointer controls, presets are
 real buttons with pressed state, and the modal delegates focus containment,
@@ -53,6 +53,10 @@ actions remain in More and Planning tools disclosures. The existing confirmed-
 save quick-task form now lives inside Your day; captured records remain in
 To-do and normal persistence/Sync paths. The old separate Tasks widget is hidden
 on Home. No workspace schema or storage identifiers change.
+
+Home overflow actions continue bubbling to their canonical document delegates.
+Suggest plan and Plan week open review previews and never apply schedule changes
+until the user confirms them. Closing the overflow does not consume the action.
 
 On phones, the daily panel and the existing radar stack within the Home content;
 canonical mobile navigation stays intact. Navbar markup, radar renderer/filter,

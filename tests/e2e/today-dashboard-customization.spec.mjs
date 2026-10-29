@@ -17,9 +17,10 @@ async function openHomeCustomizer(page) {
 test('Calm Home shows the essential workflow without duplicate cards', async ({ page }) => {
   await expect(page.locator('#view-today .today-nextup-card')).toBeVisible();
   await expect(page.locator('#view-today .today-radar-card')).toBeVisible();
-  await expect(page.locator('#view-today .today-plan-section')).toBeVisible();
+  await expect(page.locator('#view-today .your-day-heading h3')).toHaveText('Your day');
+  await expect(page.locator('#view-today .today-plan-section')).toHaveCount(0);
   await expect(page.locator('#view-today #tccBackupHealth')).toBeVisible();
-  await expect(page.locator('#view-today #tccAttentionTasks')).toBeVisible();
+  await expect(page.locator('#view-today #tccAttentionTasks')).toBeHidden();
   await expect(page.locator('#homeQuickTaskInput')).toBeVisible();
 
   for (const selector of [
@@ -69,11 +70,22 @@ test('Today widgets can be shown, resized, reordered, and persisted', async ({ p
   expect(stored.hidden).not.toContain('habits');
 });
 
-test('Calm preset keeps the mobile Today shell canonical', async ({ page }) => {
+test('Calm preset keeps one Your day panel above the mobile radar', async ({ page }) => {
   await openHomeCustomizer(page);
   await page.getByRole('button', { name: 'Calm Daily essentials first', exact: true }).click();
   await page.getByRole('button', { name: 'Done' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#todayMobileShell')).toBeVisible();
+  await expect(page.locator('#todayMobileShell')).toBeHidden();
+  await expect(page.locator('#view-today .your-day-panel')).toBeVisible();
+  await expect(page.locator('#view-today .today-radar-card')).toBeVisible();
+  await expect(page.locator('#homeQuickTaskInput')).toBeVisible();
+  await expect(page.locator('#sutraBottomNav')).toBeVisible();
+  const positions = await page.evaluate(() => ({
+    dayBottom: document.querySelector('.your-day-panel').getBoundingClientRect().bottom,
+    radarTop: document.querySelector('.today-radar-card').getBoundingClientRect().top,
+    overflow: document.documentElement.scrollWidth > window.innerWidth
+  }));
+  expect(positions.dayBottom).toBeLessThanOrEqual(positions.radarTop);
+  expect(positions.overflow).toBe(false);
   await expect(page.locator('#todayCustomizeDashboardBtn')).toBeHidden();
 });

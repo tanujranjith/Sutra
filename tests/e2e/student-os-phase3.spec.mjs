@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Student OS Phase 3 — new connected-workspace surfaces:
 //  • Assignment Studio 2.0: deterministic plan generation + extended milestone
@@ -30,6 +31,7 @@ async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await completeOnboarding(page);
+  await waitForAppReady(page);
   await page.waitForFunction(() => !!window.SutraAssignmentStudio && !!window.SutraPlanningEngine
     && !!window.SutraGradePlanner && !!window.sutraIntelligence && !!window.flowAtelier);
 }
@@ -104,20 +106,20 @@ test('Planning engine is wired and previews without auto-applying', async ({ pag
     expect(blocks[i].startMin).toBeGreaterThanOrEqual(blocks[i - 1].endMin);
   }
 
-  // The Today "Suggest plan" button opens a preview modal; nothing is written yet.
+  // The Home overflow's delegated action opens a preview without writing blocks.
   const blocksBefore = await page.evaluate(() => (window.flowAtelier.timeBlocks || []).length);
-  await page.evaluate(() => {
-    const btn = document.querySelector('[data-plan-preview="day"]');
-    if (btn) btn.click();
-  });
-  await page.waitForTimeout(300);
-  const modalVisible = await page.evaluate(() => {
-    const m = document.getElementById('sutraPlanPreviewModal');
-    return !!m && !m.hidden;
-  });
+  await page.locator('#todayHeaderMoreBtn').click();
+  await page.getByRole('menuitem', { name: 'Suggest plan', exact: true }).click();
+  const preview = page.locator('#sutraPlanPreviewModal');
+  await expect(preview).toBeVisible();
+  await expect(page.locator('#todayHeaderMoreMenu')).toBeHidden();
   const blocksAfter = await page.evaluate(() => (window.flowAtelier.timeBlocks || []).length);
-  expect(modalVisible).toBe(true);
   expect(blocksAfter).toBe(blocksBefore); // preview only — no auto-apply
+  await preview.locator('[data-plan-close]').first().click();
+  await page.locator('#todayHeaderMoreBtn').click();
+  await page.getByRole('menuitem', { name: 'Plan week', exact: true }).click();
+  await expect(preview).toBeVisible();
+  expect(await page.evaluate(() => (window.flowAtelier.timeBlocks || []).length)).toBe(blocksBefore);
 });
 
 test('Import parser and grade-risk engine are exposed in the browser', async ({ page }) => {
