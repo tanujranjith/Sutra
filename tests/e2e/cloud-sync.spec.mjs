@@ -1485,12 +1485,51 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(secondTab);
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toHaveCount(0);
       expect(await B.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
+      const captureSyncAttempt = async page => {
+        try {
+          return await page.evaluate(async () => {
+            const safeToken = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value)
+              ? value
+              : null;
+            const readState = () => {
+              try { return safeToken(window.SutraSync && window.SutraSync.status().state); }
+              catch (error) { return null; }
+            };
+            try {
+              const outcome = await window.SutraSync.syncNow();
+              return {
+                kind: outcome && outcome.error ? 'error' : outcome && outcome.skipped ? 'skipped' : 'completed',
+                state: readState(),
+                errorCode: safeToken(outcome && outcome.error && outcome.error.code),
+                errorName: safeToken(outcome && outcome.error && outcome.error.name),
+                skipped: outcome && outcome.skipped === true,
+                reason: safeToken(outcome && outcome.reason)
+              };
+            } catch (error) {
+              return {
+                kind: 'threw',
+                state: readState(),
+                errorCode: safeToken(error && error.code),
+                errorName: safeToken(error && error.name)
+              };
+            }
+          });
+        } catch (error) {
+          return {
+            kind: 'evaluate-error',
+            errorName: typeof error?.name === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(error.name)
+              ? error.name
+              : 'unavailable'
+          };
+        }
+      };
+      const lastAttemptByTab = { primary: null, secondTab: null };
       await expect.poll(async () => {
         // The primary tab may currently own the single-flight lease. Drive
         // both tabs so one performs the blocked request and relays `offline`
         // instead of repeatedly observing a legitimate `idle` skip.
-        await B.page.evaluate(() => window.SutraSync.syncNow()).catch(() => null);
-        await secondTab.evaluate(() => window.SutraSync.syncNow()).catch(() => null);
+        lastAttemptByTab.primary = { phase: 'offline', ...(await captureSyncAttempt(B.page)) };
+        lastAttemptByTab.secondTab = { phase: 'offline', ...(await captureSyncAttempt(secondTab)) };
         const states = await Promise.all([
           B.page.evaluate(() => window.SutraSync.status().state),
           secondTab.evaluate(() => window.SutraSync.status().state)
@@ -1499,42 +1538,10 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }, { timeout: 15000 }).toBe(true);
       B.net.down = false;
       await secondTab.evaluate(() => window.SutraSync.resume());
-      let lastReconnectAttempt = null;
       try {
         await expect.poll(async () => {
           if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
-          try {
-            lastReconnectAttempt = await secondTab.evaluate(async () => {
-              const safeToken = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value)
-                ? value
-                : null;
-              const readState = () => {
-                try { return safeToken(window.SutraSync && window.SutraSync.status().state); }
-                catch (error) { return null; }
-              };
-              try {
-                const outcome = await window.SutraSync.syncNow();
-                return {
-                  state: readState(),
-                  errorCode: safeToken(outcome && outcome.error && outcome.error.code),
-                  skipped: outcome && outcome.skipped === true,
-                  skipReason: safeToken(outcome && outcome.reason)
-                };
-              } catch (error) {
-                return {
-                  state: readState(),
-                  errorCode: safeToken(error && error.code),
-                  errorName: safeToken(error && error.name)
-                };
-              }
-            });
-          } catch (error) {
-            lastReconnectAttempt = {
-              evaluateErrorName: typeof error?.name === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(error.name)
-                ? error.name
-                : 'unavailable'
-            };
-          }
+          lastAttemptByTab.secondTab = { phase: 'reconnect', ...(await captureSyncAttempt(secondTab)) };
           return (await secondTab.locator('#sutraRevokedDeviceScreen').count()) > 0;
         }, { timeout: 20000 }).toBe(true);
       } catch (error) {
@@ -1607,7 +1614,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           const revokedDevice = server.state.devices[bDeviceId] || {};
           console.error('[revoke-wipe diagnostics]', JSON.stringify({
             expectedDeviceId: bDeviceId,
-            lastReconnectAttempt,
+            lastSyncAttemptByTab: lastAttemptByTab,
             tabs: { primary: primaryTab, secondTab: secondTabSnapshot },
             networkDown: B.net.down === true,
             server: {

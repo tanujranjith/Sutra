@@ -56,6 +56,18 @@ export async function routeSyncServer(context, server, net = { down: false }) {
           : Number.isFinite(Number(responseStatus)) ? Number(responseStatus) : null,
         ok: result && typeof result.ok === 'boolean' ? result.ok : null,
         resultCode: result ? safeToken(result.code, 64) : null,
+        statusContractMatches: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.contract === 'sutra-device-status-v1')
+          : undefined,
+        statusDeviceMatches: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.deviceId === body.deviceId)
+          : undefined,
+        statusUserMatches: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.userId === server.state.userId)
+          : undefined,
+        statusWipeRequired: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.wipeRequired === true)
+          : undefined,
         outcome
       });
       if (net.syncRpcTrace.length > 200) net.syncRpcTrace.splice(0, net.syncRpcTrace.length - 200);
