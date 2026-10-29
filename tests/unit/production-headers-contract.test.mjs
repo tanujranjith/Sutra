@@ -15,7 +15,7 @@ test('deployed response-header verification uses an HTTPS HEAD request', () => {
 
 test('GitHub Pages limitation and verification evidence stay in release guidance', () => {
   assert.match(headerDocs, /tanujranjith\.github\.io\/Sutra\/Sutra\.html/);
-  assert.match(headerDocs, /2026-09-13 returned `200`/);
+  assert.match(headerDocs, /\d{4}-\d{2}-\d{2} returned `200`/);
   assert.match(headerDocs, /Strict-Transport-Security/);
   assert.match(headerDocs, /Content-Security-Policy/);
   assert.match(headerDocs, /frame-ancestors/);

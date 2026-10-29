@@ -1054,8 +1054,10 @@ test('attachment authentication and hash failures pause before acknowledgement a
     const status = engine.getStatus();
     assert.ok(failed.error, `${failureMode} failure must reject the cycle`);
     assert.equal(status.state, 'encryption-error');
-    assert.match(status.lastError, /attachment data \(sha256:/);
-    assert.ok(status.lastError.includes(hash.slice(0, 12)), 'status may expose only a bounded hash prefix');
+    assert.match(status.lastError, /Encrypted attachment data could not be verified/);
+    assert.equal(status.lastErrorStage, 'attachment');
+    assert.match(status.lastErrorReference, /^attachment-[0-9a-f]{8}$/);
+    assert.ok(!status.lastError.includes(hash.slice(0, 12)), 'display errors must not expose attachment hash prefixes');
     assert.ok(!status.lastError.includes(hash), 'status must not expose the full hash');
     assert.ok(!status.lastError.includes(badEnvelope.ct), 'status must not expose ciphertext');
     assert.equal(bridge.holder.applies > 0, true, 'authenticated record metadata may already have applied');

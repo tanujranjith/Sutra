@@ -258,8 +258,8 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
     collegeTracker: atomic(base, 'collegeTracker', {
       activeTab: 'research',
       research: [{ id: 'college-research-parity', college: 'Synthetic University', notes: 'Research sentinel' }],
-      checklist: [{ id: 'college-check-parity', task: 'Synthetic checklist', completed: false }],
-      deadlines: [{ id: 'college-deadline-parity', college: 'Synthetic University', date: '2026-11-01' }],
+      checklist: [{ id: 'college-check-parity', task: 'Synthetic checklist', completed: false, completedDeadlineDates: { earlyDeadline: '2026-11-01', regularDeadline: '2027-01-01', fafsaDeadline: '2026-12-01', cssDeadline: '2026-12-15' } }],
+      deadlines: [{ id: 'college-deadline-parity', college: 'Synthetic University', date: '2026-11-01', completedDeadlineDates: { essaysDoneBy: '2026-10-20', submitBy: '2026-10-31', applicationDeadline: '2026-11-01' } }],
       essays: [{ id: 'college-essay-parity', title: 'Parity essay', status: 'drafting' }],
       prompts: [{ id: 'college-prompt-parity', prompt: 'Describe a synthetic experience.', completed: false }]
     }),
@@ -481,7 +481,7 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
         assistant: { ...(preferences.assistant || {}), enabled: true, saveChatHistory: true, includeChatsInEncryptedBackups: true, includeChatsInPlaintextRecovery: false, chatMemoryMode: 'recent', chatMemoryDepth: 15, requireApprovalForActions: true,
           personalization: { nickname: 'Synthetic Student', persona: 'balanced', responseLength: 'concise', customInstructions: 'Use synthetic examples.', aboutUser: 'Parity fixture only.' },
           localEndpoint: { enabled: false, baseUrl: '', model: '', visionCapable: false } },
-        studentPreferences: { ...(preferences.studentPreferences || {}), schoolStartHour: 7, preferredReviewStyle: 'mixed' },
+        studentPreferences: { ...(preferences.studentPreferences || {}), schoolStartHour: 7, schoolEndHour: 15, earliestStudyHour: 16, latestStudyHour: 21, studyBlockMinutes: 45, breakMinutes: 10, bedtimeHour: 22, scheduleWeekends: false, overloadThreshold: 5, defaultHomeworkDifficulty: 'medium', preferredReviewStyle: 'mixed', hardestClasses: ['course-parity'] },
         integrations: { spotifyEnabled: false, chatgptEnabled: false },
         notifications: { mode: 'focused', deadlineAlerts: true, studyReminders: false, plannerAlerts: true },
         accessibility: { interfaceScale: 120, largerTouchTargets: true, highContrast: true, quietMode: true },

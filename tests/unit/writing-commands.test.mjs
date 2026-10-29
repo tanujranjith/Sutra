@@ -57,8 +57,11 @@ test('whole-note review forwards its visible scope and validates before applicat
   assert.equal(state.openOptions.contextText, 'First.\n\nSecond.');
   assert.equal(state.openOptions.scopeLabel, 'Current note: 2 text blocks');
   assert.equal(state.openOptions.validateDraft('Merged'), 'Keep two paragraphs');
-  assert.match(state.openOptions.instruction, /Preserve the number and order/);
+  assert.match(state.openOptions.instruction, /preserving meaning/);
   assert.equal(state.providerCalls.length, 0);
+  await state.openOptions.request({ contextText: state.openOptions.contextText, instruction: state.openOptions.instruction });
+  assert.equal(state.providerCalls.length, 1);
+  assert.match(state.providerCalls[0].systemPrompt, /Preserve the number and order of paragraphs/);
 });
 
 test('opening a writing review does not call the provider or forward ambient workspace data', async () => {
@@ -76,8 +79,9 @@ test('opening a writing review does not call the provider or forward ambient wor
   assert.equal(state.providerCalls.length, 0);
   assert.equal(state.openOptions.contextText, 'Seeded review passage');
   assert.deepEqual(Object.keys(state.openOptions).sort(), [
-    'command', 'contextText', 'instruction', 'isCurrent', 'request', 'title'
+    'command', 'contextText', 'instruction', 'isCurrent', 'request', 'sourcePageId', 'title'
   ]);
+  assert.equal(state.openOptions.sourcePageId, undefined);
   const forwarded = JSON.stringify({
     command: state.openOptions.command,
     contextText: state.openOptions.contextText,

@@ -139,12 +139,15 @@ test('everything fixture covers every portable top-level and named nested contra
     'settings.preferences': fixture.settings.preferences,
     'settings.preferences.assistant': fixture.settings.preferences.assistant,
     'settings.preferences.assistant.localEndpoint': fixture.settings.preferences.assistant.localEndpoint,
+    'settings.preferences.studentPreferences': fixture.settings.preferences.studentPreferences,
     'settings.preferences.today': fixture.settings.preferences.today,
     'settings.preferences.today.dashboard': fixture.settings.preferences.today.dashboard,
     'settings.preferences.quotes': fixture.settings.preferences.quotes,
     'settings.preferences.quotes.customQuotes[]': fixture.settings.preferences.quotes.customQuotes[0],
     homeworkWorkspace: fixture.homeworkWorkspace,
     'homeworkWorkspace.tasks[]': fixture.homeworkWorkspace.tasks[0],
+    'collegeTracker.checklist[].completedDeadlineDates': fixture.collegeTracker.checklist[0].completedDeadlineDates,
+    'collegeTracker.deadlines[].completedDeadlineDates': fixture.collegeTracker.deadlines[0].completedDeadlineDates,
     reviewWorkspace: fixture.reviewWorkspace
   };
   for (const [contract, fields] of Object.entries(inventory.nestedPersistentContracts)) {
