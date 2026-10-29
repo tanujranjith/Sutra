@@ -284,7 +284,7 @@ test('Assistant prompt enrichment rechecks memory permission at the final contex
   expect(report.approvedMemoryIds).toEqual(['memory-private-1']);
 });
 
-test('Assistant bridge failure is reported and mutating actions fail closed', async ({ page }) => {
+test('Assistant bridge failure is reported; To-do stays usable while bridge writes fail closed', async ({ page }) => {
   await openApp(page);
   const report = await page.evaluate(() => {
     const originalBridge = window.flowAtelier;
@@ -298,11 +298,15 @@ test('Assistant bridge failure is reported and mutating actions fail closed', as
       window.SutraAssistantPermissions.setMode('approved_actions');
       const context = window.getFlowAssistantContext({ depth: 'workspace' });
       const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' }, { reviewed: true });
+      const taskSaved = (window.SutraHomeworkStore.getSnapshot().tasks || []).some(row => row.title === 'Must not disappear');
       const block = window.sutraAssistant.applyAction({
         type: 'create_timeline_block', name: 'Must not disappear', date: '2026-08-25', start: '09:00', end: '10:00'
       }, { reviewed: true });
       const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' }, { reviewed: true });
-      return { context, task, block, note, errors };
+      window.SutraAssistantPermissions.setMode('read_only');
+      const deniedTask = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must remain blocked' }, { reviewed: true });
+      const deniedTaskSaved = (window.SutraHomeworkStore.getSnapshot().tasks || []).some(row => row.title === 'Must remain blocked');
+      return { context, task, taskSaved, block, note, deniedTask, deniedTaskSaved, errors };
     } finally {
       window.flowAtelier = originalBridge;
       window.SutraReportError = originalReporter;
@@ -310,9 +314,12 @@ test('Assistant bridge failure is reported and mutating actions fail closed', as
   });
 
   expect(report.context.tasks).toEqual([]);
-  expect(report.task.ok).toBe(false);
+  expect(report.task.ok).toBe(true);
+  expect(report.taskSaved).toBe(true);
   expect(report.block.ok).toBe(false);
   expect(report.note.ok).toBe(false);
+  expect(report.deniedTask.ok).toBe(false);
+  expect(report.deniedTaskSaved).toBe(false);
   expect(report.errors).toEqual([
     expect.objectContaining({ message: 'Assistant workspace bridge is unavailable.', severity: 'error' })
   ]);

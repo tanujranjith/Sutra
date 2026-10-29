@@ -5,8 +5,8 @@ import { expect, test } from '@playwright/test';
 //      support metadata.
 //   2. "what's overdue" → "mark those as complete" end to end: deterministic
 //      local listing, reference resolution, batch review card with a readable
-//      preview, apply through BOTH task stores (planner appData.tasks +
-//      homework hwTasks:v2), surface refresh, Activity logging, Undo restore.
+//      preview, apply through canonical To-do, surface refresh, Activity
+//      logging, and Undo restore.
 //   3. Quantifier references ("complete the first two") and ambiguity
 //      clarification (never guess).
 //   4. Reschedule ("move ... to tomorrow"), archive guardrails (homework can't
@@ -229,7 +229,7 @@ test('read-only workspace still shows task review controls and explains the perm
     .some(item => item.title === 'Review the chemistry outline'))).toBe(false);
 });
 
-test('"what\'s overdue" then "mark those as complete": batch card, both stores, Activity, Undo', async ({ page }) => {
+test('"what\'s overdue" then "mark those as complete": batch card, canonical To-do, Activity, Undo', async ({ page }) => {
   await openApp(page);
   await seedOverdueWork(page);
   await openAssistantPanel(page);
@@ -254,7 +254,7 @@ test('"what\'s overdue" then "mark those as complete": batch card, both stores, 
   const applyBtn = card.locator('.flow-action-apply');
   await expect(applyBtn).toHaveText('Mark complete');
 
-  // 3. Apply → both stores update, Activity gets a reversible record.
+  // 3. Apply updates the canonical To-do store; Activity gets a reversible record.
   await applyBtn.click();
   await page.waitForTimeout(400);
   const applied = await page.evaluate(() => {
@@ -264,28 +264,28 @@ test('"what\'s overdue" then "mark those as complete": batch card, both stores, 
     return {
       remainingOpen: open.length,
       hwDone,
-      plannerCompleted: (window.flowAtelier.tasks || []).filter((t) => t.completed && t.origin !== 'homework').length,
+      plannerTaskCount: (window.flowAtelier.tasks || []).filter((t) => t.origin !== 'homework').length,
       rec: rec ? { type: rec.actionType, reversible: rec.reversible, hasUndo: !!rec.undoPayload, risk: rec.risk, affected: (rec.affected || []).length } : null
     };
   });
   expect(applied.remainingOpen).toBe(0);
-  expect(applied.hwDone).toBe(1);
-  expect(applied.plannerCompleted).toBe(3);
+  expect(applied.hwDone).toBe(4);
+  expect(applied.plannerTaskCount).toBe(0);
   expect(applied.rec).toEqual({ type: 'update_task_status', reversible: true, hasUndo: true, risk: 'medium', affected: 4 });
 
-  // 4. "undo that" restores every item in both stores — nothing was deleted.
+  // 4. "undo that" restores every item in To-do — nothing was deleted.
   await sendChatMessage(page, 'undo that');
   await page.waitForTimeout(2400);
   const restored = await page.evaluate(() => ({
     open: window.flowAssistant.listOpenWorkspaceTasks().filter((t) => !t.completed && !t.archived).length,
     hwDone: (window.SutraHomeworkStore.getSnapshot().tasks || []).filter((t) => t.done).length,
     recStatus: window.flowIntelligence.getActivityLog()[0].status,
-    totalTasksKept: (window.flowAtelier.tasks || []).filter((t) => t.origin !== 'homework').length
+    totalTasksKept: (window.SutraHomeworkStore.getSnapshot().tasks || []).length
   }));
   expect(restored.open).toBe(4);
   expect(restored.hwDone).toBe(0);
   expect(restored.recStatus).toBe('undone');
-  expect(restored.totalTasksKept).toBe(3);
+  expect(restored.totalTasksKept).toBe(4);
 });
 
 test('quantifier references and ambiguity: "complete the first two" works, ambiguous titles ask', async ({ page }) => {
@@ -342,11 +342,12 @@ test('reschedule to tomorrow and archive guardrails (no deletion, homework prote
   // Archive a planner task: object preserved, flags set, never deleted.
   const archive = await page.evaluate(() => {
     const fa = window.flowAssistant;
-    fa.applyAction({ type: 'create_task', title: 'Stale brainstorm task', dueDate: '2026-05-01' }, { reviewed: true });
-    const before = (window.flowAtelier.tasks || []).length;
+    const b = window.flowAtelier;
+    b.tasks.push({ id: 'stale-brainstorm', title: 'Stale brainstorm task', dueDate: '2026-05-01', origin: 'flow', completed: false, isActive: true });
+    const before = b.tasks.length;
     const res = fa.applyActionLogged({ type: 'update_task_status', taskTitles: ['Stale brainstorm task'], status: 'archived' }, { reviewed: true });
-    const after = (window.flowAtelier.tasks || []).length;
-    const t = (window.flowAtelier.tasks || []).find((x) => x.title === 'Stale brainstorm task');
+    const after = b.tasks.length;
+    const t = b.tasks.find((x) => x.title === 'Stale brainstorm task');
     return { ok: res.ok, kept: before === after, archived: t && t.archived === true && t.isActive === false };
   });
   expect(archive.ok).toBe(true);
@@ -457,9 +458,13 @@ test('redesigned panel: WORKING FROM card, onboarding card without key, pulse fr
   expect(ui.providerIds).toEqual(expect.arrayContaining([
     'groq', 'gemini', 'openai', 'anthropic', 'openrouter', 'local'
   ]));
-  // Pulse shows the REAL overdue signal (4 seeded), not demo data.
+  // The pulse is intentionally collapsed. Open it before reading its visible
+  // signal text so the assertion reflects what a student can actually see.
   expect(ui.pulse).toBe(true);
-  expect(ui.pulseText).toContain('4 overdue assignments');
+  await page.locator('#chatEmptyState .flow-pulse-disclosure > summary').click();
+  await expect(page.locator('#chatEmptyState .flow-pulse')).toBeVisible();
+  const pulseText = await page.locator('#chatEmptyState .flow-pulse').innerText();
+  expect(pulseText).toContain('4 overdue assignments');
   expect(ui.subtitle).toContain('·');
   expect(ui.launcherHidden).toBe(true);
 
@@ -531,7 +536,10 @@ test('persistence: completed status survives reload; exports never contain API k
     sessionStorage.setItem('groq_api_key', 'gsk_FAKE_TEST_KEY_000000000000');
     window.flowAssistant.applyActionLogged({ type: 'update_task_status', taskTitles: ['Run final-day checklist'], status: 'completed' }, { reviewed: true });
   });
-  await page.waitForTimeout(900); // allow debounced autosave to commit
+  await page.evaluate(async () => {
+    await window.SutraHomeworkStore.whenPersisted();
+    await window.flowAtelier.flushAppSaveNow('assistant-completion-persistence-test');
+  });
 
   const exportCheck = await page.evaluate(() => {
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
@@ -550,9 +558,9 @@ test('persistence: completed status survives reload; exports never contain API k
   await completeOnboarding(page);
   await page.waitForFunction(() => !!window.flowAssistant && !!window.flowAtelier);
   const afterReload = await page.evaluate(() => {
-    const t = (window.flowAtelier.tasks || []).find((x) => x.title === 'Run final-day checklist');
+    const t = (window.SutraHomeworkStore.getSnapshot().tasks || []).find((x) => x.title === 'Run final-day checklist');
     const rec = window.flowIntelligence.getActivityLog().find((r) => r.actionType === 'update_task_status');
-    return { completed: !!(t && t.completed), activityKept: !!rec, undoKept: !!(rec && rec.undoPayload) };
+    return { completed: !!(t && t.done), activityKept: !!rec, undoKept: !!(rec && rec.undoPayload) };
   });
   expect(afterReload.completed).toBe(true);
   expect(afterReload.activityKept).toBe(true);
