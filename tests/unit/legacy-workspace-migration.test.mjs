@@ -334,6 +334,64 @@ test('canonical workspace writes keep recovery journaling when the default store
   }
 });
 
+test('startup-created empty day states do not replace the journal after a confirmed empty save', async () => {
+  const helpPage = { id: 'help_page', title: 'Help & Docs', isSystemPage: true };
+  const prior = {
+    pages: [{ id: 'kept-page', title: 'Keep this page' }, helpPage],
+    settings: { onboarding: { version: 1, completed: true, skipped: false, migratedFromLegacy: true } }
+  };
+  const empty = { pages: [] };
+  const runtime = makeRuntime({ records: { root: prior } });
+  runtime.run();
+  await runtime.waitForMigration();
+
+  const db = runtime.context.SutraWorkspaceDB.create({ dbName: 'noteflow_atelier_db', storeName: 'workspace', version: 8 });
+  const clearResult = await db.writeIf('root', empty, current => current?.pages?.some(page => page.id === 'kept-page'));
+  assert.equal(clearResult.written, true);
+  assert.deepEqual(runtime.rows.get('workspace-last-meaningful'), prior);
+  assert.equal(runtime.rows.get('workspace-confirmed-root').meaningful, false);
+
+  const runtimeHydratedRoot = {
+    pages: [helpPage],
+    streaks: {
+      dayStates: { '2026-10-28': { committedTaskIds: [], completedTaskIds: [], freezeUsed: false } },
+      taskStreaks: []
+    },
+    habitTracker: { habits: [], dayStates: { '2026-10-28': { completedHabitIds: [] } } }
+  };
+  assert.equal((await db.writeIf('root', runtimeHydratedRoot, current => current === null || current.pages?.length === 0)).written, true);
+  assert.equal((await db.writeIf('root', runtimeHydratedRoot, current => current?.pages?.some(page => page.id === 'help_page'))).written, true);
+
+  assert.deepEqual(runtime.rows.get('workspace-last-meaningful'), prior,
+    'repeated startup saves of the Help-only root must not replace the previous meaningful workspace');
+  assert.equal(runtime.rows.get('workspace-confirmed-root').meaningful, false,
+    'default per-day records keep the confirmed-root marker empty');
+  db.close();
+});
+
+test('populated day-state fields and unknown day-state fields remain meaningful', async () => {
+  const helpPage = { id: 'help_page', title: 'Help & Docs', isSystemPage: true };
+  const meaningfulDayStates = [
+    ['committed tasks', { streaks: { dayStates: { '2026-10-28': { committedTaskIds: ['task-1'], completedTaskIds: [], freezeUsed: false } } } }],
+    ['completed tasks', { streaks: { dayStates: { '2026-10-28': { committedTaskIds: [], completedTaskIds: ['task-1'], freezeUsed: false } } } }],
+    ['used freeze', { streaks: { dayStates: { '2026-10-28': { committedTaskIds: [], completedTaskIds: [], freezeUsed: true } } } }],
+    ['completed habits', { habitTracker: { dayStates: { '2026-10-28': { completedHabitIds: ['habit-1'] } } } }],
+    ['unknown future field', { streaks: { dayStates: { '2026-10-28': { committedTaskIds: [], completedTaskIds: [], freezeUsed: false, futureDayValue: false } } } }]
+  ];
+
+  for (const [name, patch] of meaningfulDayStates) {
+    const root = { pages: [helpPage], ...patch };
+    const runtime = makeRuntime({ records: {
+      root,
+      'workspace-last-meaningful': { pages: [{ id: 'older-page', title: 'Older recovery candidate' }] }
+    } });
+    runtime.run();
+
+    assert.deepEqual(await runtime.waitForMigration(), root, `${name} must remain part of the workspace`);
+    assert.equal(runtime.writeIfCalls.length, 0, `${name} must prevent empty-root recovery`);
+  }
+});
+
 test('a confirmed empty workspace is not replaced by an older recovery journal', async () => {
   const emptyRoot = { pages: [] };
   const runtime = makeRuntime({

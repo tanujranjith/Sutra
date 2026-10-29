@@ -266,10 +266,17 @@ test('a canonically confirmed empty workspace does not resurrect its journal', a
   const stored = await readWorkspaceRecord(page, 'root');
   const journal = await readWorkspaceRecord(page, 'workspace-last-meaningful');
   const marker = await readWorkspaceRecord(page, 'workspace-confirmed-root');
-  const userPageIds = stored.pages
-    .filter(item => item.id !== 'help_page' && item.systemRole !== 'help-docs' && item.builtInId !== 'help-docs')
-    .map(item => item.id);
-  const journalPageIds = Array.isArray(journal?.pages) ? journal.pages.map(item => item.id) : null;
+  const isGeneratedHelpPage = item => {
+    if (!item || typeof item !== 'object') return false;
+    if (item.isSystemPage === true || item.builtInId === 'help-docs' || item.systemRole === 'help-docs') return true;
+    const id = String(item.id || '');
+    return (id === 'help_page' || id.startsWith('help_page_'))
+      && String(item.title || '').trim().toLowerCase() === 'help & docs';
+  };
+  const userPageIds = stored.pages.filter(item => !isGeneratedHelpPage(item)).map(item => item.id);
+  const journalPageIds = Array.isArray(journal?.pages)
+    ? journal.pages.filter(item => !isGeneratedHelpPage(item)).map(item => item.id)
+    : null;
   expect({
     rootStayedEmpty: userPageIds.length === 0,
     journalAtCommit: committed.journalPageIds,

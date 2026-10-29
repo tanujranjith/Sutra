@@ -85,6 +85,18 @@
         'operatingManual.preferredStudyTimes', 'pinnedPages.life', 'pinnedPages.collegeapp',
         'pinnedPages.notesBySpace'
     ];
+    // These maps are materialized by ordinary workspace reads. Their empty
+    // default records must not make a fresh or deliberately cleared workspace
+    // look meaningful. Keep unrecognized fields conservative for forward
+    // compatibility with newer day-state schemas.
+    const DAY_STATE_DEFAULTS = Object.freeze({
+        'habitTracker.dayStates': Object.freeze({ completedHabitIds: [] }),
+        'streaks.dayStates': Object.freeze({
+            committedTaskIds: [],
+            completedTaskIds: [],
+            freezeUsed: false
+        })
+    });
     const LIFE_WORKSPACE_FIELDS = new Set([
         'onboardingSeeded', 'goals', 'habits', 'habitCompletions', 'habitExcused', 'skills',
         'fitness', 'calories', 'books', 'spending', 'spendingBudgets', 'recurringExpenses',
@@ -182,6 +194,17 @@
         });
     }
 
+    function hasMeaningfulDayStateMap(value, defaults) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return hasStoredValue(value);
+        const knownFields = new Set(Object.keys(defaults));
+        return Object.keys(value).some(dayKey => {
+            const state = value[dayKey];
+            if (!state || typeof state !== 'object' || Array.isArray(state)) return hasUnknownStoredValue(state);
+            return hasNonDefaultFields(state, defaults)
+                || hasUnknownFieldsWithStoredValues(state, knownFields);
+        });
+    }
+
     function hasMeaningfulLifeCompatibilityData(workspace) {
         const life = valueAtPath(workspace, 'lifeWorkspace');
         if (!life || typeof life !== 'object' || Array.isArray(life)) return hasStoredValue(life);
@@ -217,7 +240,12 @@
         if (!workspace || typeof workspace !== 'object') return false;
         if (Array.isArray(workspace.pages) && workspace.pages.some(page => page && !isGeneratedHelpPage(page))) return true;
         if (hasUserSpaces(workspace.spaces)) return true;
-        if (USER_DATA_PATHS.some(path => hasStoredValue(valueAtPath(workspace, path)))) return true;
+        if (USER_DATA_PATHS.some(path => {
+            const value = valueAtPath(workspace, path);
+            return Object.prototype.hasOwnProperty.call(DAY_STATE_DEFAULTS, path)
+                ? hasMeaningfulDayStateMap(value, DAY_STATE_DEFAULTS[path])
+                : hasStoredValue(value);
+        })) return true;
         if (hasMeaningfulLifeCompatibilityData(workspace)) return true;
         if (typeof valueAtPath(workspace, 'businessWorkspace.quickCapture') === 'string'
             && valueAtPath(workspace, 'businessWorkspace.quickCapture').trim()) return true;
