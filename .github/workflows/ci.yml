@@ -124,15 +124,18 @@ jobs:
             npx playwright test tests/e2e/sutra-cloud-providers.spec.mjs --grep 'scheduled backups upload ciphertext once across two tabs and stop when disabled' --workers=1 --project=chromium
           fi
           npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-      - name: Upload failure diagnostics
-        if: ${{ failure() && !cancelled() }}
+      - name: Upload failure and retry diagnostics
+        if: ${{ !cancelled() && (failure() || success()) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-chromium-failure-${{ github.sha }}-${{ matrix.shard }}
-          path: .tmp/playwright-results/
+          path: |
+            .tmp/playwright-results/**/trace.zip
+            .tmp/playwright-results/**/test-failed-*.png
+            .tmp/playwright-results/**/error-context.md
           if-no-files-found: ignore
           include-hidden-files: true
-          retention-days: 14
+          retention-days: 7
 
   browser-compatibility-matrix:
     name: Browser compatibility (${{ matrix.label }}, verified artifact)
@@ -294,12 +297,15 @@ jobs:
           else
             npx playwright test --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
           fi
-      - name: Upload failure diagnostics
-        if: ${{ failure() && !cancelled() }}
+      - name: Upload failure and retry diagnostics
+        if: ${{ !cancelled() && (failure() || success()) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-compatibility-failure-${{ github.sha }}-${{ matrix.id }}-${{ matrix.shard }}
-          path: .tmp/playwright-results/
+          path: |
+            .tmp/playwright-results/**/trace.zip
+            .tmp/playwright-results/**/test-failed-*.png
+            .tmp/playwright-results/**/error-context.md
           if-no-files-found: ignore
           include-hidden-files: true
-          retention-days: 14
+          retention-days: 7

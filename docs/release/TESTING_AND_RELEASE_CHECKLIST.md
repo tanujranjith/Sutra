@@ -30,6 +30,11 @@ desktop test 1–10 times (default 1); responsive smoke coverage stays single-pa
 The repeat setting is validated and applies only to diagnostic runs. Full release
 runs keep their normal test count and assertions.
 
+CI retains failed-attempt traces, screenshots, and error context for seven days,
+including when a retry passes. Separate Playwright invocations use separate output
+directories so preflight diagnostics survive the full shard run. Passing tests do
+not upload empty result directories.
+
 | Command | What it guards |
 | --- | --- |
 | `node scripts/smoke-check.mjs` | Structural integrity of the app: export/import wiring, encrypted `.sutra` envelope constants, iOS-safe file pickers, Drive `appDataFolder` scope/metadata guards, settings save/apply wiring, and key feature hooks. Runs text-level assertions; does not execute the app. |

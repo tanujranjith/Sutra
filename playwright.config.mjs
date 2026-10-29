@@ -16,7 +16,9 @@ const responsiveTestMatch = [
 ];
 
 const playwrightPort = Number(process.env.PLAYWRIGHT_PORT || 5173);
-const playwrightOutputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || '.tmp/playwright-results';
+// Keep earlier CI preflight traces when another Playwright invocation starts.
+const playwrightOutputDir = process.env.PLAYWRIGHT_OUTPUT_DIR
+  || (process.env.CI ? `.tmp/playwright-results/run-${Date.now()}-${process.pid}` : '.tmp/playwright-results');
 const playwrightTrace = process.env.PLAYWRIGHT_TRACE === 'off' ? 'off' : 'retain-on-failure';
 
 export default defineConfig({
