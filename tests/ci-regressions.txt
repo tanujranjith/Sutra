@@ -10,6 +10,7 @@ tests/e2e/homework-course-edit.spec.mjs
 tests/e2e/intelligence-diagnostics.spec.mjs
 tests/e2e/locked-note-privacy.spec.mjs
 tests/e2e/navigation-clarity.spec.mjs
+tests/e2e/notes-comments.spec.mjs
 tests/e2e/notes-editor-v2.spec.mjs
 tests/e2e/notes-page-layout.spec.mjs
 tests/e2e/notes-sidebar-containment.spec.mjs
