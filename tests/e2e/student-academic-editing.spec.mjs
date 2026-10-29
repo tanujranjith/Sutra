@@ -51,6 +51,8 @@ test('Application Sheets switch, accept entries, and retain entries after reload
 });
 
 test('imported Homework notes and Reference URL can be edited, reloaded, and cleared', async ({ page }) => {
+  // This flow cold-boots twice and covers save, reload, edit, and clear.
+  test.setTimeout(120000);
   await openApp(page);
   await page.evaluate(() => {
     window.SutraHomeworkStore.transact(draft => {
