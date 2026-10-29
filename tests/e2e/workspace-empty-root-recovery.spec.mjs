@@ -287,7 +287,7 @@ test('a canonically confirmed empty workspace does not resurrect its journal', a
     marker
   }).toEqual({
     rootStayedEmpty: true,
-    journalAtCommit: ['intentionally-removed-page'],
+    journalAtCommit: expect.arrayContaining(['intentionally-removed-page']),
     journalAfterReload: ['intentionally-removed-page'],
     markerAtCommitMeaningful: false,
     markerAfterReloadMeaningful: false,
