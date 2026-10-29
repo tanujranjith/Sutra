@@ -64,6 +64,10 @@ test('local study interview opens a draft, preserves skipped values, and saves o
   await expect.poll(() => page.evaluate(() => window.flowAtelier.getStudentPreferences().schoolStartHour)).toBe(8);
   await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.flowAtelier.getStudentPreferences().schoolStartHour)).toBe(7.5);
+  const settingsStatus = page.locator('#settingsStatusPill');
+  await expect(settingsStatus).toBeVisible();
+  await expect(settingsStatus).toHaveAttribute('data-state', 'saved');
+  await expect(settingsStatus).toContainText('Saved');
   await page.reload(); await waitForAppReady(page);
   await expect.poll(() => page.evaluate(() => window.flowAtelier.getStudentPreferences().schoolStartHour)).toBe(7.5);
   const portable = await page.evaluate(() => {
@@ -78,6 +82,66 @@ test('local study interview opens a draft, preserves skipped values, and saves o
   expect(portable.after.schoolEndHour).toBe(14.25);
   expect(portable.after.bedtimeHour).toBe(22.5);
   expect(remote).toEqual([]);
+});
+
+test('Settings keeps study preferences active after a failed save and retries them to IndexedDB', async ({ page }) => {
+  await openLocalAssistant(page);
+  const setup = await page.evaluate(async () => {
+    const owner = window.flowAtelier;
+    await owner.flushAppSaveNow('assistant-settings-retry-baseline');
+    const result = owner.reviewStudentPreferences({ schoolStartHour: 7.5 });
+    if (!result?.ok) throw new Error(result?.message || 'Study settings draft was unavailable.');
+    await owner.flushAppSaveNow('assistant-settings-retry-draft-baseline');
+    return owner.getStudentPreferences().schoolStartHour;
+  });
+  expect(setup).toBe(8);
+
+  const startTime = page.locator('[data-pref-path="studentPreferences.schoolStartHour"]');
+  await expect(startTime).toHaveValue('07:30');
+  const save = page.getByRole('button', { name: 'Save Changes', exact: true });
+  await expect(save).toBeEnabled();
+
+  const indexedDbFault = await page.evaluateHandle(() => {
+    const original = IDBDatabase.prototype.transaction;
+    let active = true;
+    let blockedTransactions = 0;
+    const injected = function (storeNames, mode, ...rest) {
+      const names = typeof storeNames === 'string' ? [storeNames] : Array.from(storeNames || []);
+      if (active && this.name === 'noteflow_atelier_db' && mode === 'readwrite' && names.includes('workspace')) {
+        blockedTransactions += 1;
+        throw new DOMException('Injected Settings save failure', 'InvalidStateError');
+      }
+      return original.call(this, storeNames, mode, ...rest);
+    };
+    IDBDatabase.prototype.transaction = injected;
+    return {
+      blockedTransactions: () => blockedTransactions,
+      restore() {
+        active = false;
+        if (IDBDatabase.prototype.transaction === injected) IDBDatabase.prototype.transaction = original;
+      }
+    };
+  });
+
+  const status = page.locator('#settingsStatusPill');
+  try {
+    await save.click();
+    await expect(status).toHaveAttribute('data-state', 'error');
+    await expect(status).toContainText('Save failed');
+    expect(await indexedDbFault.evaluate(fault => fault.blockedTransactions())).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.flowAtelier.getStudentPreferences().schoolStartHour)).toBe(7.5);
+    await expect(startTime).toHaveValue('07:30');
+    await expect(save).toBeEnabled();
+  } finally {
+    await indexedDbFault.evaluate(fault => fault.restore());
+    await indexedDbFault.dispose();
+  }
+
+  await save.click();
+  await expect(status).toHaveAttribute('data-state', 'saved');
+  await expect(status).toContainText('Saved');
+  await page.reload(); await waitForAppReady(page);
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.getStudentPreferences().schoolStartHour)).toBe(7.5);
 });
 
 test('a restored setup continues locally in the dock and stays with its conversation', async ({ page }) => {

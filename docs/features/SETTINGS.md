@@ -40,6 +40,15 @@ provider credentials) retain that separate behavior. **Choose theme** opens the
 existing theme panel, whose selections apply immediately; the palette samples
 and current label reflect its actual supported presets and selection.
 
+**Save Changes** applies the selected preferences in this session, then waits for
+the canonical local write and readback verification. The status stays **Saving**
+until that succeeds; wait for **Saved** before reloading. If saving fails, the
+active values remain available and **Save Changes** retries local persistence,
+even with no new staged edits. **Revert** discards later staged edits without
+clearing an earlier save failure. Edits made during a save remain pending for
+the next save. Provider credentials and other immediate controls keep their own
+save paths.
+
 Appearance starts with flat Theme, Density, and Contrast rows. **Surface & depth**
 contains Card style, Corners, Shadow, and Blur. **Interface details** contains Icon
 size, Sidebar style, Motion, and Manage quotes. These groups expand on demand;

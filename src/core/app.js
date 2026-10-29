@@ -10033,6 +10033,8 @@ function populateProgressDashboard() {
         let activeSettingsCategory = 'appearance';
         let settingsLastAppliedAt = null;
         const settingsDraftValues = new Map();
+        let settingsSavePending = false;
+        let settingsSaveError = '';
         const splitScrollPositions = {};
         let pageToRenameId = null; // For rename functionality
         let themeApplyMode = 'current'; // 'current', 'all', 'custom'
@@ -31329,12 +31331,13 @@ function buildOnboardingPlanPreview() {
         function updateSettingsDraftUi() {
             const settingsRoot = document.getElementById('view-settings');
             const hasUnsaved = settingsDraftValues.size > 0;
-            if (settingsRoot) settingsRoot.classList.toggle('has-unsaved-settings', hasUnsaved);
+            const hasPendingChanges = hasUnsaved || settingsSavePending || !!settingsSaveError;
+            if (settingsRoot) settingsRoot.classList.toggle('has-unsaved-settings', hasPendingChanges);
 
             // The redesigned page wraps everything in `.cc-page` and toggles
             // a `data-pending` attribute used to show/hide the sticky action bar.
             const ccPage = settingsRoot ? settingsRoot.querySelector('.cc-page') : null;
-            if (ccPage) ccPage.dataset.pending = hasUnsaved ? 'true' : 'false';
+            if (ccPage) ccPage.dataset.pending = hasPendingChanges ? 'true' : 'false';
 
             const statusPill = document.getElementById('settingsStatusPill');
             if (statusPill) {
@@ -31342,32 +31345,35 @@ function buildOnboardingPlanPreview() {
                 // Update the text node if present, otherwise fall back to textContent
                 // for backwards compat with older markup.
                 const statusText = statusPill.querySelector('.cc-status-text');
-                const message = hasUnsaved
-                    ? `${settingsDraftValues.size} unsaved ${settingsDraftValues.size === 1 ? 'change' : 'changes'}`
+                const message = settingsSavePending ? 'Saving...'
+                    : settingsSaveError ? 'Save failed'
+                    : hasUnsaved ? `${settingsDraftValues.size} unsaved ${settingsDraftValues.size === 1 ? 'change' : 'changes'}`
                     : 'Saved';
                 if (statusText) statusText.textContent = message;
                 else statusPill.textContent = message;
-                statusPill.dataset.state = hasUnsaved ? 'dirty' : 'saved';
+                statusPill.dataset.state = settingsSavePending ? 'saving'
+                    : settingsSaveError ? 'error' : hasUnsaved ? 'dirty' : 'saved';
             }
 
             const unsavedText = document.getElementById('settingsUnsavedText');
             if (unsavedText) {
-                unsavedText.textContent = hasUnsaved
-                    ? `${settingsDraftValues.size} staged ${settingsDraftValues.size === 1 ? 'change' : 'changes'} ready to apply`
-                    : 'No pending changes';
+                unsavedText.textContent = settingsSavePending ? 'Saving settings locally...'
+                    : settingsSaveError || (hasUnsaved
+                        ? `${settingsDraftValues.size} staged ${settingsDraftValues.size === 1 ? 'change' : 'changes'} ready to apply`
+                        : 'No pending changes');
             }
 
             const actionBar = document.getElementById('settingsActionBar');
-            if (actionBar) actionBar.dataset.pending = hasUnsaved ? 'true' : 'false';
+            if (actionBar) actionBar.dataset.pending = hasPendingChanges ? 'true' : 'false';
 
             const applyBtn = document.getElementById('settingsApplyBtn');
-            if (applyBtn) applyBtn.disabled = !hasUnsaved;
+            if (applyBtn) applyBtn.disabled = settingsSavePending || (!hasUnsaved && !settingsSaveError);
             const revertBtn = document.getElementById('settingsRevertBtn');
-            if (revertBtn) revertBtn.disabled = !hasUnsaved;
+            if (revertBtn) revertBtn.disabled = settingsSavePending || !hasUnsaved;
             const applyBtnTop = document.getElementById('settingsApplyBtnTop');
-            if (applyBtnTop) applyBtnTop.disabled = !hasUnsaved;
+            if (applyBtnTop) applyBtnTop.disabled = settingsSavePending || (!hasUnsaved && !settingsSaveError);
             const revertBtnTop = document.getElementById('settingsRevertBtnTop');
-            if (revertBtnTop) revertBtnTop.disabled = !hasUnsaved;
+            if (revertBtnTop) revertBtnTop.disabled = settingsSavePending || !hasUnsaved;
 
             const resetSectionBtn = document.getElementById('settingsResetSectionBtn');
             if (resetSectionBtn) {
@@ -32095,54 +32101,74 @@ function buildOnboardingPlanPreview() {
         }
 
         function revertSettingsDraftChanges() {
-            if (!settingsDraftValues.size) return;
+            if (settingsSavePending || !settingsDraftValues.size) return;
             settingsDraftValues.clear();
             syncWorkspacePreferenceControls();
             filterSettingsControlsBySearch();
             showToast('Pending changes reverted');
         }
 
-        function applySettingsDraftChanges() {
-            if (!settingsDraftValues.size) return;
+        async function applySettingsDraftChanges() {
+            if (settingsSavePending || (!settingsDraftValues.size && !settingsSaveError)) return false;
             const entries = Array.from(settingsDraftValues.entries());
+            const saveReason = settingsSaveError ? 'retry' : 'settings-apply';
             let applySidebarDefault = false;
             let applyAssistantPanelDefault = false;
+            settingsSavePending = true;
+            settingsSaveError = '';
 
-            entries.forEach(([path, value]) => {
-                const shouldApplySidebarDefault = path === 'layout.sidebarDefault';
-                const shouldApplyAssistantPanelDefault = path === 'assistant.panelDefault';
-                if (shouldApplySidebarDefault) applySidebarDefault = true;
-                if (shouldApplyAssistantPanelDefault) applyAssistantPanelDefault = true;
-                setWorkspacePreference(path, value, {
-                    refresh: false,
-                    persist: false,
-                    applySidebarDefault: shouldApplySidebarDefault,
-                    applyAssistantPanelDefault: shouldApplyAssistantPanelDefault
-                });
-            });
-
-            applyWorkspacePreferences({
-                refresh: true,
-                applySidebarDefault,
-                applyAssistantPanelDefault
-            });
-
-            settingsDraftValues.clear();
-            settingsLastAppliedAt = Date.now();
-            updateSettingsLastAppliedLabel();
-            persistAppData();
-            syncWorkspacePreferenceControls();
-            filterSettingsControlsBySearch();
-            showToast(`Applied ${entries.length} ${entries.length === 1 ? 'change' : 'changes'}`);
-
-            // Brief visual confirmation on the redesigned status pill.
             try {
-                const ccPage = document.querySelector('#view-settings .cc-page');
-                if (ccPage && !ccPage.classList.contains('is-saved-flash')) {
-                    ccPage.classList.add('is-saved-flash');
-                    setTimeout(() => ccPage.classList.remove('is-saved-flash'), 1400);
-                }
-            } catch (e) { /* non-critical */ }
+                updateSettingsDraftUi();
+                entries.forEach(([path, value]) => {
+                    const shouldApplySidebarDefault = path === 'layout.sidebarDefault';
+                    const shouldApplyAssistantPanelDefault = path === 'assistant.panelDefault';
+                    if (shouldApplySidebarDefault) applySidebarDefault = true;
+                    if (shouldApplyAssistantPanelDefault) applyAssistantPanelDefault = true;
+                    setWorkspacePreference(path, value, {
+                        refresh: false,
+                        persist: false,
+                        applySidebarDefault: shouldApplySidebarDefault,
+                        applyAssistantPanelDefault: shouldApplyAssistantPanelDefault
+                    });
+                });
+
+                applyWorkspacePreferences({
+                    refresh: true,
+                    applySidebarDefault,
+                    applyAssistantPanelDefault
+                });
+
+                // Applied values remain active if storage fails. Only the
+                // verified commit below may acknowledge them as saved.
+                settingsDraftValues.clear();
+                persistAppData();
+                syncWorkspacePreferenceControls();
+                filterSettingsControlsBySearch();
+                await flushAppSaveNow(saveReason);
+                settingsLastAppliedAt = Date.now();
+                updateSettingsLastAppliedLabel();
+                showToast(entries.length
+                    ? `Saved ${entries.length} ${entries.length === 1 ? 'change' : 'changes'} locally`
+                    : 'Settings saved locally');
+
+                // New edits made during the save remain staged.
+                try {
+                    const ccPage = document.querySelector('#view-settings .cc-page');
+                    if (!settingsDraftValues.size && ccPage && !ccPage.classList.contains('is-saved-flash')) {
+                        ccPage.classList.add('is-saved-flash');
+                        setTimeout(() => ccPage.classList.remove('is-saved-flash'), 1400);
+                    }
+                } catch (e) { /* non-critical */ }
+                return true;
+            } catch (error) {
+                settingsSaveError = 'Changes remain active. Use Save Changes to retry the local save.';
+                try { reportError(error, { where: 'settings:save' }); } catch (reportingError) { /* retain the save failure */ }
+                showToast('Settings save failed. Your changes remain available in this session.');
+                return false;
+            } finally {
+                settingsSavePending = false;
+                updateSettingsDraftUi();
+            }
         }
 
         function bindWorkspacePreferenceControls() {
