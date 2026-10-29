@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
+// Route interception must observe both the failed request and its retry.
+test.use({ serviceWorkers: 'block' });
+
 test('a failed optional feature script can be retried in the browser', async ({ page }) => {
   await page.goto('/Sutra.html');
   await waitForAppHydrated(page);
@@ -37,9 +40,9 @@ test('a failed optional feature script can be retried in the browser', async ({ 
     }
   });
 
-  expect(failedAttempt.error).toContain('Optional feature script failed:');
+  expect(requestCount, `First attempt: ${JSON.stringify(failedAttempt)}`).toBe(1);
+  expect(failedAttempt.error, `First attempt: ${JSON.stringify(failedAttempt)}`).toContain('Optional feature script failed:');
   expect(failedAttempt.state).toMatchObject({ enabled: true, loaded: false, initialized: false });
-  expect(requestCount).toBe(1);
   expect(await page.locator('script[src*="business-workspace.js"]').count()).toBe(0);
 
   const retriedState = await page.evaluate(() => window.SutraFeatureRegistry.enable('business'));

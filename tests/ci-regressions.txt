@@ -6,11 +6,14 @@ tests/e2e/assistant-local-setup.spec.mjs
 tests/e2e/assistant-source-disclosures.spec.mjs
 tests/e2e/assistant-workspace-investigation.spec.mjs
 tests/e2e/cloud-sync.spec.mjs
+tests/e2e/feature-registry-retry.spec.mjs
+tests/e2e/focus-home-context.spec.mjs
 tests/e2e/full-app-audit.spec.mjs
 tests/e2e/global-search.spec.mjs
 tests/e2e/google-drive-sync.spec.mjs
 tests/e2e/homework-course-edit.spec.mjs
 tests/e2e/homework-ux.spec.mjs
+tests/e2e/home-create-html-lock.spec.mjs
 tests/e2e/intelligence-diagnostics.spec.mjs
 tests/e2e/locked-note-privacy.spec.mjs
 tests/e2e/navigation-clarity.spec.mjs
@@ -22,6 +25,7 @@ tests/e2e/public-beta-surfaces.spec.mjs
 tests/e2e/quick-capture-student-flow.spec.mjs
 tests/e2e/settings-global-search.spec.mjs
 tests/e2e/startup-chime.spec.mjs
+tests/e2e/spreadsheet-formula-note-import.spec.mjs
 tests/e2e/student-academic-editing.spec.mjs
 tests/e2e/student-assistant-model-context.spec.mjs
 tests/e2e/student-os-phase3.spec.mjs
