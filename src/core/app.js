@@ -36631,7 +36631,10 @@ function buildOnboardingPlanPreview() {
                 renderPreview();
                 modal.classList.add('active');
                 document.body.classList.add('modal-open');
+                const initialValue = inputEl.value;
                 requestAnimationFrame(() => {
+                    if (activeHtmlEmbedDialogResolver !== closeDialog || !modal.classList.contains('active')
+                        || modal.contains(document.activeElement) || inputEl.value !== initialValue) return;
                     inputEl.focus();
                     inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
                 });

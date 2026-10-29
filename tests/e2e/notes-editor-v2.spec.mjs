@@ -1012,7 +1012,13 @@ test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async
   await page.locator(PM_SELECTOR).click();
   await page.evaluate(() => { window.insertHtmlEmbed(); });
   await expect(page.locator('#htmlEmbedModal')).toHaveClass(/active/);
-  await page.locator('#htmlEmbedModalInput').fill('<section><h2>First embed</h2></section>');
+  const input = page.locator('#htmlEmbedModalInput');
+  // The dialog focuses and moves the caret on its next frame. Let that run
+  // before Playwright replaces the value, particularly on WebKit.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await expect(input).toBeFocused();
+  await input.fill('<section><h2>First embed</h2></section>');
+  await expect(input).toHaveValue('<section><h2>First embed</h2></section>');
   await page.locator('#htmlEmbedModalConfirmBtn').click();
   const embed = page.locator('#editorV2Host .html-embed-block');
   await expect(embed).toHaveCount(1);
@@ -1027,8 +1033,11 @@ test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async
 
   await embed.locator('.html-embed-menu-btn').click();
   await embed.locator('[data-html-embed-action="edit"]').click();
-  await expect(page.locator('#htmlEmbedModalInput')).toHaveValue(/First embed/);
-  await page.locator('#htmlEmbedModalInput').fill('<section><h2>Edited embed</h2></section>');
+  await expect(input).toHaveValue(/First embed/);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await expect(input).toBeFocused();
+  await input.fill('<section><h2>Edited embed</h2></section>');
+  await expect(input).toHaveValue('<section><h2>Edited embed</h2></section>');
   await page.locator('#htmlEmbedModalConfirmBtn').click();
   await expect(embed.locator('.html-embed-block-surface h2')).toHaveText('Edited embed');
   const beforeSize = await page.evaluate(() => {

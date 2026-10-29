@@ -49,6 +49,10 @@ document order. HTML previews use Sutra's existing sanitizer and sandboxed
 renderer. The embed menu edits its source or removes it; drag handles resize it. Drawing blocks
 use the existing handwriting tools and save vector strokes.
 
+The HTML source dialog focuses untouched input when it opens. Deferred autofocus
+preserves a selection or edit already made by the user and does not run after
+that dialog has been closed or replaced.
+
 `page.content` contains a lightweight anchor for each structured node, while
 `page.blocks` holds its data. Inserting, moving, removing, and undoing a node
 reconciles those two records before save. The records use the existing page

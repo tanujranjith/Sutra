@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-29T18:39:06.946Z",
-  "reviewedReason": "Case-insensitive-deadline-clock-clause-one-byte-flag",
-  "maxBytes": 5015173,
-  "maxLines": 87087
+  "blessedAt": "2026-10-29T19:01:14.879Z",
+  "reviewedReason": "Guard-HTML-embed-autofocus-against-user-edits-and-stale-dialogs",
+  "maxBytes": 5015443,
+  "maxLines": 87090
 }
