@@ -204,7 +204,7 @@
     "./src/components/icons/index.js?v=20260809-audit-icons1",
     "./src/config/feature-manifest.js?v=20261029-quality-privacy4",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20261029-quality-focus2",
+    "./src/core/app.js?v=20261029-quality-capture3",
     "./src/core/credential-vault-bridge.js?v=20260831-revoke4",
     "./src/core/credential-vault.js?v=20260831-revoke4",
     "./src/core/dom-safety.js?v=20261012-native-paste1",

@@ -80,7 +80,7 @@ test('deadline date and clock stay separate from later incidental date and time 
 
 test('comma-separated deadline clocks stay with the deadline and exclude later notes', () => {
   const { parse } = fixture();
-  for (const [clock, expected] of [['8pm', '20:00'], ['20:00', '20:00'], ['noon', '12:00'], ['midnight', '00:00']]) {
+  for (const [clock, expected] of [['8pm', '20:00'], ['8PM', '20:00'], ['AT 8pm', '20:00'], ['20:00', '20:00'], ['noon', '12:00'], ['Noon', '12:00'], ['midnight', '00:00'], ['Midnight', '00:00']]) {
     const result = parse(`physics hw lab due Friday, ${clock}, started today at 9am`);
     assert.equal(result.dueDate, '2026-10-30', clock);
     assert.equal(result.dueTime, expected, clock);

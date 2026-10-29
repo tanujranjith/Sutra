@@ -83270,7 +83270,7 @@ function parseQuickCaptureText(text, options) {
     const deadlineStart = deadlineClause ? deadlineClause.index + deadlineClause[0].length - deadlineClause[1].length : 0;
     // A following note is not part of the deadline. Preserve the comma in
     // month/day/year dates and comma-separated clocks, but stop before notes.
-    const temporalText = deadlineClause ? deadlineClause[1].split(/[;\n]|,(?!\s*(?:\d{4}\b|(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\d{1,2}:\d{2}\b|noon\b|midnight\b|night\b)))/, 1)[0] : working;
+    const temporalText = deadlineClause ? deadlineClause[1].split(/[;\n]|,(?!\s*(?:\d{4}\b|(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\d{1,2}:\d{2}\b|noon\b|midnight\b|night\b)))/i, 1)[0] : working;
     let temporalRemainder = temporalText;
     function removeTemporalMatch(match) {
         const pattern = new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
