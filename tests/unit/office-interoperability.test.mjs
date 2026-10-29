@@ -153,6 +153,59 @@ test('SheetJS formula-cache repair leaves unsupported results as formula text an
   assert.equal(parsed.Sheets.Data.A1.w, '=MYSTERY(1)');
 });
 
+test('uncached unsupported formulas and their dependents remain visible without invented results', () => {
+  const parsed = {
+    SheetNames: ['Data'],
+    Sheets: { Data: {
+      A1: { t: 'n', v: 10 },
+      B1: { t: 'n', f: 'AVERAGE(A1:A2)', future: { keep: true } },
+      C1: { t: 'n', f: 'IFERROR(XIRR(A1:A2,A3:A4),0)' },
+      D1: { t: 'n', f: 'B1+1' },
+      E1: { t: 'n', f: 'SUM(C1:D1)' },
+      F1: { t: 'n', f: 'SUM(A1:A2)' },
+      G1: { t: 'n', f: 'XIRR(A1:A2,A3:A4)', v: 7, custom: 'retained' },
+      H1: { t: 'n', f: 'G1+1' },
+      I1: { t: 's', v: '5' },
+      J1: { t: 'n', f: 'SUM(I1:I2)' },
+      K1: { t: 'n', f: 'SUM(F1:F1)' },
+      '!ref': 'A1:K4'
+    } }
+  };
+  const report = Office.fillMissingFormulaResults(parsed);
+  assert.deepEqual(report, { calculated: 3, unavailable: 5 });
+  const sheet = parsed.Sheets.Data;
+  for (const address of ['B1', 'C1', 'D1', 'E1', 'J1']) {
+    assert.equal(sheet[address].v, '=' + sheet[address].f, address);
+    assert.equal(sheet[address].t, 's', address);
+  }
+  assert.deepEqual(sheet.B1.future, { keep: true });
+  assert.deepEqual(sheet.G1, { t: 'n', f: 'XIRR(A1:A2,A3:A4)', v: 7, custom: 'retained' });
+  assert.equal(sheet.F1.v, 10);
+  assert.equal(sheet.H1.v, 8);
+  assert.equal(sheet.K1.v, 10);
+});
+
+test('formula repair leaves cycles and nonnumeric formula dependencies unavailable', () => {
+  const parsed = { SheetNames: ['Data'], Sheets: { Data: {
+    A1: { f: 'B1+1' }, B1: { f: 'A1+1' }, C1: { f: 'A1+1' },
+    D1: { f: '"5"' }, E1: { f: 'SUM(D1:D1)' }, '!ref': 'A1:E1'
+  } } };
+  assert.deepEqual(Office.fillMissingFormulaResults(parsed), { calculated: 1, unavailable: 4 });
+  assert.equal(parsed.Sheets.Data.D1.v, '5');
+  for (const address of ['A1', 'B1', 'C1', 'E1']) assert.equal(parsed.Sheets.Data[address].v, '=' + parsed.Sheets.Data[address].f);
+});
+
+test('formula repair declines unverified power and unary-reference semantics', () => {
+  const parsed = { SheetNames: ['Data'], Sheets: { Data: {
+    A1: { t: 'e', v: 7, w: '#DIV/0!' },
+    B1: { f: '-A1' }, C1: { f: '2^3^2' }, D1: { f: '-2+3' }, '!ref': 'A1:D1'
+  } } };
+  assert.deepEqual(Office.fillMissingFormulaResults(parsed), { calculated: 1, unavailable: 2 });
+  assert.equal(parsed.Sheets.Data.B1.v, '=-A1');
+  assert.equal(parsed.Sheets.Data.C1.v, '=2^3^2');
+  assert.equal(parsed.Sheets.Data.D1.v, 1);
+});
+
 test('SheetJS formula-cache repair declines unsafe ranges and oversized sheet sets', () => {
   const hugeRange = {
     SheetNames: ['Data'],

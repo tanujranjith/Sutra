@@ -27,7 +27,7 @@ async function makeUncachedFormulaWorkbook(page) {
     zip.file('_rels/.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
     zip.file('xl/workbook.xml', '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Cache Check" sheetId="1" r:id="rId1"/></sheets></workbook>');
     zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
-    zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>2</t></is></c><c r="B1" t="n"><f>10+2</f><v>0</v></c><c r="C1" t="b"><f>TRUE()</f><v>0</v></c><c r="D1" t="str"><f>&quot;recomputed text&quot;</f><v>cached text</v></c><c r="E1" t="e"><f>1+1</f><v>#DIV/0!</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>3</t></is></c></row><row r="3"><c r="A3"><f>SUM(A1:A2)</f></c></row></sheetData></worksheet>');
+    zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="n"><v>2</v></c><c r="B1" t="n"><f>10+2</f><v>0</v></c><c r="C1" t="b"><f>TRUE()</f><v>0</v></c><c r="D1" t="str"><f>&quot;recomputed text&quot;</f><v>cached text</v></c><c r="E1" t="e"><f>1+1</f><v>#DIV/0!</v></c></row><row r="2"><c r="A2" t="n"><v>3</v></c></row><row r="3"><c r="A3"><f>SUM(A1:A2)</f></c><c r="B3"><f>AVERAGE(A1:A4)</f></c><c r="C3"><f>IFERROR(XIRR(A1:A2,A3:A4),0)</f></c><c r="D3"><f>B3+1</f></c></row></sheetData></worksheet>');
     return Array.from(await zip.generateAsync({ type: 'uint8array' }));
   });
   return Buffer.from(bytes);
@@ -71,9 +71,13 @@ test('Settings imports uncached XLSX formulas and preserves supplied formula cac
   const imported = await importedTableValues(page);
   expect(imported).not.toBeNull();
   expect(imported.content).toContain('static snapshot');
+  expect(imported.content).toContain('formula result(s) could not be calculated');
   expect(imported.cells).toContain('5');
   expect(imported.cells).toContain('0');
   expect(imported.cells.some((value) => /^false$/i.test(value))).toBe(true);
   expect(imported.cells).toContain('cached text');
   expect(imported.cells).toContain('#DIV/0!');
+  expect(imported.cells).toContain('=AVERAGE(A1:A4)');
+  expect(imported.cells).toContain('=IFERROR(XIRR(A1:A2,A3:A4),0)');
+  expect(imported.cells).toContain('=B3+1');
 });

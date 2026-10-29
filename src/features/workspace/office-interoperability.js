@@ -255,6 +255,25 @@
     if (node.type === 'unary') { walkFormulaAst(node.value, visit); return; }
     if (node.type === 'binary') { walkFormulaAst(node.left, visit); walkFormulaAst(node.right, visit); }
   }
+  // A note import is a static snapshot. Only calculate the small subset whose
+  // coercion and reference behavior is known to agree with Excel; retain the
+  // formula text for other expressions rather than inventing a cached result.
+  function safeImportFormula(node, root, rangeAllowed) {
+    if (!node) return false;
+    if (node.type === 'literal') return root || typeof node.value === 'number';
+    if (node.type === 'ref') return rangeAllowed || String(node.value).indexOf(':') === -1;
+    if (node.type === 'name') return true;
+    if (node.type === 'unary') return node.op === '-' && node.value.type === 'literal' && typeof node.value.value === 'number';
+    if (node.type === 'binary') {
+      // Power and unary expressions have differing precedence in Excel and
+      // the local parser; keep powers as text until their semantics match.
+      if (['+', '-', '*', '/'].indexOf(node.op) === -1) return false;
+      return safeImportFormula(node.left, false, false) && safeImportFormula(node.right, false, false);
+    }
+    if (node.type === 'call') return node.name === 'SUM' && node.args.length > 0
+      && node.args.every(function (arg) { return safeImportFormula(arg, false, true); });
+    return false;
+  }
   function normalizeSheetJsValue(cell) {
     if (!cell || cell.v === undefined || cell.v === null) return { supported: true, value: '' };
     var value = cell.v; var type = cell.t;
@@ -303,7 +322,7 @@
       if (stopScan) return;
       var source = parsedWorkbook.Sheets[name]; if (!source || typeof source !== 'object') { unsafe = true; return; }
       if (plansByName[name]) { unsafe = true; return; }
-      var plan = { name: name, source: source, maxRow: -1, maxCol: -1, cells: [], sheet: null }; plans.push(plan); plansByName[name] = plan;
+      var plan = { name: name, source: source, maxRow: -1, maxCol: -1, cells: [], byAddress: Object.create(null), sheet: null }; plans.push(plan); plansByName[name] = plan;
       var refRange = source['!ref'];
       if (refRange) {
         var rangeParts = String(refRange).split(':'); var refStart = engine().parseA1(rangeParts[0]); var refEnd = rangeParts[1] ? engine().parseA1(rangeParts[1]) : refStart;
@@ -317,7 +336,7 @@
         var missing = hasMissingFormulaResult(cell); var entry = { plan: plan, address: address, cell: cell, ref: engine().parseA1(address), missing: missing, ast: null, unsupported: false };
         if (missing) { formulaEntries.push(entry); showFormulaLiteral(cell); }
         if (totalCells > MAX_XLSX_CELLS) { unsafe = true; stopScan = true; break; }
-        if (entry.ref) { plan.maxRow = Math.max(plan.maxRow, entry.ref.row); plan.maxCol = Math.max(plan.maxCol, entry.ref.col); plan.cells.push(entry); }
+        if (entry.ref) { plan.maxRow = Math.max(plan.maxRow, entry.ref.row); plan.maxCol = Math.max(plan.maxCol, entry.ref.col); plan.cells.push(entry); plan.byAddress[entry.ref.row + ':' + entry.ref.col] = entry; }
         else if (cell.f) entry.unsupported = true;
       }
     });
@@ -346,6 +365,9 @@
       if (entry.unsupported) return;
       if (formulaText(entry.cell).length > 10000) { entry.unsupported = true; return; }
       try { entry.ast = engine().parseFormula(formulaText(entry.cell)); } catch (_) { entry.unsupported = true; return; }
+      if (!safeImportFormula(entry.ast, true, false)) { entry.unsupported = true; return; }
+      entry.scalarNonNumeric = entry.ast.type === 'literal' && typeof entry.ast.value !== 'number';
+      entry.references = [];
       walkFormulaAst(entry.ast, function (node) {
         var reference = node.type === 'ref' ? parseFormulaReference(node.value, entry.plan.name) : null;
         if (node.type === 'name') {
@@ -359,15 +381,48 @@
         if (formulaWork > MAX_XLSX_CELLS) { unsafe = true; return; }
         var targetPlan = plansByName[reference.sheetName];
         if (!targetPlan) {
-          var caseVariant = plans.find(function (item) { return item.name.toLowerCase() === reference.sheetName.toLowerCase(); });
-          if (caseVariant) entry.unsupported = true;
+          entry.unsupported = true;
           return;
         }
         if (reference.maxRow >= MAX_XLSX_ROWS || reference.maxCol >= MAX_XLSX_COLUMNS) { unsafe = true; return; }
+        // Named ranges are eligible only when they resolve to a single cell.
+        if (node.type === 'name' && (reference.start.row !== reference.end.row || reference.start.col !== reference.end.col)) { entry.unsupported = true; return; }
+        entry.references.push({ plan: targetPlan, reference: reference });
         targetPlan.maxRow = Math.max(targetPlan.maxRow, reference.maxRow); targetPlan.maxCol = Math.max(targetPlan.maxCol, reference.maxCol);
       });
     });
     if (unsafe) return report;
+    // Propagate unavailable formulas through all references before evaluating.
+    // This prevents unsupported functions, including those hidden by IFERROR,
+    // from masquerading as calculated values in dependent cells. The queue is
+    // iterative so long chains and cycles cannot exhaust the call stack.
+    formulaEntries.forEach(function (entry) { entry.dependents = []; entry.pending = 0; });
+    formulaEntries.forEach(function (entry) {
+      (entry.references || []).forEach(function (link) {
+        var ref = link.reference;
+        for (var row = Math.min(ref.start.row, ref.end.row); row <= ref.maxRow; row += 1) {
+          for (var col = Math.min(ref.start.col, ref.end.col); col <= ref.maxCol; col += 1) {
+            var target = link.plan.byAddress[row + ':' + col];
+            if (!target) continue; // Empty cells safely contribute zero to this subset.
+            if (target.missing) { entry.pending += 1; target.dependents.push(entry); continue; }
+            var value = normalizeSheetJsValue(target.cell);
+            // SUM ignores text and booleans in ranges, whereas the local engine
+            // coerces them. Reject those references throughout the subset.
+            if (!value.supported || (typeof value.value !== 'number' && !(value.value && value.value.error) && value.value !== '')) entry.unsupported = true;
+          }
+        }
+      });
+    });
+    var ready = formulaEntries.filter(function (entry) { return !entry.pending; });
+    for (var readyIndex = 0; readyIndex < ready.length; readyIndex += 1) {
+      var dependency = ready[readyIndex];
+      dependency.dependents.forEach(function (dependent) {
+        if (dependency.unsupported || dependency.scalarNonNumeric) dependent.unsupported = true;
+        dependent.pending -= 1;
+        if (!dependent.pending) ready.push(dependent);
+      });
+    }
+    formulaEntries.forEach(function (entry) { if (entry.pending) entry.unsupported = true; });
     var area = 0;
     plans.forEach(function (plan) {
       var rowCount = Math.min(MAX_XLSX_ROWS, Math.max(200, plan.maxRow + 20)); var columnCount = Math.min(MAX_XLSX_COLUMNS, Math.max(26, plan.maxCol + 8));
