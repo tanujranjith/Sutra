@@ -441,6 +441,12 @@
     });
     if (unsafe) return report;
     var evaluated = engine().evaluate(book);
+    // Warm the evaluator's cache in dependency order. Calling getValue in
+    // source-cell order can recurse through thousands of forward references,
+    // turn a stack overflow into #VALUE!, and write that invented result.
+    ready.forEach(function (entry) {
+      if (!entry.unsupported && entry.ref) evaluated.getValue(entry.plan.sheet, entry.ref.row, entry.ref.col);
+    });
     formulaEntries.forEach(function (entry) {
       if (entry.unsupported || !entry.ref) return;
       var cached = formulaCacheValue(evaluated.getValue(entry.plan.sheet, entry.ref.row, entry.ref.col));

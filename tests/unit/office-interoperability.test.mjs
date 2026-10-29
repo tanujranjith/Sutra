@@ -195,6 +195,16 @@ test('formula repair leaves cycles and nonnumeric formula dependencies unavailab
   for (const address of ['A1', 'B1', 'C1', 'E1']) assert.equal(parsed.Sheets.Data[address].v, '=' + parsed.Sheets.Data[address].f);
 });
 
+test('long forward-reference chains calculate in dependency order without stack overflow', () => {
+  const cells = { '!ref': 'A1:A3000', A3000: { t: 'n', v: 1 } };
+  for (let row = 1; row < 3000; row += 1) cells['A' + row] = { f: 'A' + (row + 1) + '+1' };
+  const parsed = { SheetNames: ['Data'], Sheets: { Data: cells } };
+  assert.deepEqual(Office.fillMissingFormulaResults(parsed), { calculated: 2999, unavailable: 0 });
+  assert.equal(cells.A1.v, 3000);
+  assert.equal(cells.A1500.v, 1501);
+  assert.equal(cells.A2999.v, 2);
+});
+
 test('formula repair declines unverified power and unary-reference semantics', () => {
   const parsed = { SheetNames: ['Data'], Sheets: { Data: {
     A1: { t: 'e', v: 7, w: '#DIV/0!' },
