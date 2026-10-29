@@ -216,6 +216,7 @@ test('Slides scoped and navigation context cannot borrow another protected deck'
     );
     window.deserializeWorkspace(payload);
     await window.__sutraPublicBetaTestHooks.lockPageWithPin('slides-private', pin);
+    window.flowAtelier.pages.find(page => page.id === 'slides-private').lockAutoLock = 'session';
     window.flowAtelier.unlockedPageIds.add('slides-private');
     window.flowAtelier.setActiveView('notes');
     window.SutraAssistantPermissions.setMode('read_only');
@@ -225,7 +226,7 @@ test('Slides scoped and navigation context cannot borrow another protected deck'
     let duringNavigation = null;
     const observe = () => {
       if (window.flowAtelier.currentPageId !== 'slides-public') return;
-      duringNavigation = { liveId: window.SutraSlides.getContext()?.id,
+      duringNavigation = { liveId: window.SutraSlides.getContext()?.id, stillUnlocked: window.flowAtelier.unlockedPageIds.has('slides-private'),
         context: window.flowAssistant.getFlowAssistantContext({ depth: 'currentView' }) };
     };
     window.addEventListener('noteflow:view-changed', observe);
@@ -236,6 +237,7 @@ test('Slides scoped and navigation context cannot borrow another protected deck'
   expect(result.scoped.activeNote.excerpt).toContain('ORDINARY_SLIDES_TEXT');
   expect(JSON.stringify(result.scoped)).not.toContain(SECRET);
   expect(result.duringNavigation).not.toBeNull();
+  expect(result.duringNavigation.stillUnlocked).toBe(true);
   expect(result.duringNavigation.liveId).toBe('slides-private');
   expect(result.duringNavigation.context.activeNote.excerpt).toContain('ORDINARY_SLIDES_TEXT');
   expect(JSON.stringify(result.duringNavigation.context)).not.toContain(SECRET);

@@ -435,11 +435,25 @@
         return !!(node && (node === element || element.contains(node)));
     }
 
+    function assistantPageWithinScope(pageId, options) {
+        if (!pageId) return false;
+        const scope = options && (options.scope || options.conversationScope) || {};
+        const id = String(pageId);
+        if (scope.type === 'note' || scope.type === 'page') {
+            const target = scope.noteId || scope.pageId || scope.id;
+            if (!target || String(target) !== id) return false;
+        }
+        const excluded = [].concat(scope.excludedNoteIds || [], scope.excludedSourceIds || []).map(String);
+        if (excluded.some(value => value === id || value === 'note:' + id
+            || value.startsWith(id + ':') || value.startsWith('note:' + id + ':'))) return false;
+        return true;
+    }
+
     // Editor unlock permits editing only. Assistant context needs its own
     // page-scoped ticket, and an unknown owner must never be treated as public.
     function assistantPageContextAllowed(pageId, options) {
         const b = bridge({ diagnose: false });
-        if (!pageId || !b || !Array.isArray(b.pages)) return false;
+        if (!assistantPageWithinScope(pageId, options) || !b || !Array.isArray(b.pages)) return false;
         const page = b.pages.find(item => item && String(item.id) === String(pageId));
         if (!page) return false;
         return !page.isLocked || currentLockedPageAccessIds(options).includes(String(page.id));
@@ -499,10 +513,11 @@
             syncActiveV2NoteForContext();
             const b = bridge();
             const scope = options && (options.scope || options.conversationScope) || {};
-            const pageId = scope.type === 'note' && scope.noteId ? scope.noteId : (b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null));
+            const scopedId = scope.type === 'note' || scope.type === 'page' ? (scope.noteId || scope.pageId || scope.id) : null;
+            const pageId = scopedId || (b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null));
             const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
             if (!pageId) return null;
-            if ([...(scope.excludedNoteIds || []), ...(scope.excludedSourceIds || [])].some(id => String(id) === String(pageId) || String(id) === 'note:' + pageId)) return null;
+            if (!assistantPageWithinScope(pageId, options)) return null;
             const page = pages.find(p => p && p.id === pageId);
             if (!page) return null;
             const assistantAccessIds = currentLockedPageAccessIds(options);

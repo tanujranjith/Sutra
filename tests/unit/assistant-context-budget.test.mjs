@@ -126,7 +126,7 @@ function editorContextFixture({ primaryLocked = false, canvasLocked = false, can
   };
   privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { notes: 'approved' } }) });
   const names = ['lockedPageAccessTicketIsValid', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
-    'scopedAssistantContextOptions', 'rangeInsideElement', 'assistantPageContextAllowed', 'getEditorSelection',
+    'scopedAssistantContextOptions', 'rangeInsideElement', 'assistantPageWithinScope', 'assistantPageContextAllowed', 'getEditorSelection',
     'getCanvasContextSummary', 'getFlowAssistantContext'];
   const declarations = names.map(name => {
     const found = extractFunction(source, name);
@@ -213,6 +213,37 @@ test('classic editor selection requires the current visible page owner', () => {
   assert.equal(editorContextFixture({ legacy: true, primaryLocked: true }).context({ depth: 'minimal' }).selection, undefined);
 });
 
+test('note scope and exclusions keep another page selection and Canvas out of the provider request', () => {
+  const fixture = editorContextFixture();
+  const check = options => {
+    const context = fixture.context({ depth: 'currentView', ...options });
+    const enrichment = createEnrichment({ depth: 'currentView', contextProvider: fixture.context, memoryPrivacy: privacy,
+      contextFilter: (value, filterOptions) => privacy.filterContext(value, filterOptions) })('hello', 'openai', { depth: 'currentView', ...options });
+    return { context, payload: JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages }) };
+  };
+  for (const options of [
+    { scope: { type: 'note', noteId: 'other' } },
+    { conversationScope: { type: 'note', noteId: 'other' } },
+    { scope: { type: 'all', excludedNoteIds: ['primary', 'canvas'] } },
+    { scope: { type: 'all', excludedSourceIds: ['note:primary', 'note:canvas:0:0'] } }
+  ]) {
+    const result = check(options);
+    assert.equal(result.context.selection, undefined);
+    assert.equal(result.context.canvas, undefined);
+    assert.ok(!result.payload.includes('SELECTION_SENTINEL'));
+    assert.ok(!result.payload.includes('CANVAS_SENTINEL'));
+  }
+  const selectionOnly = check({ scope: { type: 'note', noteId: 'primary' } });
+  assert.match(selectionOnly.payload, /SELECTION_SENTINEL/);
+  assert.ok(!selectionOnly.payload.includes('CANVAS_SENTINEL'));
+  const canvasOnly = check({ scope: { type: 'note', noteId: 'canvas' } });
+  assert.ok(!canvasOnly.payload.includes('SELECTION_SENTINEL'));
+  assert.match(canvasOnly.payload, /CANVAS_SENTINEL/);
+  const unscoped = check({});
+  assert.match(unscoped.payload, /SELECTION_SENTINEL/);
+  assert.match(unscoped.payload, /CANVAS_SENTINEL/);
+});
+
 test('Slides summaries use the requested owner, not a stale protected editor deck', () => {
   const pages = [
     { id: 'ordinary', title: 'Ordinary', slides: { slides: [{ title: 'ORDINARY_SLIDE', speakerNotes: 'ORDINARY_NOTES', elements: [{ text: 'ORDINARY_CONTENT' }] }] } },
@@ -226,7 +257,7 @@ test('Slides summaries use the requested owner, not a stale protected editor dec
   } } };
   privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { notes: 'approved' } }) });
   const names = ['lockedPageAccessTicketIsValid', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
-    'scopedAssistantContextOptions', 'rangeInsideElement', 'assistantPageContextAllowed', 'getEditorSelection',
+    'scopedAssistantContextOptions', 'rangeInsideElement', 'assistantPageWithinScope', 'assistantPageContextAllowed', 'getEditorSelection',
     'getActiveNoteSummary', 'getCanvasContextSummary', 'getSlidesContextSummary', 'getFlowAssistantContext'];
   const declarations = names.map(name => {
     const found = extractFunction(source, name);
@@ -268,6 +299,10 @@ test('Slides summaries use the requested owner, not a stale protected editor dec
   const ready = context({ depth: 'currentView' });
   assert.equal(ready.slides.id, 'ordinary');
   assert.match(JSON.stringify(ready), /ORDINARY_CONTENT/);
+  const excluded = context({ depth: 'currentView', scope: { type: 'all', excludedSourceIds: ['ordinary:0:0'] } });
+  assert.equal(excluded.activeNote, undefined);
+  assert.equal(excluded.slides, undefined);
+  assert.ok(!JSON.stringify(excluded).includes('ORDINARY_CONTENT'));
 
   state.currentPageId = state.liveId = 'protected';
   assert.ok(!JSON.stringify(context({ depth: 'currentView' })).includes('PROTECTED_CONTENT'));

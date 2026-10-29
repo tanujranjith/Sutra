@@ -44,7 +44,7 @@ test('ambiguous, absent, overlapping, and stale source anchors remain blocked', 
 test('prompt note version matches the patch engine rather than an individual snapshot id', () => {
   const note = { id: 'n', content: '<p>Essay.</p>', versions: [{ id: 'snapshot-id' }] };
   const summarize = new Function('syncActiveV2NoteForContext', 'bridge', 'currentLockedPageAccessIds', 'window', 'document', 'setUserHtml', 'truncate',
-    extractFunction(source, 'getActiveNoteSummary').body + ';return getActiveNoteSummary;')(
+    extractFunction(source, 'assistantPageWithinScope').body + '\n' + extractFunction(source, 'getActiveNoteSummary').body + ';return getActiveNoteSummary;')(
     () => {}, () => ({ currentPageId: 'n', pages: [note] }), () => [], { SutraNotePatchSystem: patches },
     { createElement: () => ({ textContent: 'Essay.' }) }, () => {}, text => text);
   assert.equal(summarize().versionId, patches.create({ note, after: '<p>Short.</p>' }).versionId);

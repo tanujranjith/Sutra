@@ -243,7 +243,10 @@ Recent conversation receives priority over ambient workspace matches. Questions
 about this chat's history use Minimal workspace context instead of unrelated
 notes. Adding a note in the full Assistant binds its canonical note ID into the
 existing conversation scope after send consent; later follow-ups re-read that
-same note under current permissions. Older label-only chips can recover a scope
+same note under current permissions. Another open page's selection or Canvas is
+not included in that note-scoped context. Excluding a note excerpt also keeps
+its page's full editor selection and Canvas summary out of the next request.
+Older label-only chips can recover a scope
 only from a unique exact canonical title match. Locked content still needs a new
 page-scoped consent flow. Natural edit requests such as “revise it and put it in
 there” expose the canonical anchored-note action schema and produce reviewed
