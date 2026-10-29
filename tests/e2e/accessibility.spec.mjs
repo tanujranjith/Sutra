@@ -81,18 +81,11 @@ test.describe('Accessibility: keyboard navigation', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
         await waitForAppReady(page);
-        await page.evaluate(() => {
-            try { window.markStudentOnboardingCompleted?.(true); } catch (e) {}
-            document.body.classList.remove('onboarding-open');
-            const overlay = document.getElementById('studentOnboardingOverlay');
-            if (overlay) {
-                overlay.classList.remove('active');
-                overlay.hidden = true;
-                overlay.setAttribute('aria-hidden', 'true');
-                overlay.style.setProperty('display', 'none', 'important');
-                overlay.style.setProperty('pointer-events', 'none', 'important');
-            }
-        });
+        // Fresh contexts always have onboarding. Use its real dismissal so any
+        // deferred intro and focus handling finish before keyboard assertions.
+        const skipBtn = page.getByRole('button', { name: 'Skip setup', exact: true });
+        await expect(skipBtn).toBeVisible();
+        await skipBtn.click();
         await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
     });
 
