@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261029-quality-privacy2",
-    "hash": "7ff6d61785d4fc98"
+    "stamp": "20261029-quality-privacy3",
+    "hash": "1747337dcd34fc0e"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261029-quality-owner1",
-    "hash": "60d3ece26b84f0dc"
+    "stamp": "20261029-quality-focus2",
+    "hash": "ac0bf21574bd5973"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -140,8 +140,8 @@
     "hash": "d164c6f2cac51a8c"
   },
   "src/domain/student-engine.js": {
-    "stamp": "20261029-quality-completion1",
-    "hash": "dc6b9c764ab09d96"
+    "stamp": "20261029-quality-completion2",
+    "hash": "fb10849327e8eec5"
   },
   "src/domain/student-life.js": {
     "stamp": "20261029-quality-completion1",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261029-quality-privacy2",
-    "hash": "0947a86b1b46fba1"
+    "stamp": "20261029-quality-privacy3",
+    "hash": "4e9790cb2cbcc215"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261029-quality-privacy1",
-    "hash": "1fcd034267a31a68"
+    "stamp": "20261029-quality-privacy3",
+    "hash": "ceb572b4dd99f8b5"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -396,8 +396,8 @@
     "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20261028-notification-age3",
-    "hash": "60b925ee7248e26f"
+    "stamp": "20261029-quality-notifications1",
+    "hash": "0f4775c63da890ac"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20261029-quality-formulas2",
@@ -460,8 +460,8 @@
     "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20261029-quality-completion1",
-    "hash": "0a3fa23d58e88b12"
+    "stamp": "20261029-quality-completion2",
+    "hash": "df2313c949b46163"
   },
   "src/features/workspace/today-dashboard.js": {
     "stamp": "20261028-retire-priorities1",

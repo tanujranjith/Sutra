@@ -130,3 +130,74 @@ test('a bare Focus launch resumes the current session', () => {
 
   assert.equal(runtime.getSession(), previous);
 });
+
+function makeOverlayRuntime() {
+  const attributes = new Map([['hidden', ''], ['aria-hidden', 'true']]);
+  const classes = new Set();
+  const bodyClasses = new Set();
+  const frames = [];
+  const timers = [];
+  let focusCount = 0;
+  const overlay = {
+    classList: { add: value => classes.add(value), remove: value => classes.delete(value) },
+    setAttribute: (name, value) => attributes.set(name, value),
+    removeAttribute: name => attributes.delete(name),
+    hasAttribute: name => attributes.has(name)
+  };
+  const document = {
+    body: { classList: { add: value => bodyClasses.add(value), remove: value => bodyClasses.delete(value) } },
+    getElementById(id) {
+      if (id === 'focusSessionOverlay') return overlay;
+      if (id === 'fsPlayBtn') return { focus() { focusCount++; } };
+      return null;
+    }
+  };
+  const requestAnimationFrame = callback => { const record = { callback, cancelled: false }; frames.push(record); return record; };
+  const cancelAnimationFrame = record => { if (record) record.cancelled = true; };
+  const setTimeout = (callback, delay) => { const record = { callback, delay, cancelled: false }; timers.push(record); return record; };
+  const clearTimeout = record => { if (record) record.cancelled = true; };
+  const declarations = ['_fsOpenOverlay', '_fsCloseOverlay'].map(name => extractFunction(source, name).body).join('\n');
+  const runtime = new Function('document', 'requestAnimationFrame', 'cancelAnimationFrame', 'setTimeout', 'clearTimeout', '_fsSyncFromCanonicalTimer', '_fsPopulateUI', '_fsPersistSession', `
+    let _fsSession = { id: 'focus-test' };
+    let _fsOverlayRevision = 0;
+    ${declarations}
+    return { open: _fsOpenOverlay, close: _fsCloseOverlay };
+  `)(document, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout, () => {}, () => {}, () => {});
+  return {
+    ...runtime, attributes, classes, bodyClasses,
+    focusCount: () => focusCount,
+    nextFrame() { const frame = frames.shift(); assert.ok(frame, 'expected animation frame'); if (!frame.cancelled) frame.callback(); },
+    runTimers(delay) { for (const timer of timers.filter(item => item.delay === delay && !item.ran)) { timer.ran = true; if (!timer.cancelled) timer.callback(); } }
+  };
+}
+
+test('a delayed Focus close cannot hide a newly opened session', () => {
+  const ui = makeOverlayRuntime();
+  ui.open();
+  ui.nextFrame(); ui.nextFrame();
+  ui.close('minimize');
+  ui.open();
+  ui.nextFrame(); ui.nextFrame();
+  ui.runTimers(450);
+  assert.equal(ui.attributes.has('hidden'), false);
+  assert.equal(ui.attributes.get('aria-hidden'), 'false');
+  assert.equal(ui.classes.has('fs-visible'), true);
+  assert.equal(ui.bodyClasses.has('fs-active'), true);
+  ui.runTimers(120);
+  assert.equal(ui.focusCount(), 1, 'only the current open may move focus');
+});
+
+test('a pending Focus open cannot revive or focus an immediately closed overlay', () => {
+  const ui = makeOverlayRuntime();
+  ui.open();
+  ui.nextFrame(); // The second frame is now pending.
+  ui.close('minimize');
+  ui.nextFrame();
+  assert.equal(ui.classes.has('fs-visible'), false);
+  ui.runTimers(120);
+  assert.equal(ui.focusCount(), 0);
+  ui.runTimers(450);
+  assert.equal(ui.attributes.has('hidden'), true);
+  assert.equal(ui.attributes.get('aria-hidden'), 'true');
+  assert.equal(ui.bodyClasses.has('fs-active'), false);
+});

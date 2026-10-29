@@ -86598,6 +86598,7 @@ const FS_DEFAULT_DURATION_SECONDS = 25 * 60;
 let _fsSession = null;
 let _fsIntervalId = null;
 let _fsKeyboardBound = false;
+let _fsOverlayRevision = 0;
 
 function _fsTimerCommand(action, seconds) {
     var detail = { action: action, seconds: seconds, result: null };
@@ -86650,6 +86651,7 @@ function _fsNormalizeSession(raw) {
 function _fsOpenOverlay() {
     const overlay = document.getElementById('focusSessionOverlay');
     if (!overlay) return;
+    const revision = ++_fsOverlayRevision;
 
     _fsSyncFromCanonicalTimer();
     _fsPopulateUI();
@@ -86660,18 +86662,24 @@ function _fsOpenOverlay() {
 
     // Trigger CSS transition on next frame
     requestAnimationFrame(function() {
+        if (revision !== _fsOverlayRevision) return;
         requestAnimationFrame(function() {
+            if (revision !== _fsOverlayRevision) return;
             overlay.classList.add('fs-visible');
         });
     });
 
     // Focus the play button for keyboard users
     var playBtn = document.getElementById('fsPlayBtn');
-    if (playBtn) setTimeout(function() { try { playBtn.focus(); } catch (e) {} }, 120);
+    if (playBtn) setTimeout(function() {
+        if (revision !== _fsOverlayRevision) return;
+        try { playBtn.focus(); } catch (e) {}
+    }, 120);
 }
 
 function _fsCloseOverlay(reason) {
     // Closing the full-screen view must not alter the canonical sidebar timer.
+    const revision = ++_fsOverlayRevision;
 
     // Flush notes before closing
     var notesArea = document.getElementById('fsNotesTextarea');
@@ -86685,6 +86693,7 @@ function _fsCloseOverlay(reason) {
     if (overlay) {
         overlay.classList.remove('fs-visible');
         setTimeout(function() {
+            if (revision !== _fsOverlayRevision) return;
             overlay.setAttribute('hidden', '');
             overlay.setAttribute('aria-hidden', 'true');
         }, 450);

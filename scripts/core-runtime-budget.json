@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-29T18:12:18.032Z",
-  "reviewedReason": "Track-rendered-editor-owner-before-Assistant-selection",
-  "maxBytes": 5014826,
-  "maxLines": 87078
+  "blessedAt": "2026-10-29T18:26:44.300Z",
+  "reviewedReason": "Guard-Focus-overlay-transitions-by-current-revision",
+  "maxBytes": 5015172,
+  "maxLines": 87087
 }
