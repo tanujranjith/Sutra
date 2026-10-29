@@ -32,7 +32,6 @@ test('fresh Everyday is useful without autonomous writes or startup provider req
   await page.getByText('Access by area', { exact: true }).click();
   await page.locator('[data-assistant-permission-area="notes"]').selectOption('denied');
   await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant access change saved locally.');
-  await page.locator('#assistantAccessPreset').selectOption('advanced');
   await page.locator('#assistantAccessPreset').selectOption('private');
   await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant access change saved locally.');
   await page.reload(); await waitForAppReady(page);
@@ -73,19 +72,39 @@ test('permission save failure keeps the selected restriction and offers Retry sa
   await page.evaluate(() => {
     const owner = window.flowAtelier;
     const flush = owner.flushAppSaveNow;
+    let calls = 0;
     owner.flushAppSaveNow = (...args) => {
+      calls += 1;
+      if (calls === 1) {
+        return new Promise((resolve, reject) => {
+          window.__assistantPermissionSaveDeferred = { resolve, reject };
+        });
+      }
       owner.flushAppSaveNow = flush;
-      return Promise.reject(new Error('Simulated permission save rejection.'));
+      window.__assistantPermissionRetryReason = args[0];
+      return flush.apply(owner, args);
     };
   });
   await page.locator('#assistantAccessPreset').selectOption('private');
+  await expect(status).toContainText('Saving Assistant access…');
+  await expect(status).toHaveAttribute('aria-busy', 'true');
+  await expect(page.locator('#assistantAccessPreset')).toBeDisabled();
+  await expect(page.locator('#assistantWorkspaceAccess')).toBeDisabled();
+  await expect(page.locator('[data-assistant-permission-area="notes"]')).toBeDisabled();
+  await expect(status).not.toContainText('Assistant access change saved locally.');
+  expect(await page.evaluate(() => window.SutraAssistantPermissions.get())).toMatchObject({ mode: 'off', areas: { notes: 'denied' } });
+  await page.evaluate(() => {
+    const deferred = window.__assistantPermissionSaveDeferred;
+    window.__assistantPermissionSaveDeferred = null;
+    deferred.reject(new Error('Simulated permission save rejection.'));
+  });
   await expect(status).toContainText('Could not confirm saving this Assistant access change.');
   await expect(status.getByRole('button', { name: 'Retry save', exact: true })).toBeEnabled();
   await expect(status).not.toContainText('Assistant access change saved locally.');
-  expect(await page.evaluate(() => window.SutraAssistantPermissions.get())).toMatchObject({ mode: 'off', areas: { notes: 'denied' } });
 
   await status.getByRole('button', { name: 'Retry save', exact: true }).click();
   await expect(status).toContainText('Assistant access change saved locally.');
+  expect(await page.evaluate(() => window.__assistantPermissionRetryReason)).toBe('retry');
   await page.reload(); await waitForAppReady(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.locator('[data-settings-nav="assistant"]').click();

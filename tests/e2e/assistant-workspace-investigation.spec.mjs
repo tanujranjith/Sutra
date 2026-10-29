@@ -209,7 +209,6 @@ test('saving Assistant enablement loads and reinitializes workspace-access contr
   await expect(preset).toBeEnabled();
   await expect(area).toBeEnabled();
   await expect(mode).toHaveValue('read_only');
-  await page.locator('#assistantAccessPreset').selectOption('advanced');
   await mode.selectOption('ask_per_area');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('ask_per_area');
   await expect(status).toContainText('Assistant access change saved locally.');

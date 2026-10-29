@@ -9722,7 +9722,7 @@
             }
             let result;
             try {
-                result = await saveAssistantPermissionSetting(() => {});
+                result = await saveAssistantPermissionSetting(() => {}, 'retry');
             } catch (error) {
                 result = { ok: false, phase: 'save', error };
             }
@@ -9750,8 +9750,10 @@
         }));
     }
 
-    async function saveAssistantPermissionSetting(apply) {
+    async function saveAssistantPermissionSetting(apply, reason) {
         if (assistantPermissionSavePending) return { ok: false, phase: 'busy' };
+        const previousSaveState = assistantPermissionSaveState;
+        const previousSaveMessage = assistantPermissionSaveMessage;
         assistantPermissionSavePending = true;
         assistantPermissionSaveState = 'saving';
         assistantPermissionSaveMessage = '';
@@ -9767,14 +9769,19 @@
                 if (!owner || typeof owner.flushAppSaveNow !== 'function') {
                     throw new Error('Workspace save confirmation is unavailable.');
                 }
-                return owner.flushAppSaveNow('assistant-permission-settings');
+                return owner.flushAppSaveNow(reason === 'retry' ? 'retry' : 'assistant-permission-settings');
             });
             if (result.ok) {
                 assistantPermissionSaveState = 'saved';
                 assistantPermissionSaveMessage = 'Assistant access change saved locally.';
             } else if (result.phase === 'apply') {
-                assistantPermissionSaveState = 'blocked';
-                assistantPermissionSaveMessage = result.error && result.error.message || 'Could not apply Assistant access.';
+                if (previousSaveState === 'failed') {
+                    assistantPermissionSaveState = previousSaveState;
+                    assistantPermissionSaveMessage = previousSaveMessage;
+                } else {
+                    assistantPermissionSaveState = 'blocked';
+                    assistantPermissionSaveMessage = result.error && result.error.message || 'Could not apply Assistant access.';
+                }
             } else {
                 assistantPermissionSaveState = 'failed';
                 assistantPermissionSaveMessage = 'Could not confirm saving this Assistant access change. The selected permissions remain active in this session; retry before leaving this page.';
@@ -9823,7 +9830,9 @@
         const assistantEnabled = getPref('assistant.enabled', true) !== false;
         mode.disabled = !ready || !assistantEnabled || assistantPermissionSavePending;
         if (preset) preset.disabled = !ready || !assistantEnabled || assistantPermissionSavePending || typeof controls.applyPreset !== 'function';
-        document.querySelectorAll('[data-assistant-permission-enable]').forEach(button => { button.disabled = assistantPermissionSavePending; });
+        document.querySelectorAll('[data-assistant-permission-enable]').forEach(button => {
+            button.disabled = !ready || !assistantEnabled || assistantPermissionSavePending;
+        });
         if (!ready) {
             container.querySelectorAll('select').forEach(select => { select.disabled = true; });
             renderAssistantPermissionStatus(status, 'Workspace access is unavailable. Reload Sutra to restore its permission controls.');
