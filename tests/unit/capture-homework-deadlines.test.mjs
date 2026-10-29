@@ -49,6 +49,50 @@ test('explicit deadline clocks beat night defaults and incidental event clocks',
   assert.equal(parse('schedule physics study block tomorrow night').dueTime, '19:00');
 });
 
+test('repeated due date text is removed from the deadline clause, not the title', () => {
+  const { parse } = fixture();
+  const result = parse('Friday lab due Friday');
+  assert.equal(result.dueDate, '2026-10-30');
+  assert.equal(result.title, 'Friday lab');
+});
+
+test('an incidental date after the due clause does not replace the deadline', () => {
+  const { parse } = fixture();
+  const result = parse('physics hw lab due Friday, I started today');
+  assert.equal(result.dueDate, '2026-10-30');
+  assert.match(result.title, /started today/i);
+});
+
+test('a comma before the year remains part of a month-day-year deadline', () => {
+  const { parse } = fixture();
+  const result = parse('physics hw lab due October 26, 2026');
+  assert.equal(result.dueDate, '2026-10-26');
+  assert.doesNotMatch(result.title, /October 26|2026/i);
+});
+
+test('deadline date and clock stay separate from later incidental date and time text', () => {
+  const { parse } = fixture();
+  const result = parse('physics hw lab due Friday at 8pm, started today at 9am');
+  assert.equal(result.dueDate, '2026-10-30');
+  assert.equal(result.dueTime, '20:00');
+  assert.match(result.title, /started today at 9am/i);
+});
+
+test('comma-separated deadline clocks stay with the deadline and exclude later notes', () => {
+  const { parse } = fixture();
+  for (const [clock, expected] of [['8pm', '20:00'], ['20:00', '20:00'], ['noon', '12:00'], ['midnight', '00:00']]) {
+    const result = parse(`physics hw lab due Friday, ${clock}, started today at 9am`);
+    assert.equal(result.dueDate, '2026-10-30', clock);
+    assert.equal(result.dueTime, expected, clock);
+    assert.match(result.title, /started today at 9am/i);
+    assert.doesNotMatch(result.title, new RegExp(clock, 'i'));
+  }
+  const dated = parse('physics hw lab due October 26, 2026, 8pm, started today at 9am');
+  assert.equal(dated.dueDate, '2026-10-26');
+  assert.equal(dated.dueTime, '20:00');
+  assert.match(dated.title, /started today at 9am/i);
+});
+
 test('Photography homework infers its exact class and tomorrow-night deadline without due', () => {
   const { parse } = fixture();
   const result = parse('submit photography hw tmrw night');

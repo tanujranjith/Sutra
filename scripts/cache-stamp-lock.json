@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261029-ci-revoke-coordination1",
-    "hash": "f2b25276bc5724da"
+    "stamp": "20261029-quality-capture1",
+    "hash": "d6cdd3fdaac160ca"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -252,8 +252,8 @@
     "hash": "16d76c3e5d3d41a8"
   },
   "src/features/feature-registry.js": {
-    "stamp": "20261029-quality-retry1",
-    "hash": "0552e0a8748fa6a3"
+    "stamp": "20261029-quality-retry2",
+    "hash": "d31a99d834536367"
   },
   "src/features/notes/authoring-tools.js": {
     "stamp": "20261024-writing-session1",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261029-ci-revoke-coordination1",
-    "hash": "3d0b0eb35a5aae15"
+    "stamp": "20261029-quality-capture1",
+    "hash": "bbc1339177f63df2"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -500,8 +500,8 @@
     "hash": "9d3be0ba07f108c3"
   },
   "src/sync/sync-crypto.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "d2216832ed6fe9bd"
+    "stamp": "20261029-quality-identity1",
+    "hash": "a5d7db7fca9bb047"
   },
   "src/sync/sync-diff.js": {
     "stamp": "20260716-sync6",

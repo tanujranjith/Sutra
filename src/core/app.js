@@ -30011,7 +30011,7 @@ function buildOnboardingPlanPreview() {
         function cwFocusInboxItem(source, sourceId, milestoneId) {
             const item = cwFindInboxItem(source, sourceId, milestoneId);
             const title = item ? item.title : '';
-            const taskId = sourceId && (source === 'homework' ? `hw_v2_${sourceId}` : source === 'task' ? sourceId : null);
+            const taskId = sourceId && (source === 'homework' ? `hw_v2_${sourceId}` : (source === 'planner' || source === 'task') ? sourceId : null);
             if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') {
                 try { window.flowAtelier.startFocusSession(taskId || null, { title }); showToast('Focus session started.'); return true; } catch (e) { /* fall through */ }
             }
@@ -83264,7 +83264,18 @@ function parseQuickCaptureText(text, options) {
     // "in N days", "next week", explicit + month-name dates) — see parseQuickCaptureDate.
     // Parse deadline fields from the due clause, not descriptive event dates.
     const deadlineClause = working.match(/\bdue\s+(?:(?:on|by|at)\s+)?(.+)$/i);
-    const temporalText = deadlineClause ? deadlineClause[1] : working;
+    const deadlineStart = deadlineClause ? deadlineClause.index + deadlineClause[0].length - deadlineClause[1].length : 0;
+    // A following note is not part of the deadline. Preserve the comma in
+    // month/day/year dates and comma-separated clocks, but stop before notes.
+    const temporalText = deadlineClause ? deadlineClause[1].split(/[;\n]|,(?!\s*(?:\d{4}\b|(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\d{1,2}:\d{2}\b|noon\b|midnight\b|night\b)))/, 1)[0] : working;
+    let temporalRemainder = temporalText;
+    function removeTemporalMatch(match) {
+        const pattern = new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        if (!deadlineClause) { working = working.replace(pattern, ' '); return; }
+        const next = temporalRemainder.replace(pattern, ' ');
+        working = working.slice(0, deadlineStart) + next + working.slice(deadlineStart + temporalRemainder.length);
+        temporalRemainder = next;
+    }
     const sharedDateParser = window.SutraStudentDateParser;
     const sharedTimeParsed = sharedDateParser && typeof sharedDateParser.parseNaturalTime === 'function'
         ? sharedDateParser.parseNaturalTime(temporalText)
@@ -83280,8 +83291,7 @@ function parseQuickCaptureText(text, options) {
         out.dueDate = dateParsed.date;
         if (dateParsed.timeHint) out.dueTime = String(dateParsed.timeHint);
         if (dateParsed.match) {
-            const dateRe = new RegExp(dateParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            working = working.replace(dateRe, ' ').replace(/\s+/g, ' ').trim();
+            removeTemporalMatch(dateParsed.match);
         }
     }
 
@@ -83297,7 +83307,7 @@ function parseQuickCaptureText(text, options) {
         if (h >= 0 && h <= 23 && min >= 0 && min <= 59 && (suffix || timeMatch[0].includes(':'))) {
             out.dueTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
             explicitTimeSpecified = true;
-            working = working.replace(timeMatch[0], ' ').replace(/\s+/g, ' ').trim();
+            removeTemporalMatch(timeMatch[0]);
         }
     } else if (sharedTimeParsed && sharedTimeParsed.time) {
         out.dueTime = String(sharedTimeParsed.time);
@@ -83305,8 +83315,7 @@ function parseQuickCaptureText(text, options) {
         // Phrases such as "after school" may already have been removed by the
         // date parser; replacing a missing match is harmless and keeps titles clean.
         if (sharedTimeParsed.match) {
-            const timeRe = new RegExp(sharedTimeParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            working = working.replace(timeRe, ' ').replace(/\s+/g, ' ').trim();
+            removeTemporalMatch(sharedTimeParsed.match);
         }
     }
     if (sharedDuration && sharedDuration.minutes) {

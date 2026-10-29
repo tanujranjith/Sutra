@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-29T17:41:16.521Z",
-  "reviewedReason": "Preserve task identity and explicit title context in canonical Focus entry points",
-  "maxBytes": 5013885,
-  "maxLines": 87066
+  "blessedAt": "2026-10-29T17:56:10.275Z",
+  "reviewedReason": "Preserve-explicit-deadline-clocks-and-All-Due-Focus-identity",
+  "maxBytes": 5014490,
+  "maxLines": 87075
 }

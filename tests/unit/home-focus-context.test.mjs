@@ -91,6 +91,23 @@ test('All Due passes Focus options using the canonical taskId, opts signature', 
   assert.equal(runtime.getSession().taskTitle, item.title);
 });
 
+test('All Due preserves the task ID for its normalized planner source', () => {
+  const task = { id: 'planner-42', title: 'Read chemistry notes' };
+  const runtime = makeFocusRuntime([task]);
+  const focusInbox = new Function(
+    'cwFindInboxItem', 'window', 'showToast', 'startFocusSession', 'setActiveView',
+    `${extractFunction(source, 'cwFocusInboxItem').body}; return cwFocusInboxItem;`
+  )(
+    () => ({ source: 'planner', sourceId: task.id, title: task.title }),
+    { flowAtelier: { startFocusSession: (taskId, opts) => { runtime.start(taskId, opts); return true; } } },
+    () => {}, runtime.start, () => {}
+  );
+
+  assert.equal(focusInbox('planner', task.id, ''), true);
+  assert.equal(runtime.getSession().taskId, task.id);
+  assert.equal(runtime.getSession().taskTitle, task.title);
+});
+
 test('a title-seeded session without a task ID replaces unrelated current context', () => {
   const previous = { id: 'focus-old', taskId: 'old-task', taskTitle: 'Old assignment' };
   const runtime = makeFocusRuntime([], previous);
