@@ -87,6 +87,12 @@ test.describe('Accessibility: keyboard navigation', () => {
         await expect(skipBtn).toBeVisible();
         await skipBtn.click();
         await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
+        // The modal manager releases background inertness on its next frame.
+        // Wait for the real Home action to become focusable instead of racing it.
+        await page.waitForFunction(() => {
+            const target = document.getElementById('topAddTaskBtn');
+            return !!target && target.isConnected && !target.closest('[inert]');
+        });
     });
 
     test('Tab key moves focus forward', async ({ page }) => {
@@ -106,7 +112,7 @@ test.describe('Accessibility: keyboard navigation', () => {
     });
 
     test('Enter activates the Today add-task button', async ({ page }) => {
-        await page.evaluate(() => window.setActiveView('today'));
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'today');
         const addTask = page.locator('#topAddTaskBtn');
         await expect(addTask).toBeVisible();
         await expect(addTask).toBeEnabled();
