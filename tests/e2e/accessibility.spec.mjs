@@ -113,8 +113,9 @@ test.describe('Accessibility: keyboard navigation', () => {
         await addTask.focus();
         await expect(addTask).toBeFocused();
         await page.keyboard.press('Enter');
-        await expect(page.locator('#taskModal')).toBeVisible();
-        await expect(page.locator('#taskModal')).toContainText('Add Task');
+        await expect(page.locator('#quickCaptureModal')).toBeVisible();
+        await expect(page.locator('#quickCaptureTitle')).toHaveText('Add task');
+        await expect(page.locator('#quickCaptureType')).toHaveValue('task');
     });
 });
 
