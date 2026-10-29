@@ -28,6 +28,8 @@ async function send(page, text, expected) {
 }
 
 test('local study interview opens a draft, preserves skipped values, and saves only through Settings', async ({ page }) => {
+  // This 15-answer flow includes four cold reloads plus the Settings and backup round-trip.
+  test.setTimeout(120_000);
   const remote = [];
   page.on('request', request => { if (/api\.openai\.com|generativelanguage\.googleapis\.com|api\.groq\.com/.test(request.url())) remote.push(request.url()); });
   await openLocalAssistant(page);
