@@ -133,7 +133,12 @@ test('empty writing slash command requires an explicit passage and Cancel preser
   await enableEditorV2(page);
   await stageWritingProvider(page);
   const editor = page.locator('#editorV2Host .ProseMirror');
-  await editor.fill('/spelling');
+  // Type through ProseMirror so its focused selection and slash-query handler
+  // see the same keyboard input as a student.
+  await editor.click();
+  await page.keyboard.type('/spelling');
+  await expect(editor).toHaveText('/spelling');
+  await expect(page.locator('.editor-v2-slash-menu')).toBeVisible();
   await page.locator('.editor-v2-slash-item').filter({ hasText: '/spelling' }).click();
   const review = page.locator('.sutra-inline-ai-workbench');
   await expect(review.getByLabel('Passage to edit')).toHaveValue('');
@@ -1317,7 +1322,11 @@ test('paired sidebar notes survive unrelated navigation, reload, and explicit un
   expect(pairCells[0].right).toBeLessThanOrEqual(pairCells[1].left);
   await expect(page.locator('#pagesList .page-item').filter({ hasText: 'Pair Alpha' })).toBeHidden();
   await expect(page.locator('#pagesList .page-item').filter({ hasText: 'Pair Beta' })).toBeHidden();
-  await page.locator('#editorV2SecondaryHost .ProseMirror').fill('Alpha pending edit');
+  const secondaryEditor = page.locator('#editorV2SecondaryHost .ProseMirror');
+  await secondaryEditor.click();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.type('Alpha pending edit');
+  await expect(secondaryEditor).toHaveText('Alpha pending edit');
   // Creating a page while the secondary pane is active must not replace either member.
   await createBlankNote(page, 'Separate Gamma');
   await page.locator('#editorV2Host .ProseMirror').fill('Gamma original');
