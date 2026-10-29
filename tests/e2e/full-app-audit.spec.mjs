@@ -481,6 +481,13 @@ test('mobile Sync dialog fits the dynamic viewport and keeps actions touchable',
   // on the actual dialog shell rather than the inner Sync section.
   const dialog = page.locator('#sutraCloudModal .sutra-cloud-modal');
   await expect(dialog).toBeVisible();
+  await dialog.evaluate(async node => {
+    const openingAnimations = node.getAnimations().filter(animation => {
+      const finite = Number.isFinite(animation.effect?.getComputedTiming?.().endTime);
+      return finite && (animation.playState === 'running' || animation.playState === 'pending');
+    });
+    await Promise.all(openingAnimations.map(animation => animation.finished.catch(() => {})));
+  });
   const layout = await dialog.evaluate((node) => {
     const rect = node.getBoundingClientRect();
     const input = node.querySelector('.sutra-sync-input');
