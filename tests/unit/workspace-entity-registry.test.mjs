@@ -277,3 +277,28 @@ test('browser adapters cover the connected student loop and preserve locked-note
     });
   }
 });
+
+test('Homework entities use canonical completion while preserving progress and legacy metadata', async () => {
+  await Promise.resolve(); // release the previous adapter snapshot
+  const store = require('../../src/domain/homework-store.js');
+  const workspace = store.normalizeWorkspace({ tasks: [
+    { id: 'reopened', title: 'Reopened', done: false, completed: true, status: 'done', futureData: { keep: true } },
+    { id: 'progress', title: 'In progress', done: false, status: 'in-progress' },
+    { id: 'finished', title: 'Finished', done: true, status: 'in-progress' },
+    { id: 'legacy', title: 'Legacy', status: 'done' }
+  ] });
+  const before = structuredClone(workspace);
+  const previous = globalThis.flowAtelier;
+  globalThis.flowAtelier = { getWorkspaceEntitySources: () => ({ homeworkWorkspace: workspace }) };
+  try {
+    const adapter = adaptersModule.createAdapterDefinitions().find(definition => definition.id === 'homework');
+    const entities = adapter.collect();
+    assert.equal(entities.find(entity => entity.id === 'reopened').status, 'open');
+    assert.equal(entities.find(entity => entity.id === 'progress').status, 'in-progress');
+    assert.equal(entities.find(entity => entity.id === 'finished').status, 'completed');
+    assert.equal(entities.find(entity => entity.id === 'legacy').status, 'completed');
+    assert.deepEqual(workspace, before);
+  } finally {
+    if (previous === undefined) delete globalThis.flowAtelier; else globalThis.flowAtelier = previous;
+  }
+});

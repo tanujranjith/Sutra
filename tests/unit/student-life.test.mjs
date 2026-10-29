@@ -234,6 +234,28 @@ test('emergency week tolerates tasks with no due date and empty workspace', () =
   assert.deepEqual(empty.essentials, []);
 });
 
+test('emergency week respects canonical Homework completion and separate task semantics', () => {
+  const store = require('../../src/domain/homework-store.js');
+  const homework = store.normalizeWorkspace({ tasks: [
+    { id: 'reopened', title: 'Reopened assignment', done: false, completed: true, status: 'done', futureData: { keep: true } },
+    { id: 'finished', title: 'Finished assignment', done: true, completed: false },
+    { id: 'legacy', title: 'Legacy finished', completed: true }
+  ] });
+  const workspace = { homeworkWorkspace: homework, tasks: [
+    { id: 'open-task', title: 'Open task', completed: false },
+    { id: 'done-task', title: 'Finished task', completed: true, done: false }
+  ] };
+  const before = structuredClone(workspace);
+  const plan = life.buildEmergencyWeek(workspace, { now: '2026-07-10T08:00:00Z' });
+  const ids = plan.essentials.concat(plan.deferred).map(item => item.id);
+  assert.ok(ids.includes('reopened'));
+  assert.ok(ids.includes('open-task'));
+  assert.ok(!ids.includes('finished'));
+  assert.ok(!ids.includes('legacy'));
+  assert.ok(!ids.includes('done-task'));
+  assert.deepEqual(workspace, before);
+});
+
 /* --------------------------------------------------- Operating Manual */
 
 test('operating manual normalizes to stable shape with sane defaults', () => {

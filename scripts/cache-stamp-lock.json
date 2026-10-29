@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261029-quality-privacy1",
-    "hash": "3cbc47b3c86d7527"
+    "stamp": "20261029-quality-privacy2",
+    "hash": "7ff6d61785d4fc98"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -140,20 +140,20 @@
     "hash": "d164c6f2cac51a8c"
   },
   "src/domain/student-engine.js": {
-    "stamp": "20260913-energy-removal-engine1",
-    "hash": "8a017b92eaa6e86f"
+    "stamp": "20261029-quality-completion1",
+    "hash": "dc6b9c764ab09d96"
   },
   "src/domain/student-life.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "9e0c79bcf4117514"
+    "stamp": "20261029-quality-completion1",
+    "hash": "86fbe89140388a01"
   },
   "src/domain/workspace-entity-registry.js": {
     "stamp": "20260728-entity1",
     "hash": "c197d4cd6e6a4eb2"
   },
   "src/features/academic/academic-command-center.js": {
-    "stamp": "20260614-acc1",
-    "hash": "3ca5d5895240861e"
+    "stamp": "20261029-quality-completion1",
+    "hash": "01651d6fc6a8cec6"
   },
   "src/features/academic/assignment-studio.js": {
     "stamp": "20260813-pdf1",
@@ -168,8 +168,8 @@
     "hash": "d4f582d3908c34dd"
   },
   "src/features/academic/planning-engine.js": {
-    "stamp": "20261015-remaining-time2",
-    "hash": "9887123df511fd84"
+    "stamp": "20261029-quality-completion1",
+    "hash": "93f6f7bc8b7dbba3"
   },
   "src/features/academic/school-schedule.js": {
     "stamp": "20260816-home-labels1",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261029-quality-privacy1",
-    "hash": "5fbc72215893fcb4"
+    "stamp": "20261029-quality-privacy2",
+    "hash": "0947a86b1b46fba1"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -400,8 +400,8 @@
     "hash": "60b925ee7248e26f"
   },
   "src/features/workspace/office-interoperability.js": {
-    "stamp": "20261029-quality-formulas1",
-    "hash": "170096bf5b83ca18"
+    "stamp": "20261029-quality-formulas2",
+    "hash": "b1376808ba35901c"
   },
   "src/features/workspace/pdf-engine.js": {
     "stamp": "20260823-pdf4",
@@ -460,8 +460,8 @@
     "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20261028-workspace-todos2",
-    "hash": "62da5ac1b1bc05a3"
+    "stamp": "20261029-quality-completion1",
+    "hash": "0a3fa23d58e88b12"
   },
   "src/features/workspace/today-dashboard.js": {
     "stamp": "20261028-retire-priorities1",
@@ -472,8 +472,8 @@
     "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20261025-course-types1",
-    "hash": "dea081d0001a61e3"
+    "stamp": "20261029-quality-completion1",
+    "hash": "37ef85bf18c6831a"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260831-revoke5",

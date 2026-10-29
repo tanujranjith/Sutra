@@ -748,7 +748,10 @@
             add({ id:'task:'+row.id, source:'task', sourceId:String(row.id), title:row.title || 'Task', dueDate:row.dueDate, dueTime:row.dueTime, priority:row.priority });
         });
         safeItems(snapshot.homework).forEach(function (row) {
-            if (terminal(row)) return;
+            // Homework's Boolean done field is canonical; retained legacy
+            // completion aliases cannot override an explicitly reopened row.
+            var homeworkDone = typeof row.done === 'boolean' ? row.done : row.completed === true || row.status === 'done';
+            if (homeworkDone) return;
             add({ id:'hw:'+row.id, source:'homework', sourceId:String(row.id), sourceCourseId:row.courseId || '', title:row.title || row.text || 'Homework', dueDate:row.dueDate, dueTime:row.dueTime });
             var studio = row.studio;
             if (!studio || !studio.enabled) return;

@@ -143,6 +143,28 @@ test('weekly planning ignores completed and deleted canonical rows', () => {
   assert.deepEqual(items.map(item => item.id), ['open']);
 });
 
+test('planning respects Homework reopening without changing task or Timeline completion rules', () => {
+  const store = require('../../src/domain/homework-store.js');
+  const homeworkTasks = store.normalizeWorkspace({ tasks: [
+    { id: 'reopened', title: 'Reopened assignment', dueDate: '2026-06-03', done: false, completed: true, status: 'done', futureData: { keep: true } },
+    { id: 'done', title: 'Completed assignment', dueDate: '2026-06-03', done: true, completed: false },
+    { id: 'legacy', title: 'Legacy completed assignment', dueDate: '2026-06-03', completed: true },
+    { id: 'scheduled', title: 'Scheduled assignment', dueDate: '2026-06-03', done: false }
+  ] }).tasks;
+  const before = structuredClone(homeworkTasks);
+  const items = planning.collectPlanningItems({ today, dates, homeworkTasks,
+    tasks: [{ id: 'done-task', title: 'Completed task', dueDate: '2026-06-03', done: false, completed: true }],
+    timeBlocks: [
+      { source: 'homework', sourceId: 'reopened', status: 'done', date: '2026-06-02' },
+      { source: 'homework', sourceId: 'scheduled', date: '2026-06-02' }
+    ]
+  });
+  assert.deepEqual(items.map(item => [item.kind, item.id]), [['homework', 'reopened']]);
+  const plan = planning.planWork({ today, dates, items, freeWindowsByDate: windowsForWeek() });
+  assert.ok(plan.blocks.some(block => block.sourceKind === 'homework' && block.sourceId === 'reopened'));
+  assert.deepEqual(homeworkTasks, before);
+});
+
 test('undated high-priority work remains eligible, but invalid calendar dates do not become undated work', () => {
   const items = planning.collectPlanningItems({ dates, tasks: [
     { id: 'urgent', title: 'Choose project topic', priority: 'high' },

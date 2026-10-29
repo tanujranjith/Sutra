@@ -161,8 +161,11 @@
 
   function buildEmergencyWeek(workspace, options) {
     var snapshot = workspace || {}, opts = options || {}, now = dateMs(opts.now) || Date.now(), horizon = now + 7 * 86400000;
-    var tasks = list(snapshot.tasks).concat(list(snapshot.homeworkWorkspace && snapshot.homeworkWorkspace.tasks)).filter(function (row) {
-      if (!row || row.completed === true || row.status === 'completed') return false;
+    var plannerTasks = list(snapshot.tasks).filter(function (row) { return row && row.completed !== true && row.status !== 'completed'; });
+    var homeworkTasks = list(snapshot.homeworkWorkspace && snapshot.homeworkWorkspace.tasks).filter(function (row) {
+      return row && !(typeof row.done === 'boolean' ? row.done : row.completed === true || row.status === 'done' || row.status === 'completed');
+    });
+    var tasks = plannerTasks.concat(homeworkTasks).filter(function (row) {
       var due = dateMs(row.dueAt || row.dueDate || row.date); return due === null || due <= horizon;
     });
     var fixed = list(snapshot.timeBlocks).filter(function (row) { var start = dateMs(row.startAt || row.date); return start !== null && start >= now && start <= horizon && (row.fixed === true || row.kind === 'commitment' || row.flexibility === 'fixed'); });

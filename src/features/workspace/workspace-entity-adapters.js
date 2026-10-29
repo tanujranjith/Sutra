@@ -343,13 +343,17 @@
           rows(workspace.courses).forEach(function (course) { if (course && course.id) coursesById[String(course.id)] = course; });
           return rows(workspace.tasks).filter(function (task) { return task && task.id; }).map(function (task) {
             var course = coursesById[String(task.courseId || '')] || {};
+            var status = String(task.status || '').trim();
+            // Preserve progress labels, but a retained legacy completion label
+            // cannot make an explicitly reopened Homework row complete.
+            if (task.done === false && /^(?:done|complete|completed)$/i.test(status)) status = '';
             return {
               id: task.id,
               title: task.title || task.text || 'Untitled task',
               text: recordText(task, [course.name]),
               keywords: ['to-do', task.kind === 'task' || task.kind === 'general' ? 'general task' : 'homework assignment', course.name, task.kind, task.type, task.priority, task.status],
               courseId: task.courseId || '',
-              status: task.done ? 'completed' : (task.status || 'open'),
+              status: task.done ? 'completed' : (status || 'open'),
               dates: dateFields(task),
               deepLink: { view: 'homework', params: { assignmentId: task.id } },
               metadata: metadata(task, { courseName: course.name || '', source: 'homework', taskNotes: String(task.notes || '').slice(0, 1000), taskNotesLength: String(task.notes || '').length })

@@ -201,13 +201,17 @@
         return '';
     }
 
-    function isOpenSourceItem(item) {
+    function isOpenSourceItem(item, kind) {
         if (!item || typeof item !== 'object') return false;
         var status = String(item.status || '').toLowerCase();
-        return item.completed !== true && item.done !== true && item.deleted !== true
+        // Only Homework defines Boolean done as authoritative over retained
+        // legacy completion aliases. Tasks and Timeline keep their own rules.
+        var complete = kind === 'homework' && typeof item.done === 'boolean'
+            ? item.done : item.completed === true || item.done === true || ['done', 'completed'].indexOf(status) !== -1;
+        return !complete && item.deleted !== true
             && item.isDeleted !== true && !item.deletedAt && item.isActive !== false
             && item.archived !== true
-            && ['done', 'completed', 'deleted', 'trashed', 'archived'].indexOf(status) === -1;
+            && ['deleted', 'trashed', 'archived'].indexOf(status) === -1;
     }
 
     function legacyPlannerBlockMatches(block, item) {
@@ -263,7 +267,7 @@
         var seen = Object.create(null);
         function addRows(rows, kind) {
             (Array.isArray(rows) ? rows : []).forEach(function (raw) {
-                if (!isOpenSourceItem(raw)) return;
+                if (!isOpenSourceItem(raw, kind)) return;
                 // The app task array also contains homework mirrors. The
                 // authoritative homework store below supplies those rows.
                 if (kind === 'task' && (raw.origin === 'homework' || raw.homeworkSourceId)) return;
