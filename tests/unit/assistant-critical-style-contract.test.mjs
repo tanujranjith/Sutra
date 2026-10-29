@@ -16,4 +16,6 @@ test('Assistant layout is available before optional pack hydration finishes', ()
 test('optional style loading reuses critical shell styles instead of duplicating them', () => {
   assert.match(registry, /querySelectorAll\(['"]link\[rel=["']stylesheet["']\]['"]\)/u);
   assert.match(registry, /findExistingStyle\(href\)/u);
+  assert.match(registry, /if \(existing && existing\.sheet\)/u, 'only a loaded sheet is safe to reuse without waiting');
+  assert.match(registry, /if \(existing\) existing\.replaceWith\(node\)/u, 'pending or failed shell styles are replaced in place');
 });

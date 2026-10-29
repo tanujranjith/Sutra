@@ -12,7 +12,6 @@
   function browserLoader() {
     var loadedScripts = Object.create(null);
     var loadedStyles = Object.create(null);
-    var failedStyles = new WeakSet();
 
     function findExistingStyle(href) {
       var absoluteHref;
@@ -26,23 +25,6 @@
         if (nodes[i].href === absoluteHref || nodes[i].getAttribute('href') === href) return nodes[i];
       }
       return null;
-    }
-
-    function waitForExistingStyle(node, href) {
-      if (node.sheet) return Promise.resolve(href);
-      return new Promise(function (resolve, reject) {
-        function cleanup() {
-          node.removeEventListener('load', onload);
-          node.removeEventListener('error', onerror);
-        }
-        function onload() { cleanup(); resolve(href); }
-        function onerror() {
-          cleanup();
-          reject(new Error('Optional feature style failed: ' + href));
-        }
-        node.addEventListener('load', onload, { once: true });
-        node.addEventListener('error', onerror, { once: true });
-      });
     }
 
     return {
@@ -70,13 +52,15 @@
         }
         var record = {};
         var existing = findExistingStyle(href);
-        if (existing && !failedStyles.has(existing)) {
+        if (existing && existing.sheet) {
+          // A sheet is ready to reuse. A link without a sheet may still be
+          // loading, or may have failed before we could attach a listener.
+          // Replace it in place and bind our handlers before insertion so both
+          // cases produce an observable load/error event without losing order.
           record.node = existing;
-          record.promise = waitForExistingStyle(existing, href);
+          record.promise = Promise.resolve(href);
         } else {
           record.promise = new Promise(function (resolve, reject) {
-            // Replace failed links in place so retry preserves stylesheet order
-            // and attributes, including media and CSP nonces.
             var node = existing ? existing.cloneNode(false) : document.createElement('link');
             record.node = node;
             node.rel = 'stylesheet';
@@ -89,7 +73,6 @@
           });
         }
         record.promise = record.promise.catch(function (error) {
-          if (record.node) failedStyles.add(record.node);
           if (loadedStyles[href] === record) delete loadedStyles[href];
           throw error;
         });
