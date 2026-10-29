@@ -993,7 +993,8 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   .top-nav { display: grid; grid-template-columns: 1fr; }
   .top-nav > .global-app-brand { grid-area: 1 / 1; justify-self: start; }
   .top-nav > .nav-left { grid-area: 1 / 1; width: 100%; }
-  .top-nav .tabs-shell { display: grid; grid-template-columns: minmax(126px, 1fr) minmax(0, auto) minmax(126px, 1fr); }
+  /* Reserve the utility dock's full width so it cannot intrude into centered tabs. */
+  .top-nav .tabs-shell { display: grid; grid-template-columns: minmax(126px, 1fr) minmax(0, auto) minmax(max-content, 1fr); }
   .top-nav .view-tabs { grid-column: 2; justify-self: center; }
   .top-nav .nav-utility-group { grid-column: 3; justify-self: end; }
 }
