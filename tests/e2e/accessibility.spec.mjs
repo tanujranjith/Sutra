@@ -80,7 +80,20 @@ test.describe('Accessibility: core surfaces', () => {
 test.describe('Accessibility: keyboard navigation', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(1500);
+        await waitForAppReady(page);
+        await page.evaluate(() => {
+            try { window.markStudentOnboardingCompleted?.(true); } catch (e) {}
+            document.body.classList.remove('onboarding-open');
+            const overlay = document.getElementById('studentOnboardingOverlay');
+            if (overlay) {
+                overlay.classList.remove('active');
+                overlay.hidden = true;
+                overlay.setAttribute('aria-hidden', 'true');
+                overlay.style.setProperty('display', 'none', 'important');
+                overlay.style.setProperty('pointer-events', 'none', 'important');
+            }
+        });
+        await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
     });
 
     test('Tab key moves focus forward', async ({ page }) => {
@@ -99,14 +112,16 @@ test.describe('Accessibility: keyboard navigation', () => {
         expect(errors).toHaveLength(0);
     });
 
-    test('Enter activates buttons', async ({ page }) => {
-        const buttons = page.locator('button:not([disabled]):not([hidden])');
-        const count = await buttons.count();
-        if (count > 0) {
-            await buttons.first().focus();
-            const tagName = await page.evaluate(() => document.activeElement?.tagName);
-            expect(tagName).toBe('BUTTON');
-        }
+    test('Enter activates the Today add-task button', async ({ page }) => {
+        await page.evaluate(() => window.setActiveView('today'));
+        const addTask = page.locator('#addTaskBtn');
+        await expect(addTask).toBeVisible();
+        await expect(addTask).toBeEnabled();
+        await addTask.focus();
+        await expect(addTask).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#taskModal')).toBeVisible();
+        await expect(page.locator('#taskModal')).toContainText('Add Task');
     });
 });
 

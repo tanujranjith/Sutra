@@ -385,12 +385,18 @@ test('desktop: toast appears and auto-dismisses (notification micro-interaction)
 
   const shown = await page.evaluate(() => {
     const fn = (window.flowAtelier && window.flowAtelier.showToast) ? window.flowAtelier.showToast : window.showToast;
-    if (typeof fn !== 'function') return 'no-toast-fn';
-    fn('Audit toast check', { durationMs: 900 });
+    if (typeof fn !== 'function') return { visible: false, message: 'no-toast-fn' };
+    // The flowAtelier bridge supports the message-only form and uses the app's
+    // default three-second auto-dismiss timer.
+    fn('Audit toast check');
     const toast = document.getElementById('toast');
-    return toast ? toast.classList.contains('show') : 'missing';
+    return {
+      visible: !!(toast && toast.classList.contains('show')),
+      message: document.getElementById('toastMessage')?.textContent || ''
+    };
   });
-  expect(shown).toBe(true);
+  expect(shown.visible).toBe(true);
+  expect(shown.message).toBe('Audit toast check');
   // A transition must be defined so the toast slides/fades rather than snapping.
   const transition = await page.evaluate(() => {
     const toast = document.getElementById('toast');
@@ -400,7 +406,7 @@ test('desktop: toast appears and auto-dismisses (notification micro-interaction)
   await expect.poll(() => page.evaluate(() => {
     const t = document.getElementById('toast');
     return t ? t.classList.contains('show') : false;
-  }), { timeout: 4000 }).toBe(false);
+  }), { timeout: 6000 }).toBe(false);
   console.log('AUDIT::' + JSON.stringify({ section: 'TOAST', transition }));
   expect(transition && transition !== 'all 0s ease 0s').toBeTruthy();
 });
