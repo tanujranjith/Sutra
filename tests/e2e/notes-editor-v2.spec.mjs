@@ -1523,7 +1523,7 @@ test('Move to space cancels cleanly, refuses duplicate titles, and rebases a nes
   await expect.poll(() => page.evaluate(id => ({
     currentPageId: window.flowAtelier.currentPageId,
     title: window.flowAtelier.getPageById(id)?.title
-  }), staged.child)).toEqual({ currentPageId: staged.child, title: 'Unique child' });
+  }), staged.child)).toEqual({ currentPageId: staged.child, title: 'Parent::Unique child' });
   const sourceEditor = page.locator('#editorV2Host .ProseMirror');
   await expect(sourceEditor).toHaveAttribute('contenteditable', 'true');
   await sourceEditor.click();
