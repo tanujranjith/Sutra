@@ -1538,18 +1538,23 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }, { timeout: 15000 }).toBe(true);
       B.net.down = false;
       // Restoring the mock route flag does not emit a browser `online` event.
-      // Resume both same-device tabs so the freshest eligible tab can sync;
-      // each engine still enforces the canonical stale-tab guard.
-      await Promise.all([
-        B.page.evaluate(() => window.SutraSync.resume()),
-        secondTab.evaluate(() => window.SutraSync.resume())
-      ]);
+      // Drive both eligible tabs without making the screen assertion await
+      // the full syncNow promise: verified revocation resolves that promise
+      // only after database cleanup and server acknowledgement have finished.
+      const pendingReconnectAttempts = new Map();
+      const driveReconnect = (name, page) => {
+        if (pendingReconnectAttempts.has(name)) return;
+        lastAttemptByTab[name] = { phase: 'reconnect', kind: 'pending' };
+        const attempt = captureSyncAttempt(page).then(outcome => {
+          lastAttemptByTab[name] = { phase: 'reconnect', ...outcome };
+        }).finally(() => pendingReconnectAttempts.delete(name));
+        pendingReconnectAttempts.set(name, attempt);
+      };
       try {
         await expect.poll(async () => {
           if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
-          lastAttemptByTab.primary = { phase: 'reconnect', ...(await captureSyncAttempt(B.page)) };
-          if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
-          lastAttemptByTab.secondTab = { phase: 'reconnect', ...(await captureSyncAttempt(secondTab)) };
+          driveReconnect('primary', B.page);
+          driveReconnect('secondTab', secondTab);
           return (await secondTab.locator('#sutraRevokedDeviceScreen').count()) > 0;
         }, { timeout: 20000 }).toBe(true);
       } catch (error) {
@@ -1641,8 +1646,13 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
       await expect(B.page.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
+      // Screen locking and completed deletion are separate guarantees. Await
+      // the tracked cycles before auditing acknowledgement and every store.
+      await Promise.all(pendingReconnectAttempts.values());
+      // An already scheduled offline retry can own the cycle instead of an
+      // explicit attempt. Its successful acknowledgement is required too.
+      await expect.poll(() => Boolean(server.state.devices[bDeviceId].wipeAcknowledgedAt), { timeout: 20000 }).toBe(true);
       await expect(B.page.locator('#sutraRevokedDeviceMessage')).toContainText('removed');
-      expect(server.state.devices[bDeviceId].wipeAcknowledgedAt).toBeTruthy();
 
       const audit = await B.page.evaluate(async () => ({
         localKeys: Object.keys(localStorage),
