@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261028-ci-preferences2",
-    "hash": "89b2c4b102d597bb"
+    "stamp": "20261029-ci-durability1",
+    "hash": "13052402831aa11b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -184,8 +184,8 @@
     "hash": "7168f34034a3e5ce"
   },
   "src/features/assistant/assistant-core.js": {
-    "stamp": "20261022-assistant-polish3",
-    "hash": "045820024d5bccfc"
+    "stamp": "20261029-ci-focus1",
+    "hash": "d3c6c0293e89e174"
   },
   "src/features/assistant/assistant-permissions.js": {
     "stamp": "20261022-everyday2",
