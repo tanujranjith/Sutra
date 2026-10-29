@@ -27,10 +27,10 @@ function makeFocusRuntime(tasks, initialSession = null) {
   );
 }
 
-function runActualBlock(marker, dependencies) {
+function runActualBlock(marker, dependencies, suffix = '') {
   const block = extractBalancedBlock(source, marker);
   assert.ok(block, `actual app block exists: ${marker}`);
-  return new Function(...Object.keys(dependencies), block.body)(...Object.values(dependencies));
+  return new Function(...Object.keys(dependencies), block.body + suffix)(...Object.values(dependencies));
 }
 
 const homeworkId = 'assignment-42';
@@ -49,10 +49,13 @@ test('Home Focus next resolves a Homework source ID through its canonical task p
     'data-donow-title': projectedHomework.title
   };
   runActualBlock("focusBtn.addEventListener('click', () => {", {
-    focusBtn: { getAttribute: key => attrs[key] || '' },
+    focusBtn: {
+      getAttribute: key => attrs[key] || '',
+      addEventListener: (_event, callback) => callback()
+    },
     startFocusSession: runtime.start,
     window: { SutraReportError() {} }
-  });
+  }, ');');
   assert.equal(runtime.getSession().taskId, projectedHomework.id);
   assert.equal(runtime.getSession().taskTitle, projectedHomework.title);
 });

@@ -31,5 +31,5 @@ test('mobile Today passes the duration shown on its focus button into the canoni
   assert.match(appRuntime, /data-rn-focus-seconds="\$\{Math\.round\(focusMinutes \* 60\)\}"/);
   assert.match(appRuntime, /const seconds = Math\.max\(60, Math\.floor\(Number\(btn\.getAttribute\('data-rn-focus-seconds'\)\) \|\| 0\)\)/);
   assert.match(appRuntime, /const options = \{ plannedDurationSeconds: seconds, autostart: true, title \}/);
-  assert.match(appRuntime, /startFocusSession\(sid, options\)[\s\S]*?startFocusSession\(null, options\)/);
+  assert.match(appRuntime, /startFocusSession\(src === 'homework' \? `hw_v2_\$\{sid\}` : sid, options\)[\s\S]*?startFocusSession\(null, options\)/);
 });
