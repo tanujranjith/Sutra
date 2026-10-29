@@ -52,7 +52,9 @@
     list(rows).forEach(function (item, index) {
       if (!item) return;
       var canonicalHomework = type === 'homework' && typeof item.done === 'boolean';
-      if (canonicalHomework ? item.done : isDone(item.status || (item.completed ? 'done' : 'todo'))) return;
+      var status = normalizeStatus(item.status);
+      var completionAlias = ['done', 'complete', 'completed'].indexOf(status) !== -1;
+      if (canonicalHomework ? item.done || (isDone(status) && !completionAlias) : isDone(item.status || (item.completed ? 'done' : 'todo'))) return;
       var id = makeId(type, item, index);
       map.push({
         id: id,
@@ -60,7 +62,7 @@
         sourceId: String(item.id || item.uid || item.key || index),
         title: String(item.title || item.name || item.label || 'Untitled action').trim().slice(0, 300),
         dueAt: dueValue(item),
-        status: canonicalHomework && isDone(item.status) ? 'todo' : normalizeStatus(item.status),
+        status: canonicalHomework && completionAlias ? 'todo' : status,
         priority: String(item.priority || 'medium'),
         estimatedMinutes: effortMinutes(item),
         gradeImpact: clamp(item.gradeImpact || item.gradeWeight || item.weight || 0, 0, 1),

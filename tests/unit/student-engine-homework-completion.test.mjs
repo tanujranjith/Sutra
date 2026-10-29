@@ -11,7 +11,10 @@ test('Student OS and its planner honor reopened Homework and omit completed Home
   const homeworkWorkspace = store.normalizeWorkspace({ tasks: [
     { id: 'reopened', title: 'Reopened lab', dueDate: '2026-06-03', done: false, completed: true, status: 'done', futureData: { keep: true } },
     { id: 'finished', title: 'Finished lab', dueDate: '2026-06-03', done: true },
-    { id: 'legacy', title: 'Legacy finished', dueDate: '2026-06-03', completed: true }
+    { id: 'legacy', title: 'Legacy finished', dueDate: '2026-06-03', completed: true },
+    { id: 'cancelled', title: 'Cancelled', done: false, status: 'cancelled' },
+    { id: 'submitted', title: 'Submitted', done: false, status: 'submitted' },
+    { id: 'mastered', title: 'Mastered', done: false, status: 'mastered' }
   ] });
   const workspace = { homeworkWorkspace, tasks: [{ id: 'finished-task', title: 'Finished task', completed: true }] };
   const before = structuredClone(workspace);

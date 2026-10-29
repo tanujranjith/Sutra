@@ -723,7 +723,13 @@
         snapshot = snapshot || {}; now = now || new Date();
         var result = new Map(), completed = new Set((snapshot.completedTaskIds || []).map(String));
         var tasks = safeItems(snapshot.tasks), taskById = new Map(tasks.map(function (t) { return [String(t.id), t]; }));
+        var homework = safeItems(snapshot.homework), homeworkById = new Map(homework.map(function (row) { return [String(row.id), row]; }));
         var terminal = function (row) { return !row || row.completed || row.done || ['done','complete','completed','archived','cancelled','canceled'].indexOf(String(row.status || '').toLowerCase()) >= 0; };
+        function homeworkTerminal(row) {
+            var status = String(row.status || '').toLowerCase();
+            var done = typeof row.done === 'boolean' ? row.done : row.completed === true || ['done','complete','completed'].indexOf(status) >= 0;
+            return done || ['archived','cancelled','canceled'].indexOf(status) >= 0;
+        }
         function date(value, time) {
             if (!value) return null;
             var raw = String(value).trim();
@@ -741,17 +747,20 @@
                 var task = taskById.get(String(item.sourceId));
                 if (task && (terminal(task) || completed.has(String(task.id)) || (task.scheduleType === 'once' && task.isActive === false))) return;
             }
+            if (item.source === 'homework') {
+                var sourceHomework = homeworkById.get(String(item.sourceId));
+                if (sourceHomework && homeworkTerminal(sourceHomework)) return;
+            }
             add(item);
         });
         tasks.forEach(function (row) {
             if (terminal(row) || row.origin === 'homework' || row.isActive === false || completed.has(String(row.id))) return;
             add({ id:'task:'+row.id, source:'task', sourceId:String(row.id), title:row.title || 'Task', dueDate:row.dueDate, dueTime:row.dueTime, priority:row.priority });
         });
-        safeItems(snapshot.homework).forEach(function (row) {
+        homework.forEach(function (row) {
             // Homework's Boolean done field is canonical; retained legacy
             // completion aliases cannot override an explicitly reopened row.
-            var homeworkDone = typeof row.done === 'boolean' ? row.done : row.completed === true || row.status === 'done';
-            if (homeworkDone) return;
+            if (homeworkTerminal(row)) return;
             add({ id:'hw:'+row.id, source:'homework', sourceId:String(row.id), sourceCourseId:row.courseId || '', title:row.title || row.text || 'Homework', dueDate:row.dueDate, dueTime:row.dueTime });
             var studio = row.studio;
             if (!studio || !studio.enabled) return;

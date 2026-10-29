@@ -10,15 +10,25 @@ test('workspace list honors canonical Homework reopening and keeps legacy comple
     { id: 'reopened', title: 'Reopened', done: false, completed: true, status: 'done', futureField: { keep: true }, studio: { enabled: true, milestones: [{ id: 'step', title: 'Step' }] } },
     { id: 'dated', title: 'Reopened dated', done: false, completed: true, status: 'done', dueDate: '2026-11-01' },
     { id: 'finished', title: 'Finished', done: true, completed: false },
-    { id: 'legacy', title: 'Legacy completion', completed: true }
+    { id: 'legacy', title: 'Legacy completion', completed: true },
+    { id: 'archived', title: 'Archived', done: false, status: 'archived', dueDate: '2026-11-01', studio: { enabled: true, milestones: [{ id: 'step', title: 'Archived step' }] } },
+    { id: 'cancelled', title: 'Cancelled', done: false, status: 'cancelled' },
+    { id: 'canceled', title: 'Canceled', done: false, status: 'canceled' }
   ] }).tasks;
   const before = structuredClone(homework);
-  const items = collect({ homework, deadlines: [{ id: 'hw:dated', source: 'homework', sourceId: 'dated', title: 'Reopened dated', due: new Date(2026, 10, 1) }] });
+  const items = collect({ homework, deadlines: [
+    { id: 'hw:dated', source: 'homework', sourceId: 'dated', title: 'Reopened dated', due: new Date(2026, 10, 1) },
+    { id: 'hw:archived', source: 'homework', sourceId: 'archived', title: 'Archived', status: 'open', due: new Date(2026, 10, 1) }
+  ] });
   const ids = Array.from(items, item => item.id);
   assert.ok(ids.includes('hw:reopened'));
   assert.ok(ids.includes('milestone:reopened:step'));
   assert.equal(ids.filter(id => id === 'hw:dated').length, 1);
   assert.ok(!ids.includes('hw:finished'));
   assert.ok(!ids.includes('hw:legacy'));
+  assert.ok(!ids.includes('hw:archived'));
+  assert.ok(!ids.includes('milestone:archived:step'));
+  assert.ok(!ids.includes('hw:cancelled'));
+  assert.ok(!ids.includes('hw:canceled'));
   assert.deepEqual(homework, before);
 });
