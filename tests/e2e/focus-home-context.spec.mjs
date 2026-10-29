@@ -33,6 +33,12 @@ async function readActiveFocusContext(page) {
   });
 }
 
+async function acceptFocusPreflight(page) {
+  await expect(page.locator('#customPromptModal')).toHaveClass(/active/);
+  await expect(page.locator('#customPromptTitle')).toHaveText('Plan your focus session');
+  await page.locator('#customPromptConfirmBtn').click();
+}
+
 test('Focus preserves canonical task and Homework projection identity and title', async ({ page }) => {
   await openFocusWorkspace(page);
 
@@ -74,6 +80,7 @@ test('Focus preserves canonical task and Homework projection identity and title'
     { taskId: seeded.homeworkTaskId, title: seeded.homeworkTitle }
   ]) {
     await page.evaluate(taskId => window.startFocusSession(taskId), expected.taskId);
+    await acceptFocusPreflight(page);
     await expect(page.locator('#focusSessionOverlay')).toBeVisible();
     await expect(page.locator('#fsTaskTitle')).toHaveText(expected.title);
     await expect.poll(async () => (await readActiveFocusContext(page))?.taskId).toBe(expected.taskId);
@@ -88,17 +95,26 @@ test('Focus replaces an explicit new title and resumes the existing context when
   await openFocusWorkspace(page);
 
   await page.evaluate(() => window.startFocusSession(null, { title: 'Old focus context' }));
+  await acceptFocusPreflight(page);
   await expect(page.locator('#focusSessionOverlay')).toBeVisible();
   await expect(page.locator('#fsTaskTitle')).toHaveText('Old focus context');
   const oldSession = await readActiveFocusContext(page);
+  await page.evaluate(() => window.fsMinimize());
+  await expect(page.locator('#focusSessionOverlay')).toBeHidden();
 
   await page.evaluate(() => window.startFocusSession(null, { title: 'New focus context' }));
+  await acceptFocusPreflight(page);
+  await expect(page.locator('#focusSessionOverlay')).toBeVisible();
   await expect(page.locator('#fsTaskTitle')).toHaveText('New focus context');
   const newSession = await readActiveFocusContext(page);
   expect(newSession.id).not.toBe(oldSession.id);
   expect(newSession.taskTitle).toBe('New focus context');
+  await page.evaluate(() => window.fsMinimize());
+  await expect(page.locator('#focusSessionOverlay')).toBeHidden();
 
   await page.evaluate(() => window.startFocusSession());
+  await acceptFocusPreflight(page);
+  await expect(page.locator('#focusSessionOverlay')).toBeVisible();
   await expect(page.locator('#fsTaskTitle')).toHaveText('New focus context');
   const resumedSession = await readActiveFocusContext(page);
   expect(resumedSession.id).toBe(newSession.id);
@@ -123,6 +139,7 @@ test('Home Focus button keeps the selected Homework identity', async ({ page, is
   const brief = page.locator('#todayDailyBrief');
   await expect(brief.locator('.tnu-title')).toHaveText(homework.title);
   await brief.locator('[data-donow-focus]').click();
+  await acceptFocusPreflight(page);
   await expect(page.locator('#focusSessionOverlay')).toBeVisible();
   await expect(page.locator('#fsTaskTitle')).toHaveText(homework.title);
   await expect.poll(async () => (await readActiveFocusContext(page))?.taskId).toBe(`hw_v2_${homework.id}`);
@@ -148,6 +165,7 @@ test('All Due Focus button keeps its planner task identity', async ({ page, isMo
   const row = page.locator('#allDueMount .student-inbox-row', { hasText: task.title });
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Start focus session' }).click();
+  await acceptFocusPreflight(page);
   await expect(page.locator('#focusSessionOverlay')).toBeVisible();
   await expect(page.locator('#fsTaskTitle')).toHaveText(task.title);
   await expect.poll(async () => (await readActiveFocusContext(page))?.taskId).toBe(task.id);
