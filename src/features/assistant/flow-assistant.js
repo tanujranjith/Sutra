@@ -5155,9 +5155,16 @@
             };
         }
         const active = getActiveNoteSummary(accessOptions);
-        const scope = options.scope && typeof options.scope === 'object'
-            ? options.scope
+        const suppliedScope = options.scope || options.conversationScope;
+        let scope = suppliedScope && typeof suppliedScope === 'object'
+            ? suppliedScope
             : { type: 'all' };
+        // Notes Knowledge uses `note`, while other Assistant paths also accept
+        // `page`. Preserve exclusions and other scope fields when translating;
+        // a missing identity remains an empty note scope rather than searching all.
+        if (scope.type === 'page') {
+            scope = Object.assign({}, scope, { type: 'note', noteId: scope.noteId || scope.pageId || scope.id || '' });
+        }
         const searchOptions = {
             scope,
             currentNoteId: active && active.id || '',

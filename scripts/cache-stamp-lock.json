@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261029-quality-privacy3",
-    "hash": "1747337dcd34fc0e"
+    "stamp": "20261029-quality-privacy4",
+    "hash": "2547f11adcc26483"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -140,8 +140,8 @@
     "hash": "d164c6f2cac51a8c"
   },
   "src/domain/student-engine.js": {
-    "stamp": "20261029-quality-completion2",
-    "hash": "fb10849327e8eec5"
+    "stamp": "20261029-quality-completion3",
+    "hash": "53a2da93b8916da6"
   },
   "src/domain/student-life.js": {
     "stamp": "20261029-quality-completion1",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261029-quality-privacy3",
-    "hash": "4e9790cb2cbcc215"
+    "stamp": "20261029-quality-privacy4",
+    "hash": "a0e4720d607d640c"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

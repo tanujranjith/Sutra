@@ -64,7 +64,8 @@ function createEnrichment({
   contextOverrides = {}, chatMemoryMode = 'stateless', conversationMessages = [], attachments = [],
   promptBuilder = buildSystemPromptParts, memoryAllowed = true,
   memoryPrivacy = { canRead: () => memoryAllowed }, memorySnippets = [], onMemoryUsed = () => {},
-  lockedTicket = null, onTicketConsumed = () => {}, contextProvider = null, contextFilter = ctx => ctx
+  lockedTicket = null, onTicketConsumed = () => {}, contextProvider = null, contextFilter = ctx => ctx,
+  retrieveSources = null
 } = {}) {
   const context = {
     schema: 'flow-context/1', view: 'today', depth, summary: 'User is on the today view.',
@@ -97,7 +98,7 @@ function createEnrichment({
       recordUsed: onMemoryUsed
     }),
     () => 'today',
-    (...args) => { onNotesRead(); return { sources: noteSources, evidenceStatus: 'supported', args }; },
+    (...args) => { onNotesRead(); return retrieveSources ? retrieveSources(...args) : { sources: noteSources, evidenceStatus: 'supported', args }; },
     window,
     () => chatMemoryMode,
     () => conversationMessages,
@@ -495,6 +496,35 @@ test('a verified page read searches only its target, including generic prompts, 
   assert.deepEqual(retrieve('Read this note.', { scope: { type: 'all', excludedSourceIds: named.sources.map(row => row.id) } }).sources, []);
   assert.deepEqual(retrieve('Read this note.', { scope: { type: 'note', noteId: 'other-atlas' } }).sources, []);
   assert.ok(noteRetriever(pages)('Sealed Atlas').sources.every(row => row.noteId !== 'sealed-atlas'));
+});
+
+test('page-scoped retrieval serializes only the requested page and preserves exclusions', () => {
+  const pages = [
+    { id: 'target-page', title: 'Orchid target', content: '<p>orchid TARGET_PAGE_SENTINEL evidence for biology.</p>' },
+    { id: 'other-page', title: 'Orchid other', content: '<p>orchid OTHER_PAGE_SENTINEL evidence for biology.</p>' }
+  ];
+  let observedScope;
+  const core = { ...noteCore, search(index, query, options) {
+    observedScope = options.scope;
+    return noteCore.search(index, query, options);
+  } };
+  const retrieve = noteRetriever(pages, core);
+  assert.deepEqual(new Set(retrieve('orchid').sources.map(row => row.noteId)), new Set(['target-page', 'other-page']));
+
+  for (const identity of [{ pageId: 'target-page' }, { noteId: 'target-page' }, { id: 'target-page' }]) {
+    const scope = { type: 'page', ...identity, futureOption: { retained: true } };
+    const enrichment = createEnrichment({ depth: 'workspace', retrieveSources: retrieve })('orchid', 'openai', { scope });
+    const payload = JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages });
+    assert.match(payload, /TARGET_PAGE_SENTINEL/);
+    assert.doesNotMatch(payload, /OTHER_PAGE_SENTINEL/);
+    assert.equal(observedScope.type, 'note');
+    assert.equal(observedScope.noteId, 'target-page');
+    assert.deepEqual(observedScope.futureOption, { retained: true });
+    assert.equal(scope.type, 'page', 'the original scope is not mutated');
+  }
+  assert.deepEqual(retrieve('orchid', { scope: { type: 'page' } }).sources, [], 'missing page ID never searches the workspace');
+  assert.deepEqual(retrieve('orchid', { scope: { type: 'page', pageId: 'target-page', excludedNoteIds: ['target-page'] } }).sources, []);
+  assert.deepEqual(retrieve('orchid', { conversationScope: { type: 'page', pageId: 'target-page', excludedSourceIds: ['target-page:0:0'] } }).sources, []);
 });
 
 test('Minimal permits a verified explicit page read without automatic memory and reports only its retained source', () => {
