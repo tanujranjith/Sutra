@@ -79002,7 +79002,7 @@ ${cspMeta}
                     document.querySelector('[data-settings-section-group="student-preferences"]')?.scrollIntoView({ block: 'start' });
                     return { ok: true, message: 'Study settings staged for review. Choose Save Changes to apply, or Revert to discard.' };
                 },
-                getStudentPreferences: () => ((appSettings && appSettings.studentPreferences) ? appSettings.studentPreferences : null),
+                getStudentPreferences: () => (appSettings.preferences?.studentPreferences || null),
                 openDeadlineRadar: () => (_origOpenDeadlineRadar ? (_origOpenDeadlineRadar(), true) : undefined),
                 openClassDashboardDrawer: (id) => (_origOpenClassDashboard ? (_origOpenClassDashboard(id), true) : undefined),
                 createWeeklyReviewNote: () => (_origWeeklyReview ? (_origWeeklyReview(), true) : undefined),
