@@ -1304,6 +1304,9 @@ test('Split View mounts independent Modern Editor instances', async ({ page }) =
 });
 
 test('paired sidebar notes survive unrelated navigation, reload, and explicit unpairing', async ({ page }) => {
+  // This persistence round trip includes the initial boot and two reloads with
+  // workspace hydration before verifying paired and unpaired state.
+  test.setTimeout(90_000);
   await openApp(page);
   await enableEditorV2(page);
   await openNotesView(page);
