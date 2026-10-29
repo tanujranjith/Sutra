@@ -12,6 +12,7 @@
   function browserLoader() {
     var loadedScripts = Object.create(null);
     var loadedStyles = Object.create(null);
+    var failedStyles = new WeakSet();
 
     function findExistingStyle(href) {
       var absoluteHref;
@@ -47,13 +48,18 @@
     return {
       script: function (src) {
         if (loadedScripts[src]) return loadedScripts[src];
+        var node;
         loadedScripts[src] = new Promise(function (resolve, reject) {
-          var node = document.createElement('script');
+          node = document.createElement('script');
           node.src = src;
           node.async = false;
           node.onload = function () { resolve(src); };
           node.onerror = function () { reject(new Error('Optional feature script failed: ' + src)); };
           document.head.appendChild(node);
+        }).catch(function (error) {
+          delete loadedScripts[src];
+          if (node) node.remove();
+          throw error;
         });
         return loadedScripts[src];
       },
@@ -64,20 +70,29 @@
         }
         var record = {};
         var existing = findExistingStyle(href);
-        if (existing) {
+        if (existing && !failedStyles.has(existing)) {
           record.node = existing;
           record.promise = waitForExistingStyle(existing, href);
         } else {
           record.promise = new Promise(function (resolve, reject) {
-            var node = document.createElement('link');
+            // Replace failed links in place so retry preserves stylesheet order
+            // and attributes, including media and CSP nonces.
+            var node = existing ? existing.cloneNode(false) : document.createElement('link');
             record.node = node;
             node.rel = 'stylesheet';
             node.href = href;
+            node.disabled = false;
             node.onload = function () { resolve(href); };
             node.onerror = function () { reject(new Error('Optional feature style failed: ' + href)); };
-            document.head.appendChild(node);
+            if (existing) existing.replaceWith(node);
+            else document.head.appendChild(node);
           });
         }
+        record.promise = record.promise.catch(function (error) {
+          if (record.node) failedStyles.add(record.node);
+          if (loadedStyles[href] === record) delete loadedStyles[href];
+          throw error;
+        });
         loadedStyles[href] = record;
         return record.promise;
       },
@@ -139,6 +154,7 @@
         await initializing[id];
       }
       if (!current.enabled && disabling[id]) await disabling[id];
+      if (current.enabled && current.initialized) current.error = null;
       metrics[id] = { loadedAt: new Date().toISOString(), durationMs: Math.max(0, (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - start) };
       return clone(current);
     }

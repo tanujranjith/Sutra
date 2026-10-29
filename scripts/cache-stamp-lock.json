@@ -252,8 +252,8 @@
     "hash": "16d76c3e5d3d41a8"
   },
   "src/features/feature-registry.js": {
-    "stamp": "20261022-lifecycle1",
-    "hash": "4619be4ddf2e90f2"
+    "stamp": "20261029-quality-retry1",
+    "hash": "0552e0a8748fa6a3"
   },
   "src/features/notes/authoring-tools.js": {
     "stamp": "20261024-writing-session1",

@@ -19,6 +19,12 @@ globals have legacy aliases that point at the same object (e.g. `sutraAssistant`
 
 ## When adding a feature
 
+`feature-registry.js` shares successful optional-asset loads and initialization.
+Failed downloads are evicted so the next explicit enable/configure attempt can
+retry without a reload. Stylesheet retries preserve the original cascade slot
+and attributes; successful scripts are not executed again. Successful enablement
+clears an earlier load error. No background network retry is introduced.
+
 `workspace/create-split-surface.js` loads after the native Create editors. It
 registers a controller with the existing contextual-shell API and mounts a
 secondary native editor against the host's canonical page bridge. It never
