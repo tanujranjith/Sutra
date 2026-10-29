@@ -47617,7 +47617,7 @@ function getActiveEditor() {
         function showCanvasEditorForPage(page) {
             const editor = getPrimaryEditor();
             const canvasRoot = document.getElementById('canvasEditor');
-            if (editor) editor.hidden = true;
+            if (editor) { editor.hidden = true; delete editor.dataset.pageId; }
             if (canvasRoot) canvasRoot.hidden = false;
             const tags = document.getElementById('tagsContainer');
             if (tags) tags.hidden = true;
@@ -49587,6 +49587,9 @@ function getActiveEditor() {
 
             const page = pages.find(p => p.id === pageId);
             if (page) {
+                // Invalidate the rendered owner before navigation listeners run.
+                const outgoingEditor = getPrimaryEditor();
+                if (outgoingEditor) delete outgoingEditor.dataset.pageId;
                 window.SutraFolderWorkspace?.close();
                 document.body.classList.remove('folder-page-active');
                 currentPageId = pageId;
@@ -67967,6 +67970,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function loadPageContentIntoEditor(editor, page) {
             if (!editor || !page) return;
+            delete editor.dataset.pageId;
             if (!isPageContentAuthorized(page)) {
                 disposeDrawingControllersForEditor(editor);
                 editor.contentEditable = 'false';
@@ -68031,6 +68035,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Render this page's document background (if any) behind the note surface.
             applyDocumentBackgroundForEditor(editor, page);
             renderComments();
+            editor.dataset.pageId = String(page.id || '');
         }
 
         /* ====================================================================

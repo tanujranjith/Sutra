@@ -435,19 +435,35 @@
         return !!(node && (node === element || element.contains(node)));
     }
 
-    function getEditorSelection() {
+    // Editor unlock permits editing only. Assistant context needs its own
+    // page-scoped ticket, and an unknown owner must never be treated as public.
+    function assistantPageContextAllowed(pageId, options) {
+        const b = bridge({ diagnose: false });
+        if (!pageId || !b || !Array.isArray(b.pages)) return false;
+        const page = b.pages.find(item => item && String(item.id) === String(pageId));
+        if (!page) return false;
+        return !page.isLocked || currentLockedPageAccessIds(options).includes(String(page.id));
+    }
+
+    function getEditorSelection(options) {
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return '';
             const text = String(sel.toString() || '').trim();
             if (!text) return '';
             const range = sel.getRangeAt(0);
+            const b = bridge({ diagnose: false });
+            const pageId = b && b.currentPageId;
             const v2Host = document.getElementById('editorV2Host');
-            if (v2Host && rangeInsideElement(range, v2Host)) return text;
+            if (v2Host && rangeInsideElement(range, v2Host)) {
+                if (v2Host.hidden || !v2Host.dataset.pageId || String(v2Host.dataset.pageId) !== String(pageId)) return '';
+                return assistantPageContextAllowed(pageId, options) ? text : '';
+            }
             const editor = document.getElementById('editor');
             if (!editor) return '';
             if (!rangeInsideElement(range, editor)) return '';
-            return text;
+            if (editor.hidden || !editor.dataset.pageId || String(editor.dataset.pageId) !== String(pageId)) return '';
+            return assistantPageContextAllowed(pageId, options) ? text : '';
         } catch (e) { return ''; }
     }
 
@@ -549,11 +565,14 @@
         } catch (e) { return null; }
     }
 
-    function getCanvasContextSummary() {
+    function getCanvasContextSummary(options) {
         try {
             const api = (window.SutraCanvas && typeof window.SutraCanvas.getContext === 'function') ? window.SutraCanvas : null;
-            if (api) return api.getContext();
-            const note = getActiveNoteSummary();
+            if (api) {
+                const context = api.getContext();
+                return context && assistantPageContextAllowed(context.pageId, options) ? context : null;
+            }
+            const note = getActiveNoteSummary(options);
             return note && note.type === 'canvas' ? note : null;
         } catch (e) { return null; }
     }
@@ -901,7 +920,7 @@
         // explicitly overrides via options.includeSelection.
         const includeSelectionPref = getPref('assistant.includeSelectionByDefault', true) !== false;
         const allowSelection = options.includeSelection != null ? options.includeSelection !== false : includeSelectionPref;
-        const selection = allowSelection ? getEditorSelection() : '';
+        const selection = allowSelection ? getEditorSelection(options) : '';
 
         const ctx = {
             schema: 'flow-context/1',
@@ -965,7 +984,7 @@
         const openNote = getActiveNoteSummary(options);
         if (openNote) ctx.activeNote = openNote;
         if (view === 'notes') {
-            const canvasContext = getCanvasContextSummary();
+            const canvasContext = getCanvasContextSummary(options);
             if (canvasContext) ctx.canvas = canvasContext;
             const slidesContext = getSlidesContextSummary();
             if (slidesContext) ctx.slides = slidesContext;

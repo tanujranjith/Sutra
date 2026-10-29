@@ -64,7 +64,7 @@ function createEnrichment({
   contextOverrides = {}, chatMemoryMode = 'stateless', conversationMessages = [], attachments = [],
   promptBuilder = buildSystemPromptParts, memoryAllowed = true,
   memoryPrivacy = { canRead: () => memoryAllowed }, memorySnippets = [], onMemoryUsed = () => {},
-  lockedTicket = null, onTicketConsumed = () => {}
+  lockedTicket = null, onTicketConsumed = () => {}, contextProvider = null, contextFilter = ctx => ctx
 } = {}) {
   const context = {
     schema: 'flow-context/1', view: 'today', depth, summary: 'User is on the today view.',
@@ -91,7 +91,7 @@ function createEnrichment({
     options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket : null,
     options => lockedTicket && options?.lockedPageAccessTicket === lockedTicket ? lockedTicket.pageIds : [],
     ctx => ctx,
-    options => structuredClone({ ...context, depth: options && options.depth || context.depth }),
+    options => contextProvider ? contextProvider(options) : structuredClone({ ...context, depth: options && options.depth || context.depth }),
     () => ({
       buildPromptSnippets: () => { onMemoryRead(); return memorySnippets; },
       recordUsed: onMemoryUsed
@@ -103,13 +103,115 @@ function createEnrichment({
     () => conversationMessages,
     () => attachments,
     promptBuilder,
-    ctx => ctx,
+    contextFilter,
     () => null,
     () => null,
     onTicketConsumed
   ]);
   return enrich;
 }
+
+// Exercise the actual selection/Canvas collection and final prompt builder,
+// including the identity-based, expiring one-request ticket checks.
+function editorContextFixture({ primaryLocked = false, canvasLocked = false, canvasId = 'canvas', ticket = null, legacy = false } = {}) {
+  const primary = { id: 'primary', isLocked: primaryLocked };
+  const canvas = { id: 'canvas', isLocked: canvasLocked };
+  const pages = [primary, canvas];
+  const selectionNode = { nodeType: 1 };
+  const host = { dataset: { pageId: primary.id }, contains: node => node === selectionNode };
+  const fakeDocument = { getElementById: id => legacy ? (id === 'editor' ? host : null) : (id === 'editorV2Host' ? host : null) };
+  const fakeWindow = {
+    getSelection: () => ({ rangeCount: 1, toString: () => 'SELECTION_SENTINEL', getRangeAt: () => ({ commonAncestorContainer: selectionNode }) }),
+    SutraCanvas: { getContext: () => ({ pageId: canvasId, objects: [{ text: 'CANVAS_SENTINEL' }] }) }
+  };
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { notes: 'approved' } }) });
+  const names = ['lockedPageAccessTicketIsValid', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
+    'scopedAssistantContextOptions', 'rangeInsideElement', 'assistantPageContextAllowed', 'getEditorSelection',
+    'getCanvasContextSummary', 'getFlowAssistantContext'];
+  const declarations = names.map(name => {
+    const found = extractFunction(source, name);
+    assert.ok(found, `could not extract ${name}`);
+    return found.body;
+  }).join('\n');
+  const context = new Function('window', 'document', 'Node', 'bridge', 'filterAssistantContext', 'initialTicket',
+    `let activeLockedPageAccessTicket = initialTicket;
+     const normalizeDepth = depth => depth || 'currentView';
+     const getActiveViewName = () => 'notes';
+     const getPref = (_key, fallback) => fallback;
+     const intel = () => null;
+     const getActiveNoteSummary = () => null;
+     const getSlidesContextSummary = () => null;
+     const summarizeTasksFor = () => [], summarizeHomework = () => [], summarizeTimeline = () => [], summarizeDeadlines = () => [];
+     const summarizeReviewDue = () => null, summarizeApStudy = () => null, summarizeCollege = () => null;
+     const summarizeLife = () => null, summarizeBusiness = () => null, summarizeCram = () => null;
+     const summarizeCourses = () => null, summarizeAllDue = () => null, summarizeTestingHub = () => null;
+     const truncate = (text, max) => text.slice(0, max);
+     ${declarations}
+     return getFlowAssistantContext;`)(fakeWindow, fakeDocument, { TEXT_NODE: 3 }, () => ({ pages, currentPageId: primary.id }),
+    (value, options) => privacy.filterContext(value, options), ticket);
+  return { context, host };
+}
+
+test('provider prompts exclude selection and split Canvas from locked pages without their scoped ticket', () => {
+  const validTicket = { pageIds: ['primary'], expiresAt: Date.now() + 60000 };
+  const wrongTicket = { pageIds: ['canvas'], expiresAt: Date.now() + 60000 };
+  const forgedTicket = { ...validTicket };
+  for (const depth of ['minimal', 'currentView']) {
+    const fixture = editorContextFixture({ primaryLocked: true, canvasLocked: true, ticket: validTicket });
+    for (const ticket of [null, forgedTicket, wrongTicket]) {
+      const context = fixture.context({ depth, lockedPageAccessTicket: ticket });
+      const enrichment = createEnrichment({ depth, contextProvider: fixture.context, memoryPrivacy: privacy,
+        contextFilter: (value, options) => privacy.filterContext(value, options) })('hello', 'openai', { depth, lockedPageAccessTicket: ticket });
+      const payload = JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages });
+      assert.ok(!JSON.stringify(context).includes('SELECTION_SENTINEL'));
+      assert.ok(!payload.includes('SELECTION_SENTINEL'));
+      assert.ok(!payload.includes('CANVAS_SENTINEL'));
+    }
+    // Explicit page access still identifies exactly one page; the send path
+    // deliberately suppresses editor selection even for a verified ticket.
+    assert.equal(fixture.context({ depth, lockedPageAccessTicket: validTicket }).selection, 'SELECTION_SENTINEL');
+    assert.equal(fixture.context({ depth, lockedPageAccessTicket: validTicket }).canvas, undefined);
+    const scoped = createEnrichment({ depth, lockedTicket: validTicket, contextProvider: fixture.context, memoryPrivacy: privacy,
+      contextFilter: (value, options) => privacy.filterContext(value, options) })('hello', 'openai', { depth, lockedPageAccessTicket: validTicket });
+    assert.ok(!JSON.stringify({ systemPrompt: scoped.systemPrompt, messages: scoped.requestMessages }).includes('SELECTION_SENTINEL'));
+    assert.ok(!JSON.stringify(scoped.context).includes('CANVAS_SENTINEL'));
+  }
+});
+
+test('ordinary editor selection and ordinary Canvas remain available; unknown or stale owners fail closed', () => {
+  const fixture = editorContextFixture();
+  const enrichment = createEnrichment({ depth: 'currentView', contextProvider: fixture.context, memoryPrivacy: privacy,
+    contextFilter: (value, options) => privacy.filterContext(value, options) })('hello', 'openai', { depth: 'currentView' });
+  assert.match(enrichment.systemPrompt, /SELECTION_SENTINEL/);
+  assert.match(enrichment.systemPrompt, /CANVAS_SENTINEL/);
+  fixture.host.dataset.pageId = 'stale-page';
+  assert.equal(fixture.context({ depth: 'minimal' }).selection, undefined);
+  const unknownCanvas = editorContextFixture({ canvasId: 'missing-page' });
+  assert.equal(unknownCanvas.context({ depth: 'currentView' }).canvas, undefined);
+  const canvasTicket = { pageIds: ['canvas'], expiresAt: Date.now() + 60000 };
+  const lockedCanvas = editorContextFixture({ primaryLocked: true, canvasLocked: true, ticket: canvasTicket });
+  const canvasContext = lockedCanvas.context({ depth: 'currentView', lockedPageAccessTicket: canvasTicket });
+  assert.equal(canvasContext.canvas.pageId, 'canvas');
+  assert.equal(canvasContext.selection, undefined);
+  const expired = { pageIds: ['primary'], expiresAt: Date.now() - 1000 };
+  const expiredFixture = editorContextFixture({ primaryLocked: true, ticket: expired });
+  assert.equal(expiredFixture.context({ depth: 'minimal', lockedPageAccessTicket: expired }).selection, undefined);
+  const legacyLock = editorContextFixture({ primaryLocked: 'true' });
+  assert.equal(legacyLock.context({ depth: 'minimal' }).selection, undefined);
+});
+
+test('classic editor selection requires the current visible page owner', () => {
+  const fixture = editorContextFixture({ legacy: true });
+  assert.equal(fixture.context({ depth: 'minimal' }).selection, 'SELECTION_SENTINEL');
+  fixture.host.hidden = true;
+  assert.equal(fixture.context({ depth: 'minimal' }).selection, undefined);
+  fixture.host.hidden = false;
+  fixture.host.dataset.pageId = 'previous-protected-page';
+  assert.equal(fixture.context({ depth: 'minimal' }).selection, undefined);
+  delete fixture.host.dataset.pageId;
+  assert.equal(fixture.context({ depth: 'minimal' }).selection, undefined);
+  assert.equal(editorContextFixture({ legacy: true, primaryLocked: true }).context({ depth: 'minimal' }).selection, undefined);
+});
 
 test('generic prompts omit the action catalog while preserving the core safety rules', () => {
   const generic = buildSystemPromptParts({ view: 'today', depth: 'minimal' }, 'hello');

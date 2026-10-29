@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-29T18:02:01.262Z",
-  "reviewedReason": "Restore-rejected-Radar-completion-fields",
-  "maxBytes": 5014476,
-  "maxLines": 87073
+  "blessedAt": "2026-10-29T18:12:18.032Z",
+  "reviewedReason": "Track-rendered-editor-owner-before-Assistant-selection",
+  "maxBytes": 5014826,
+  "maxLines": 87078
 }

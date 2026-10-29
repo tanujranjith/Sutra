@@ -308,6 +308,9 @@ Assistant asks for one-time permission and the page PIN before including that
 page in the current request. The grant does not unlock the editor, change saved
 privacy settings, or authorize later requests. Without that grant, safe metadata
 may identify a locked source without quoting or linking its contents.
+Unlocking a page for editing does not authorize Assistant context: its selected
+text and Canvas contents remain excluded until separately authorized for that
+page. This applies to Canvas in either editor pane.
 Context collection also preserves the canonical locked document: the blank
 editor privacy surface must never be copied back into the protected note.
 

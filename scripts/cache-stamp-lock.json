@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261029-ci-permission-save2",
-    "hash": "3b9411bf21f54ff2"
+    "stamp": "20261029-quality-privacy1",
+    "hash": "3cbc47b3c86d7527"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261029-quality-radar1",
-    "hash": "b7ceb3a39a0b1812"
+    "stamp": "20261029-quality-owner1",
+    "hash": "60d3ece26b84f0dc"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -100,8 +100,8 @@
     "hash": "0b7582713b3b44e3"
   },
   "src/core/workspace-lock.js": {
-    "stamp": "20261015-pin-guard1",
-    "hash": "6d3256ba89732c71"
+    "stamp": "20261029-quality-lock1",
+    "hash": "0b581b69008678a9"
   },
   "src/data/daily-lock-in-quotes.js": {
     "stamp": "20260605-quotes1",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261029-ci-permission-save2",
-    "hash": "938831885e1fbddb"
+    "stamp": "20261029-quality-privacy1",
+    "hash": "5fbc72215893fcb4"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -376,8 +376,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261029-quality-capture1",
-    "hash": "bbc1339177f63df2"
+    "stamp": "20261029-quality-privacy1",
+    "hash": "1fcd034267a31a68"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -400,8 +400,8 @@
     "hash": "60b925ee7248e26f"
   },
   "src/features/workspace/office-interoperability.js": {
-    "stamp": "20261015-formula-cache2",
-    "hash": "33231c2e093874bc"
+    "stamp": "20261029-quality-formulas1",
+    "hash": "170096bf5b83ca18"
   },
   "src/features/workspace/pdf-engine.js": {
     "stamp": "20260823-pdf4",

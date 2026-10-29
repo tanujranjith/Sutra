@@ -162,6 +162,119 @@ test('Assistant context fails closed when the privacy boundary is unavailable', 
   expect(report.diagnosed).toBe(true);
 });
 
+test('an editor-unlocked protected selection is excluded from unrelated Assistant requests', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(async ({ pin, secret }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    payload.pages.push({ id: 'selection-protected', title: 'Protected selection', content: `<p>${secret}</p>`, blocks: [], createdAt: now, updatedAt: now });
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin('selection-protected', pin);
+    window.flowAtelier.unlockedPageIds.add('selection-protected');
+    window.flowAtelier.setActiveView('notes');
+    window.loadPage('selection-protected');
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('notes', 'approved');
+  }, { pin: PIN, secret: SECRET });
+  await page.waitForFunction(secret => document.querySelector('#editorV2Host .ProseMirror')?.textContent.includes(secret), SECRET);
+
+  const report = await page.evaluate(({ secret }) => {
+    const editor = document.querySelector('#editorV2Host .ProseMirror');
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const depths = ['minimal', 'currentView'];
+    return depths.map(depth => {
+      const enrichment = window.flowAssistant.buildRequestEnrichment('Hello', 'openai', { depth });
+      return {
+        depth,
+        selectionPresent: selection.toString().includes(secret),
+        context: JSON.stringify(enrichment.context),
+        payload: JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages })
+      };
+    });
+  }, { secret: SECRET });
+  for (const result of report) {
+    expect(result.selectionPresent).toBe(true);
+    expect(result.context).not.toContain(SECRET);
+    expect(result.payload).not.toContain(SECRET);
+  }
+});
+
+test('classic editor owner follows navigation and excludes stale protected selections', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async ({ pin, secret }) => {
+    const ordinaryText = 'Ordinary available passage';
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    payload.pages.push(
+      { id: 'classic-private', title: 'Classic private', content: `<p>${secret}</p>`, blocks: [], createdAt: now, updatedAt: now },
+      { id: 'classic-ordinary', title: 'Classic ordinary', content: `<p>${ordinaryText}</p>`, blocks: [], createdAt: now, updatedAt: now },
+      { id: 'classic-canvas', title: 'Classic canvas', type: 'canvas', content: '', blocks: [],
+        canvas: { version: 1, viewport: { x: 0, y: 0, zoom: 1 }, background: 'grid', objects: [], connections: [], groups: [] }, createdAt: now, updatedAt: now }
+    );
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin('classic-private', pin);
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.applyWorkspacePreferences({});
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('notes', 'approved');
+    const editor = document.getElementById('editor');
+    const selectEditor = () => {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return selection.toString();
+    };
+    const request = () => {
+      const enrichment = window.flowAssistant.buildRequestEnrichment('Hello', 'openai', { depth: 'minimal' });
+      return JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages });
+    };
+    window.loadPage('classic-ordinary');
+    const ordinaryOwner = editor.dataset.pageId;
+    const ordinarySelection = selectEditor();
+    const ordinaryRequest = request();
+
+    window.flowAtelier.unlockedPageIds.add('classic-private');
+    window.loadPage('classic-private');
+    const privateOwner = editor.dataset.pageId;
+    const privateSelection = selectEditor();
+    let duringNavigation = null;
+    const observe = () => {
+      if (window.flowAtelier.currentPageId !== 'classic-ordinary') return;
+      duringNavigation = { owner: editor.dataset.pageId || '', text: editor.textContent, request: request() };
+    };
+    window.addEventListener('noteflow:view-changed', observe);
+    window.loadPage('classic-ordinary');
+    window.removeEventListener('noteflow:view-changed', observe);
+
+    window.flowAtelier.unlockedPageIds.add('classic-private');
+    window.loadPage('classic-private');
+    selectEditor();
+    window.loadPage('classic-canvas');
+    const canvas = { owner: editor.dataset.pageId || '', hidden: editor.hidden, retainedText: editor.textContent, request: request() };
+    return { ordinaryText, ordinaryOwner, ordinarySelection, ordinaryRequest, privateOwner, privateSelection, duringNavigation, canvas };
+  }, { pin: PIN, secret: SECRET });
+
+  expect(result.ordinaryOwner).toBe('classic-ordinary');
+  expect(result.ordinarySelection).toContain(result.ordinaryText);
+  expect(result.ordinaryRequest).toContain(result.ordinaryText);
+  expect(result.privateOwner).toBe('classic-private');
+  expect(result.privateSelection).toContain(SECRET);
+  expect(result.duringNavigation).not.toBeNull();
+  expect(result.duringNavigation.text).toContain(SECRET);
+  expect(result.duringNavigation.owner).toBe('');
+  expect(result.duringNavigation.request).not.toContain(SECRET);
+  expect(result.canvas.hidden).toBe(true);
+  expect(result.canvas.owner).toBe('');
+  expect(result.canvas.retainedText).toContain(SECRET);
+  expect(result.canvas.request).not.toContain(SECRET);
+});
+
 for (const depth of ['currentView', 'minimal']) {
 test(`Assistant locked-page access requires consent and PIN without unlocking the editor (${depth})`, async ({ page }) => {
   await openApp(page);
