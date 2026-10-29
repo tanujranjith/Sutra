@@ -1757,7 +1757,8 @@ test('secondary pane saves its pending edit before switching pages or closing Sp
 });
 
 test('Split View keeps equal panes aligned, independently scrollable, and clear about the active note', async ({ page }, testInfo) => {
-  test.setTimeout(90000);
+  // Modern and Classic panes, eight tags, theme, close, and viewport flows need a cold WebKit budget.
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 1600, height: 900 });
   await openAppForSplitLayout(page);
   await enableEditorV2(page);
