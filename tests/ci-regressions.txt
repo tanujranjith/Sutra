@@ -1,8 +1,10 @@
 tests/e2e/assistant-action-harness.spec.mjs
+tests/e2e/accessibility.spec.mjs
 tests/e2e/assistant-everyday.spec.mjs
 tests/e2e/assistant-local-setup.spec.mjs
 tests/e2e/assistant-source-disclosures.spec.mjs
 tests/e2e/assistant-workspace-investigation.spec.mjs
+tests/e2e/full-app-audit.spec.mjs
 tests/e2e/intelligence-diagnostics.spec.mjs
 tests/e2e/locked-note-privacy.spec.mjs
 tests/e2e/navigation-clarity.spec.mjs
@@ -10,6 +12,8 @@ tests/e2e/notes-editor-v2.spec.mjs
 tests/e2e/notes-page-layout.spec.mjs
 tests/e2e/notes-sidebar-containment.spec.mjs
 tests/e2e/public-beta-surfaces.spec.mjs
+tests/e2e/student-academic-editing.spec.mjs
+tests/e2e/student-assistant-model-context.spec.mjs
 tests/e2e/student-os-phase3.spec.mjs
 tests/e2e/today-dashboard-customization.spec.mjs
 tests/e2e/today-redesign.spec.mjs

@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261029-ci-focus2",
-    "hash": "18ceb9735254f102"
+    "stamp": "20261029-ci-permission-save1",
+    "hash": "ec9ba4bbe4cc0718"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261028-ci-investigation2",
-    "hash": "2991b2e40fb5f62b"
+    "stamp": "20261029-ci-permission-save1",
+    "hash": "c4138c2e12422bad"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
