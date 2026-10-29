@@ -7,6 +7,7 @@ async function saveSettings(page) {
   const topButton = page.locator('#settingsApplyBtnTop');
   const button = await topButton.isVisible() ? topButton : page.locator('#settingsApplyBtn');
   await button.click();
+  await expect(page.locator('#settingsStatusPill')).toHaveAttribute('data-state', 'saved');
 }
 async function open(page, provider = 'openai') {
   await page.addInitScript(() => sessionStorage.setItem('sutra_intro_played', '1'));

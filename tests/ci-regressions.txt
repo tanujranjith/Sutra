@@ -20,6 +20,8 @@ tests/e2e/notes-page-layout.spec.mjs
 tests/e2e/notes-sidebar-containment.spec.mjs
 tests/e2e/public-beta-surfaces.spec.mjs
 tests/e2e/quick-capture-student-flow.spec.mjs
+tests/e2e/settings-global-search.spec.mjs
+tests/e2e/startup-chime.spec.mjs
 tests/e2e/student-academic-editing.spec.mjs
 tests/e2e/student-assistant-model-context.spec.mjs
 tests/e2e/student-os-phase3.spec.mjs

@@ -301,6 +301,7 @@ test('Appearance keeps its preview inline and reflects staged values, Revert, Sa
   await density.locator(`[data-value="${nextDensity}"]`).click();
   await page.locator('#settingsApplyBtn').click();
   await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'false');
+  await expect(page.locator('#settingsStatusPill')).toHaveAttribute('data-state', 'saved');
   await expect(page.locator('body')).toHaveAttribute('data-ui-density', nextDensity);
   await page.reload();
   await waitForAppReady(page);
@@ -356,4 +357,5 @@ test('Settings remains contained at 320px with appearance disclosures expanded',
   expect(save.bottom).toBeLessThan(save.navTop);
   await page.locator('#settingsApplyBtn').click();
   await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'false');
+  await expect(page.locator('#settingsStatusPill')).toHaveAttribute('data-state', 'saved');
 });
