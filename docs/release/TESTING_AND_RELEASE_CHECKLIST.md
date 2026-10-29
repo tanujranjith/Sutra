@@ -16,6 +16,13 @@ Sutra is a static, local-first app with no required backend; optional services h
 
 The table below lists selected Node checks, which require no browser. It is not the complete release gate. `npm run verify` runs check:all, unit tests, deploy build/check, Chromium smoke, and Sync suites; the full compatibility matrix additionally covers the configured browser/device projects.
 
+For remote diagnosis, manually dispatch **CI — verified artifact** with
+`regression_only: true` and `full_browser_matrix: true` to run the specs listed
+in `tests/ci-regressions.txt` across the existing browser/device lanes. Static,
+unit, build, and deploy-artifact gates still run. This diagnostic subset does
+not replace a complete run with `regression_only: false`; normal pushes, pull
+requests, scheduled runs, and deployment checks retain their full coverage.
+
 | Command | What it guards |
 | --- | --- |
 | `node scripts/smoke-check.mjs` | Structural integrity of the app: export/import wiring, encrypted `.sutra` envelope constants, iOS-safe file pickers, Drive `appDataFolder` scope/metadata guards, settings save/apply wiring, and key feature hooks. Runs text-level assertions; does not execute the app. |

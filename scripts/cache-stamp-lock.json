@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20261015-life-recovery3",
-    "hash": "981e9e7de35c46ae"
+    "stamp": "20261028-ci-recovery1",
+    "hash": "3a7b6244d7db1e2a"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261025-todo-classes1",
-    "hash": "f248c5b04c312dce"
+    "stamp": "20261028-ci-investigation1",
+    "hash": "b3dd10216e222e25"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261028-workspace-todos2",
-    "hash": "d530a3ea5b75d6fa"
+    "stamp": "20261028-ci-preferences1",
+    "hash": "f16255a2aade5e9b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261025-todo-classes1",
-    "hash": "6923a5cb4a030c0b"
+    "stamp": "20261028-ci-investigation1",
+    "hash": "df206aeccdaf2f3c"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -672,8 +672,8 @@
     "hash": "ac54806d3a4b956d"
   },
   "styles/features/sidebar-page-actions.css": {
-    "stamp": "20260803-overflow1",
-    "hash": "1282bcc43a7bc9b4"
+    "stamp": "20261028-ci-actions1",
+    "hash": "b62d5c520c69ad9b"
   },
   "styles/features/slides.css": {
     "stamp": "20261004-slides-lines-menus1",
@@ -768,8 +768,8 @@
     "hash": "23882a93ae06f7c4"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261027-page-tree1",
-    "hash": "999526e967fd2878"
+    "stamp": "20261028-ci-nav1",
+    "hash": "dbf8fd668639d74f"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",
