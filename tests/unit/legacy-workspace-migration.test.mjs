@@ -380,7 +380,11 @@ test('populated day-state fields and unknown day-state fields remain meaningful'
   ];
 
   for (const [name, patch] of meaningfulDayStates) {
-    const root = { pages: [helpPage], ...patch };
+    const root = {
+      pages: [helpPage],
+      settings: { onboarding: { version: 1, completed: true, skipped: false, migratedFromLegacy: true } },
+      ...patch
+    };
     const runtime = makeRuntime({ records: {
       root,
       'workspace-last-meaningful': { pages: [{ id: 'older-page', title: 'Older recovery candidate' }] }
