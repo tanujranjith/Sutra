@@ -1519,7 +1519,17 @@ test('Move to space cancels cleanly, refuses duplicate titles, and rebases a nes
   await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
   await page.locator('#renamePageName').fill('Parent::Unique child');
   await page.locator('#renamePageModal').getByRole('button', { name: 'Save', exact: true }).click();
-  await page.locator('#editorV2Host .ProseMirror').fill('Pending source edit');
+  await expect(page.locator('#renamePageModal')).toBeHidden();
+  await expect.poll(() => page.evaluate(id => ({
+    currentPageId: window.flowAtelier.currentPageId,
+    title: window.flowAtelier.getPageById(id)?.title
+  }), staged.child)).toEqual({ currentPageId: staged.child, title: 'Unique child' });
+  const sourceEditor = page.locator('#editorV2Host .ProseMirror');
+  await expect(sourceEditor).toHaveAttribute('contenteditable', 'true');
+  await sourceEditor.click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('Pending source edit');
+  await expect(sourceEditor).toHaveText('Pending source edit');
   await page.getByRole('button', { name: 'More actions for Unique child', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
   await page.getByRole('dialog', { name: 'Move to space', exact: true }).getByRole('button', { name: 'Move', exact: true }).click();

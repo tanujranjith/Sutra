@@ -100,7 +100,7 @@ async function stubFetchRetryThenOk(page, payload) {
   }, payload);
 }
 
-test('a reported-usage response renders an accessible Response details chip with tokens + latency', async ({ page }) => {
+test('a reported-usage response renders an accessible Response details chip with tokens + latency', async ({ page, browserName }) => {
   await openApp(page);
   // Pin a light palette so the chip background cannot silently use a dark
   // fallback while its labels and values inherit light-theme text colors.
@@ -149,11 +149,43 @@ test('a reported-usage response renders an accessible Response details chip with
 
   const responseDetails = page.locator('#chatbotMessages').getByRole('dialog', { name: 'Response details', exact: true }).last();
   const closeDetails = responseDetails.getByRole('button', { name: 'Close response details', exact: true });
-  // The dialog's Close button precedes its selected Usage tab in the DOM.
+  // WebKit on Apple platforms follows the system's full keyboard access setting
+  // for Tab. Option+Tab (Alt+Tab in Playwright) includes native buttons even
+  // when that setting is off; other engines use ordinary Tab navigation.
   await expect(summary).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Shift+Tab' : 'Shift+Tab');
+  const closeIsFocused = await closeDetails.evaluate(button => button === button.ownerDocument.activeElement);
+  if (!closeIsFocused) {
+    const focusState = await responseDetails.evaluate(dialog => {
+      const active = dialog.ownerDocument.activeElement;
+      let popoverOpen = false;
+      try { popoverOpen = dialog.matches(':popover-open'); } catch (_) { /* Older dialog fallback. */ }
+      return {
+        active: active && {
+          tag: active.tagName,
+          id: active.id,
+          role: active.getAttribute('role'),
+          label: active.getAttribute('aria-label'),
+          className: String(active.className || ''),
+          tabIndex: active.tabIndex
+        },
+        activeInsideDialog: dialog.contains(active),
+        dialog: { open: dialog.open, popoverOpen: popoverOpen, hidden: dialog.hidden },
+        tabStops: Array.from(dialog.querySelectorAll('button, [tabindex]')).map(element => ({
+          tag: element.tagName,
+          label: element.getAttribute('aria-label'),
+          className: String(element.className || ''),
+          tabIndex: element.tabIndex,
+          disabled: element.disabled === true,
+          hidden: element.hidden === true,
+          selected: element.getAttribute('aria-selected')
+        }))
+      };
+    });
+    expect(closeIsFocused, `Reverse Tab focus state: ${JSON.stringify(focusState)}`).toBe(true);
+  }
   await expect(closeDetails).toBeFocused();
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(summary).toBeFocused();
   const focusStyle = await summary.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(focusStyle).toBe('solid');
