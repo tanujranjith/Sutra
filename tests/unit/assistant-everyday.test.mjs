@@ -12,6 +12,7 @@ const compile = (name, names = [], values = []) => new Function(...names,
   `${extractFunction(source, name).body}; return ${name};`)(...values);
 const normalizeMode = compile('normalizeChatMemoryMode', ['getPref'], [getPref]);
 const normalizeDepth = compile('normalizeChatMemoryDepth', ['CHAT_MEMORY_DEPTH_OPTIONS'], [[3, 5, 10, 15, 25]]);
+const persistAssistantPermissionMutation = compile('persistAssistantPermissionMutation');
 const history = compile('buildConversationMessages',
   ['normalizeChatMemoryMode', 'normalizeChatMemoryDepth', 'getChatMemoryMode', 'getChatMemoryDepth'],
   [normalizeMode, normalizeDepth, () => 'stateful', () => 5]);
@@ -56,6 +57,40 @@ test('Everyday retains sensitive-content opt-ins but never creates them', () => 
   assert.equal(ordinary.allowPrivateDocuments, false);
   const existing = privacy.presetPlan('everyday', { allowFinancial: true }).permissions;
   assert.equal(existing.allowFinancial, true);
+});
+
+test('permission restrictions apply before the canonical save acknowledgement settles', async () => {
+  const permissions = { mode: 'approved_actions', areas: { notes: 'ask' } };
+  let finishSave;
+  let settled = false;
+  const saving = persistAssistantPermissionMutation(() => {
+    permissions.mode = 'off';
+    permissions.areas.notes = 'denied';
+  }, () => new Promise(resolve => { finishSave = resolve; }));
+  saving.then(() => { settled = true; });
+
+  assert.equal(permissions.mode, 'off');
+  assert.equal(permissions.areas.notes, 'denied');
+  assert.equal(settled, false);
+
+  finishSave();
+  assert.deepEqual(await saving, { ok: true });
+  assert.equal(settled, true);
+});
+
+test('failed permission save keeps the selected restriction active for retry', async () => {
+  const permissions = { mode: 'approved_actions', areas: { notes: 'ask' } };
+  const failure = new Error('readback failed');
+  const result = await persistAssistantPermissionMutation(() => {
+    permissions.mode = 'off';
+    permissions.areas.notes = 'denied';
+  }, () => Promise.reject(failure));
+
+  assert.equal(result.ok, false);
+  assert.equal(result.phase, 'save');
+  assert.equal(result.error, failure);
+  assert.equal(permissions.mode, 'off');
+  assert.equal(permissions.areas.notes, 'denied');
 });
 
 test('conversation recap is bounded, role-preserving, current-chat-only and absent in Stateless', () => {

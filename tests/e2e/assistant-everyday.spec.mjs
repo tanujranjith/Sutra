@@ -31,16 +31,22 @@ test('fresh Everyday is useful without autonomous writes or startup provider req
 
   await page.getByText('Access by area', { exact: true }).click();
   await page.locator('[data-assistant-permission-area="notes"]').selectOption('denied');
+  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant access change saved locally.');
+  await page.locator('#assistantAccessPreset').selectOption('advanced');
   await page.locator('#assistantAccessPreset').selectOption('private');
+  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant access change saved locally.');
   await page.reload(); await waitForAppReady(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.locator('[data-settings-nav="assistant"]').click();
   await expect(page.locator('#assistantAccessPreset')).toHaveValue('private');
   await expect(page.locator('#assistantWorkspaceAccess')).toHaveValue('off');
+  await expect(page.locator('[data-assistant-permission-area="notes"]')).toHaveValue('denied');
+  expect(await page.evaluate(() => window.SutraAssistantPrivacy.canRead('notes'))).toBe(false);
   await page.locator('#assistantAccessPreset').selectOption('everyday');
   await expect(page.locator('#assistantWorkspaceAccess')).toHaveValue('approved_actions');
   await expect(page.locator('[data-assistant-permission-area="notes"]')).toHaveValue('denied');
   expect(await page.evaluate(() => window.SutraAssistantPrivacy.canRead('notes'))).toBe(false);
+  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant access change saved locally.');
   expect(remote).toEqual([]);
 });
 
@@ -55,6 +61,36 @@ test('preset refuses an unsaved draft; Advanced leaves current permissions intac
   await page.locator('#assistantAccessPreset').selectOption('advanced');
   await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('keeps your current permissions');
   expect(await page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('approved_actions');
+});
+
+test('permission save failure keeps the selected restriction and offers Retry save', async ({ page }) => {
+  await open(page);
+  const status = page.locator('#assistantWorkspaceAccessStatus');
+  await page.getByText('Access by area', { exact: true }).click();
+  await page.locator('[data-assistant-permission-area="notes"]').selectOption('denied');
+  await expect(status).toContainText('Assistant access change saved locally.');
+
+  await page.evaluate(() => {
+    const owner = window.flowAtelier;
+    const flush = owner.flushAppSaveNow;
+    owner.flushAppSaveNow = (...args) => {
+      owner.flushAppSaveNow = flush;
+      return Promise.reject(new Error('Simulated permission save rejection.'));
+    };
+  });
+  await page.locator('#assistantAccessPreset').selectOption('private');
+  await expect(status).toContainText('Could not confirm saving this Assistant access change.');
+  await expect(status.getByRole('button', { name: 'Retry save', exact: true })).toBeEnabled();
+  await expect(status).not.toContainText('Assistant access change saved locally.');
+  expect(await page.evaluate(() => window.SutraAssistantPermissions.get())).toMatchObject({ mode: 'off', areas: { notes: 'denied' } });
+
+  await status.getByRole('button', { name: 'Retry save', exact: true }).click();
+  await expect(status).toContainText('Assistant access change saved locally.');
+  await page.reload(); await waitForAppReady(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('[data-settings-nav="assistant"]').click();
+  await expect(page.locator('#assistantAccessPreset')).toHaveValue('private');
+  await expect(page.locator('[data-assistant-permission-area="notes"]')).toHaveValue('denied');
 });
 
 test('reviewed task creation applies once with Undo; importing missing permissions fails closed', async ({ page }) => {
@@ -98,7 +134,7 @@ test('enabling Everyday beside a blocked proposal does not apply that proposal',
   expect(await page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('read_only');
   await card.getByRole('button', { name: 'Use Everyday Assistant', exact: true }).click();
   await confirmation.getByRole('button', { name: 'Enable Everyday', exact: true }).click();
-  await expect(card).toContainText('Everyday is enabled');
+  await expect(card).toContainText('Assistant access change saved locally.');
   expect(await page.evaluate(() => window.flowAssistant.listOpenWorkspaceTasks().some(row => row.title === 'QA explicit review still required'))).toBe(false);
   await expect(card.locator('.flow-action-apply')).toBeEnabled();
 });

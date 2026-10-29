@@ -93,6 +93,12 @@ Preset selection applies immediately and refuses to overwrite an unsaved
 Settings draft: Save or Revert that draft first. A blocked action also offers
 **Use Everyday Assistant**, with a configuration confirmation; enabling it
 does not apply the proposal. The proposal still needs its own Apply click.
+Permission changes take effect in the current session immediately. The controls
+show **Saving Assistant access** until the canonical workspace save is confirmed;
+they stay disabled while that save is pending. If the save fails, the selected
+permissions remain active in the current session and the failure is reported
+with a **Retry save** action. Treat the change as saved only after the
+confirmation appears.
 Existing saved workspaces are not upgraded automatically. Older missing
 permissions remain Off on load/import; older missing conversation preferences
 retain Current view / Stateless. No new durable field or permission store exists.

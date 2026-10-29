@@ -195,6 +195,7 @@ test('saving Assistant enablement loads and reinitializes workspace-access contr
   await expect(status).not.toContainText('Enable Sutra Assistant');
   await mode.selectOption('read_only');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('read_only');
+  await expect(status).toContainText('Assistant access change saved locally.');
   // Exercise the loaded -> teardown -> reinit path as well as first enable.
   await toggle.uncheck({ force: true });
   await saveSettings(page);
@@ -208,9 +209,12 @@ test('saving Assistant enablement loads and reinitializes workspace-access contr
   await expect(preset).toBeEnabled();
   await expect(area).toBeEnabled();
   await expect(mode).toHaveValue('read_only');
+  await page.locator('#assistantAccessPreset').selectOption('advanced');
   await mode.selectOption('ask_per_area');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().mode)).toBe('ask_per_area');
+  await expect(status).toContainText('Assistant access change saved locally.');
   await page.getByText('Access by area', { exact: true }).click();
   await page.getByLabel('Tasks & schedule access', { exact: true }).selectOption('approved');
   await expect.poll(() => page.evaluate(() => window.SutraAssistantPermissions.get().areas.planning)).toBe('approved');
+  await expect(status).toContainText('Assistant access change saved locally.');
 });

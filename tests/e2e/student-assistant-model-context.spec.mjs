@@ -176,10 +176,13 @@ test('Workspace-aware does not override permissions; visible access settings res
   await page.locator('[data-pref-path="assistant.contextDepth"]').selectOption('workspace', { force: true });
   await expect(mode).toHaveValue('off');
   await mode.selectOption('read_only');
-  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Tasks & schedule is not allowed');
+  const permissionStatus = page.locator('#assistantWorkspaceAccessStatus');
+  await expect(permissionStatus).toContainText('Tasks & schedule is not allowed');
+  await expect(permissionStatus).toContainText('Assistant access change saved locally.');
   await page.getByText('Access by area', { exact: true }).click();
   await page.getByLabel('Tasks & schedule access', { exact: true }).selectOption('approved');
-  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant can read your tasks');
+  await expect(permissionStatus).toContainText('Assistant can read your tasks');
+  await expect(permissionStatus).toContainText('Assistant access change saved locally.');
   await expect(page.getByLabel('Notes access', { exact: true })).toHaveValue('denied');
   await page.evaluate(() => window.setActiveView('assistantview'));
   await page.locator('#asstInput').fill('can u summarize my todos');
