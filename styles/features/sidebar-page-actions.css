@@ -41,7 +41,11 @@
         color: var(--text-primary);
         border-color: var(--accent, rgba(160, 132, 96, 0.8));
         background: var(--surface-bg-hover, rgba(255, 255, 255, 0.12));
-        outline: none;
+    }
+
+    .page-item-actions-toggle:focus-visible {
+        outline: 2px solid var(--accent, rgba(160, 132, 96, 0.8));
+        outline-offset: 2px;
     }
 }
 
