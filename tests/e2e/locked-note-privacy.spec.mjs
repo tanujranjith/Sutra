@@ -203,6 +203,46 @@ test('an editor-unlocked protected selection is excluded from unrelated Assistan
   }
 });
 
+test('Slides scoped and navigation context cannot borrow another protected deck', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async ({ pin, secret }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    const makeDeck = (text) => window.SutraSlides.normalizeDeck({ slides: [{ id: 'slide', title: text,
+      speakerNotes: text, elements: [{ id: 'text', type: 'text', text }] }] }, 'Deck');
+    payload.pages.push(
+      { id: 'slides-private', title: 'Private deck', content: '', blocks: [], slides: makeDeck(secret), createdAt: now, updatedAt: now },
+      { id: 'slides-public', title: 'Ordinary deck', content: '', blocks: [], slides: makeDeck('ORDINARY_SLIDES_TEXT'), createdAt: now, updatedAt: now }
+    );
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin('slides-private', pin);
+    window.flowAtelier.unlockedPageIds.add('slides-private');
+    window.flowAtelier.setActiveView('notes');
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('notes', 'approved');
+    window.loadPage('slides-private');
+    const scoped = window.flowAssistant.getFlowAssistantContext({ depth: 'currentView', scope: { type: 'note', noteId: 'slides-public' } });
+    let duringNavigation = null;
+    const observe = () => {
+      if (window.flowAtelier.currentPageId !== 'slides-public') return;
+      duringNavigation = { liveId: window.SutraSlides.getContext()?.id,
+        context: window.flowAssistant.getFlowAssistantContext({ depth: 'currentView' }) };
+    };
+    window.addEventListener('noteflow:view-changed', observe);
+    window.loadPage('slides-public');
+    window.removeEventListener('noteflow:view-changed', observe);
+    return { scoped, duringNavigation, settled: window.flowAssistant.getFlowAssistantContext({ depth: 'currentView' }) };
+  }, { pin: PIN, secret: SECRET });
+  expect(result.scoped.activeNote.excerpt).toContain('ORDINARY_SLIDES_TEXT');
+  expect(JSON.stringify(result.scoped)).not.toContain(SECRET);
+  expect(result.duringNavigation).not.toBeNull();
+  expect(result.duringNavigation.liveId).toBe('slides-private');
+  expect(result.duringNavigation.context.activeNote.excerpt).toContain('ORDINARY_SLIDES_TEXT');
+  expect(JSON.stringify(result.duringNavigation.context)).not.toContain(SECRET);
+  expect(result.settled.slides.id).toBe('slides-public');
+  expect(JSON.stringify(result.settled)).toContain('ORDINARY_SLIDES_TEXT');
+});
+
 test('classic editor owner follows navigation and excludes stale protected selections', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(async ({ pin, secret }) => {

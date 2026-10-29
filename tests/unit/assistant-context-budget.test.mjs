@@ -213,6 +213,69 @@ test('classic editor selection requires the current visible page owner', () => {
   assert.equal(editorContextFixture({ legacy: true, primaryLocked: true }).context({ depth: 'minimal' }).selection, undefined);
 });
 
+test('Slides summaries use the requested owner, not a stale protected editor deck', () => {
+  const pages = [
+    { id: 'ordinary', title: 'Ordinary', slides: { slides: [{ title: 'ORDINARY_SLIDE', speakerNotes: 'ORDINARY_NOTES', elements: [{ text: 'ORDINARY_CONTENT' }] }] } },
+    { id: 'protected', title: 'Protected', isLocked: true, slides: { slides: [{ title: 'PROTECTED_SLIDE', speakerNotes: 'PROTECTED_NOTES', elements: [{ text: 'PROTECTED_CONTENT' }] }] } }
+  ];
+  const state = { currentPageId: 'protected', liveId: 'protected' };
+  const ticket = { pageIds: ['protected'], expiresAt: Date.now() + 60000 };
+  const win = { getSelection: () => null, SutraSlides: { getContext() {
+    const page = pages.find(item => item.id === state.liveId);
+    return page ? { id: page.id, type: 'slides', slideCount: page.slides.slides.length, slides: page.slides.slides } : null;
+  } } };
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { notes: 'approved' } }) });
+  const names = ['lockedPageAccessTicketIsValid', 'currentLockedPageAccessTicket', 'currentLockedPageAccessIds',
+    'scopedAssistantContextOptions', 'rangeInsideElement', 'assistantPageContextAllowed', 'getEditorSelection',
+    'getActiveNoteSummary', 'getCanvasContextSummary', 'getSlidesContextSummary', 'getFlowAssistantContext'];
+  const declarations = names.map(name => {
+    const found = extractFunction(source, name);
+    assert.ok(found, `could not extract ${name}`);
+    return found.body;
+  }).join('\n');
+  const context = new Function('window', 'document', 'Node', 'bridge', 'filterAssistantContext', 'initialTicket',
+    `let activeLockedPageAccessTicket = initialTicket;
+     const normalizeDepth = depth => depth || 'currentView';
+     const getActiveViewName = () => 'notes';
+     const getPref = (_key, fallback) => fallback;
+     const intel = () => null;
+     const syncActiveV2NoteForContext = () => {};
+     const summarizeTasksFor = () => [], summarizeHomework = () => [], summarizeTimeline = () => [], summarizeDeadlines = () => [];
+     const summarizeReviewDue = () => null, summarizeApStudy = () => null, summarizeCollege = () => null;
+     const summarizeLife = () => null, summarizeBusiness = () => null, summarizeCram = () => null;
+     const summarizeCourses = () => null, summarizeAllDue = () => null, summarizeTestingHub = () => null;
+     const truncate = (text, max) => text.slice(0, max);
+     ${declarations}
+     return getFlowAssistantContext;`)(win, { getElementById: () => null }, { TEXT_NODE: 3 },
+    () => ({ pages, currentPageId: state.currentPageId }), (value, options) => privacy.filterContext(value, options), ticket);
+
+  const scoped = { depth: 'currentView', scope: { type: 'note', noteId: 'ordinary' } };
+  const scopedResult = context(scoped);
+  assert.match(scopedResult.activeNote.excerpt, /ORDINARY_CONTENT/);
+  assert.equal(scopedResult.slides, undefined);
+  assert.ok(!JSON.stringify(scopedResult).includes('PROTECTED_'));
+  const enrichment = createEnrichment({ depth: 'currentView', contextProvider: context, memoryPrivacy: privacy,
+    contextFilter: (value, options) => privacy.filterContext(value, options) })('Summarize this note', 'openai', scoped);
+  assert.ok(!JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages }).includes('PROTECTED_'));
+
+  // Navigation changes the current page before the Slides editor refreshes.
+  state.currentPageId = 'ordinary';
+  const transition = context({ depth: 'currentView' });
+  assert.match(transition.activeNote.excerpt, /ORDINARY_CONTENT/);
+  assert.equal(transition.slides, undefined);
+  assert.ok(!JSON.stringify(transition).includes('PROTECTED_'));
+  state.liveId = 'ordinary';
+  const ready = context({ depth: 'currentView' });
+  assert.equal(ready.slides.id, 'ordinary');
+  assert.match(JSON.stringify(ready), /ORDINARY_CONTENT/);
+
+  state.currentPageId = state.liveId = 'protected';
+  assert.ok(!JSON.stringify(context({ depth: 'currentView' })).includes('PROTECTED_CONTENT'));
+  const authorized = context({ depth: 'currentView', lockedPageAccessTicket: ticket });
+  assert.match(authorized.activeNote.excerpt, /PROTECTED_CONTENT/);
+  assert.equal(authorized.slides.id, 'protected');
+});
+
 test('generic prompts omit the action catalog while preserving the core safety rules', () => {
   const generic = buildSystemPromptParts({ view: 'today', depth: 'minimal' }, 'hello');
   const action = buildSystemPromptParts({ view: 'today', depth: 'minimal' }, 'Create a task');

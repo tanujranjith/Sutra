@@ -105,6 +105,11 @@ speaker notes. Locked pages remain excluded. Sync transports the complete
 changes and inline image data use the same encrypted, deterministic path as
 other Note content.
 
+For a note-scoped request, the Assistant reads the authorized page's own deck.
+Live editor context is included only when it belongs to that same page, including
+while a page change is in progress. Protected decks require the Assistant's
+separate one-request consent and PIN check even when the editor is unlocked.
+
 Slides uses only local image files chosen by the student. V1 stores those image
 bytes in the page model so existing workspace backup and Sync transport retain
 them. Moving those bytes to the course attachment store is a follow-up needed

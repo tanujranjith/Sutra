@@ -521,17 +521,20 @@
                 };
             }
             if (page.slides && Array.isArray(page.slides.slides)) {
-                const deck = window.SutraSlides && typeof window.SutraSlides.getContext === 'function'
-                    ? window.SutraSlides.getContext()
-                    : null;
-                const slideText = deck && Array.isArray(deck.slides)
-                    ? deck.slides.map(slide => [slide.title, slide.speakerNotes].concat((slide.elements || []).map(element => element.text || element.alt || '')).join(' ')).join(' ')
-                    : '';
+                // The live Slides editor can still belong to a different page
+                // during navigation or when this request has a note scope. Read
+                // this already-authorized page's canonical deck instead.
+                const slideText = page.slides.slides.slice(0, 10).map(slide => {
+                    if (!slide || typeof slide !== 'object') return '';
+                    const elements = Array.isArray(slide.elements) ? slide.elements.slice(0, 10) : [];
+                    return [String(slide.title || '').slice(0, 300), String(slide.speakerNotes || '').slice(0, 500)]
+                        .concat(elements.map(element => String(element && (element.text || element.alt) || '').slice(0, 240))).join(' ');
+                }).join(' ');
                 return {
                     id: page.id,
                     title: page.title || 'Untitled presentation',
                     type: 'slides',
-                    slideCount: deck ? deck.slideCount : page.slides.slides.length,
+                    slideCount: page.slides.slides.length,
                     excerpt: truncate(slideText, 800),
                     wordCount: slideText ? slideText.trim().split(/\s+/).length : 0,
                     classLinkId: page.classLinkId || '',
@@ -577,12 +580,13 @@
         } catch (e) { return null; }
     }
 
-    function getSlidesContextSummary() {
+    function getSlidesContextSummary(options) {
         try {
-            const note = getActiveNoteSummary();
+            const note = getActiveNoteSummary(options);
             if (!note || note.locked || note.type !== 'slides') return null;
             const api = window.SutraSlides && typeof window.SutraSlides.getContext === 'function' ? window.SutraSlides : null;
-            return api ? api.getContext() : null;
+            const context = api ? api.getContext() : null;
+            return context && String(context.id) === String(note.id) && assistantPageContextAllowed(context.id, options) ? context : null;
         } catch (e) { return null; }
     }
 
@@ -986,7 +990,7 @@
         if (view === 'notes') {
             const canvasContext = getCanvasContextSummary(options);
             if (canvasContext) ctx.canvas = canvasContext;
-            const slidesContext = getSlidesContextSummary();
+            const slidesContext = getSlidesContextSummary(options);
             if (slidesContext) ctx.slides = slidesContext;
             if (selection) ctx.selection = truncate(selection, 1500);
         }
