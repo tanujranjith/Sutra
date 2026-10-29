@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20261028-ci-recovery1",
-    "hash": "3a7b6244d7db1e2a"
+    "stamp": "20261028-ci-recovery2",
+    "hash": "7df0930698ea3b95"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261028-ci-investigation1",
-    "hash": "b3dd10216e222e25"
+    "stamp": "20261028-ci-investigation2",
+    "hash": "4880b09bf1b3795b"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261028-ci-preferences1",
-    "hash": "f16255a2aade5e9b"
+    "stamp": "20261028-ci-preferences2",
+    "hash": "89b2c4b102d597bb"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -200,8 +200,8 @@
     "hash": "39df9f707048eae3"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261028-ci-investigation1",
-    "hash": "df206aeccdaf2f3c"
+    "stamp": "20261028-ci-investigation2",
+    "hash": "2991b2e40fb5f62b"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -264,8 +264,8 @@
     "hash": "2251acb689897110"
   },
   "src/features/notes/inline-ai-assist.js": {
-    "stamp": "20261024-writing-session1",
-    "hash": "974479db590994e6"
+    "stamp": "20261028-ci-writing1",
+    "hash": "ed91d27a58f2f81f"
   },
   "src/features/notes/rich-links.js": {
     "stamp": "20261003-create-review5",
@@ -576,8 +576,8 @@
     "hash": "471e4b2f094dc3c4"
   },
   "styles/features/assistant-sidebar.css": {
-    "stamp": "20261024-eyes3",
-    "hash": "90e99493262d6490"
+    "stamp": "20261028-ci-writing1",
+    "hash": "7f6808b43a0fe489"
   },
   "styles/features/backup-progress.css": {
     "stamp": "20261001-backup-progress1",
@@ -656,8 +656,8 @@
     "hash": "f4cae96a29fa89ae"
   },
   "styles/features/notifications.css": {
-    "stamp": "20261028-notification-age1",
-    "hash": "2faf37fd48d8097f"
+    "stamp": "20261028-ci-notifications1",
+    "hash": "a47a1ef8086b362b"
   },
   "styles/features/pdf-workspace.css": {
     "stamp": "20261001-authoring4",
@@ -672,8 +672,8 @@
     "hash": "ac54806d3a4b956d"
   },
   "styles/features/sidebar-page-actions.css": {
-    "stamp": "20261028-ci-actions1",
-    "hash": "b62d5c520c69ad9b"
+    "stamp": "20261028-ci-actions2",
+    "hash": "be78d8abad113aa0"
   },
   "styles/features/slides.css": {
     "stamp": "20261004-slides-lines-menus1",
