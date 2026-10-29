@@ -1537,9 +1537,17 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         return states.includes('offline');
       }, { timeout: 15000 }).toBe(true);
       B.net.down = false;
-      await secondTab.evaluate(() => window.SutraSync.resume());
+      // Restoring the mock route flag does not emit a browser `online` event.
+      // Resume both same-device tabs so the freshest eligible tab can sync;
+      // each engine still enforces the canonical stale-tab guard.
+      await Promise.all([
+        B.page.evaluate(() => window.SutraSync.resume()),
+        secondTab.evaluate(() => window.SutraSync.resume())
+      ]);
       try {
         await expect.poll(async () => {
+          if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
+          lastAttemptByTab.primary = { phase: 'reconnect', ...(await captureSyncAttempt(B.page)) };
           if (await secondTab.locator('#sutraRevokedDeviceScreen').count()) return true;
           lastAttemptByTab.secondTab = { phase: 'reconnect', ...(await captureSyncAttempt(secondTab)) };
           return (await secondTab.locator('#sutraRevokedDeviceScreen').count()) > 0;
