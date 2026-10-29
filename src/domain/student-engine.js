@@ -54,7 +54,8 @@
       var canonicalHomework = type === 'homework' && typeof item.done === 'boolean';
       var status = normalizeStatus(item.status);
       var completionAlias = ['done', 'complete', 'completed'].indexOf(status) !== -1;
-      if (canonicalHomework ? item.done || (isDone(status) && !completionAlias) : isDone(item.status || (item.completed ? 'done' : 'todo'))) return;
+      var homeworkTerminal = ['archived', 'canceled'].indexOf(status) !== -1 || (isDone(status) && !completionAlias);
+      if (canonicalHomework ? item.done || homeworkTerminal : isDone(item.status || (item.completed ? 'done' : 'todo'))) return;
       var id = makeId(type, item, index);
       map.push({
         id: id,

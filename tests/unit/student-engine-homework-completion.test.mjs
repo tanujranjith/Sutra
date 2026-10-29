@@ -13,6 +13,8 @@ test('Student OS and its planner honor reopened Homework and omit completed Home
     { id: 'finished', title: 'Finished lab', dueDate: '2026-06-03', done: true },
     { id: 'legacy', title: 'Legacy finished', dueDate: '2026-06-03', completed: true },
     { id: 'cancelled', title: 'Cancelled', done: false, status: 'cancelled' },
+    { id: 'canceled', title: 'Canceled', done: false, status: 'canceled' },
+    { id: 'archived', title: 'Archived', done: false, status: 'archived' },
     { id: 'submitted', title: 'Submitted', done: false, status: 'submitted' },
     { id: 'mastered', title: 'Mastered', done: false, status: 'mastered' }
   ] });
