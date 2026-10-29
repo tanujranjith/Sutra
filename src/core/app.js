@@ -3008,7 +3008,12 @@ function populateProgressDashboard() {
             }
             for (const child of Array.from(document.body.children)) {
                 if (child === screen) continue;
-                child.hidden = true;
+                // WebKit's hidden-property updates are costly across this large
+                // shell. Inline priority also conceals existing display overrides.
+                if (child.style.getPropertyValue('display') !== 'none'
+                    || child.style.getPropertyPriority('display') !== 'important') {
+                    child.style.setProperty('display', 'none', 'important');
+                }
                 child.inert = true;
                 child.setAttribute('aria-hidden', 'true');
             }

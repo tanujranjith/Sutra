@@ -1505,6 +1505,30 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         await window.SutraSync.unlock(passphrase);
       }, PASSPHRASE);
 
+      // A DOM-only sentinel verifies that the lock's inline important style
+      // overrides an existing visible body child without touching workspace
+      // data or browser storage.
+      const revocationDisplayProbeId = 'sutraRevocationDisplayProbe';
+      const addRevocationDisplayProbe = page => page.evaluate(id => {
+        const probe = document.createElement('div');
+        probe.id = id;
+        probe.setAttribute('data-revocation-display-probe', 'true');
+        probe.setAttribute('aria-hidden', 'true');
+        probe.textContent = 'Revocation display probe';
+        probe.style.setProperty('display', 'block', 'important');
+        document.body.appendChild(probe);
+        return {
+          computedDisplay: getComputedStyle(probe).display,
+          inlineDisplay: probe.style.getPropertyValue('display'),
+          inlinePriority: probe.style.getPropertyPriority('display')
+        };
+      }, revocationDisplayProbeId);
+      const probeSetup = await Promise.all([addRevocationDisplayProbe(B.page), addRevocationDisplayProbe(secondTab)]);
+      expect(probeSetup).toEqual([
+        { computedDisplay: 'block', inlineDisplay: 'block', inlinePriority: 'important' },
+        { computedDisplay: 'block', inlineDisplay: 'block', inlinePriority: 'important' }
+      ]);
+
       B.net.down = true;
       A.net.captureSyncRpcTrace = true;
       B.net.captureSyncRpcTrace = true;
@@ -1595,7 +1619,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         const concealmentStyleId = 'sutraRevocationConcealmentStyle';
         const phaseNames = [
           'guardStorageWrite', 'revokeStartBroadcast', 'syncStatusDispatch',
-          'screenAppend', 'concealmentStyleAppend', 'bodyChildHidden',
+          'screenAppend', 'concealmentStyleAppend', 'bodyChildHidden', 'bodyChildDisplay',
           'bodyChildInert', 'bodyChildAriaHidden', 'titleFocus'
         ];
         const metrics = Object.fromEntries(phaseNames.map(name => [name, {
@@ -1626,6 +1650,9 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           body && element && element !== body && element.parentNode === body
           && element.id !== screenId && body.classList.contains('sutra-revocation-locked')
         );
+        const bodyChildStyles = new Set(Array.from(body ? body.children : [])
+          .filter(element => element.id !== screenId)
+          .map(element => element.style));
         const findDescriptor = (prototype, name) => {
           for (let owner = prototype; owner; owner = Object.getPrototypeOf(owner)) {
             const descriptor = Object.getOwnPropertyDescriptor(owner, name);
@@ -1727,6 +1754,14 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         installed.concealmentStyleAppend = patchInstanceAppend(head, concealmentStyleId, 'concealmentStyleAppend');
         installed.hidden = patchSetter(HTMLElement.prototype, 'hidden',
           (element, value) => value === true && isBodyContentChild(element), 'bodyChildHidden');
+        installed.display = typeof CSSStyleDeclaration !== 'undefined'
+          && patchMethod(CSSStyleDeclaration.prototype, 'setProperty', original => function (name, value, priority) {
+            if (name === 'display' && value === 'none' && priority === 'important'
+              && bodyChildStyles.has(this) && body && body.classList.contains('sutra-revocation-locked')) {
+              return measure('bodyChildDisplay', () => original.call(this, name, value, priority));
+            }
+            return original.call(this, name, value, priority);
+          });
         installed.inert = patchSetter(HTMLElement.prototype, 'inert',
           (element, value) => value === true && isBodyContentChild(element), 'bodyChildInert');
         installed.ariaHidden = patchMethod(Element.prototype, 'setAttribute', original => function (name, value) {
@@ -1948,6 +1983,49 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
       await expect(B.page.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toBeVisible({ timeout: 15000 });
+      const revocationDomStates = await Promise.all([B.page, secondTab].map(page => page.evaluate(probeId => {
+        const screenId = 'sutraRevokedDeviceScreen';
+        const screen = document.getElementById(screenId);
+        const children = Array.from(document.body.children);
+        const appRoot = document.querySelector('.app-container');
+        const probe = document.getElementById(probeId);
+        return {
+          bodyLocked: document.body.classList.contains('sutra-revocation-locked'),
+          screenCount: children.filter(child => child.id === screenId).length,
+          screenVisible: !!screen && getComputedStyle(screen).display !== 'none',
+          otherBodyChildrenConcealed: children.filter(child => child !== screen)
+            .every(child => getComputedStyle(child).display === 'none'),
+          appRootInert: !!appRoot && appRoot.inert === true,
+          appRootAriaHidden: !!appRoot && appRoot.getAttribute('aria-hidden') === 'true',
+          probeComputedDisplay: probe ? getComputedStyle(probe).display : null,
+          probeInlineDisplay: probe ? probe.style.getPropertyValue('display') : null,
+          probeInlinePriority: probe ? probe.style.getPropertyPriority('display') : null
+        };
+      }, revocationDisplayProbeId)));
+      expect(revocationDomStates).toEqual([
+        {
+          bodyLocked: true,
+          screenCount: 1,
+          screenVisible: true,
+          otherBodyChildrenConcealed: true,
+          appRootInert: true,
+          appRootAriaHidden: true,
+          probeComputedDisplay: 'none',
+          probeInlineDisplay: 'none',
+          probeInlinePriority: 'important'
+        },
+        {
+          bodyLocked: true,
+          screenCount: 1,
+          screenVisible: true,
+          otherBodyChildrenConcealed: true,
+          appRootInert: true,
+          appRootAriaHidden: true,
+          probeComputedDisplay: 'none',
+          probeInlineDisplay: 'none',
+          probeInlinePriority: 'important'
+        }
+      ]);
       // Screen locking and completed deletion are separate guarantees. Only
       // after both screens are visible, await all retained cycles to prove
       // their local wipes and server acknowledgements finished.

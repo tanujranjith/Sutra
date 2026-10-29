@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261029-ci-settings-durable1",
-    "hash": "bbb93faed8c10d53"
+    "stamp": "20261029-ci-revoke-concealment2",
+    "hash": "bf0cf86feefcb841"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

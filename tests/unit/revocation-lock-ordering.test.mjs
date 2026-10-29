@@ -26,12 +26,13 @@ function createNode(tagName, events) {
   const node = {
     tagName: String(tagName).toUpperCase(),
     id: '',
-    style: {},
+    style: null,
     children: [],
     attributes: new Map(),
     hidden: false,
     inert: false,
     appendChild(child) {
+      child.parentNode = this;
       this.children.push(child);
       return child;
     },
@@ -60,12 +61,42 @@ function createNode(tagName, events) {
       events.push('screen:focus');
     }
   };
+  const styleValues = new Map();
+  const stylePriorities = new Map();
+  node.style = {
+    setProperty(name, value, priority = '') {
+      const property = String(name);
+      styleValues.set(property, String(value));
+      stylePriorities.set(property, String(priority));
+      events.push(`style:${node.id}:${property}:${String(value)}:${String(priority)}`);
+    },
+    getPropertyValue(name) { return styleValues.get(String(name)) || ''; },
+    getPropertyPriority(name) { return stylePriorities.get(String(name)) || ''; }
+  };
+  let hidden = false;
+  Object.defineProperty(node, 'hidden', {
+    configurable: true,
+    enumerable: true,
+    get() { return hidden; },
+    set(value) {
+      hidden = !!value;
+      if (hidden) events.push(`hidden:true:${node.id}`);
+    }
+  });
   return node;
 }
 
 function createDocument(events) {
   const body = createNode('body', events);
   const head = createNode('head', events);
+  const bodyClasses = new Set();
+  body.classList = {
+    add(name) {
+      bodyClasses.add(String(name));
+      events.push(`body-class:${name}`);
+    },
+    contains(name) { return bodyClasses.has(String(name)); }
+  };
   const visitById = (parent, id) => {
     if (parent.id === id) return parent;
     for (const child of parent.children) {
@@ -74,7 +105,6 @@ function createDocument(events) {
     }
     return null;
   };
-  body.classList = { add(name) { events.push(`body-class:${name}`); } };
   return {
     body,
     head,
@@ -90,11 +120,22 @@ function createLockHarness({ persistenceCommitQueue, attachmentPromise }) {
   const document = createDocument(events);
   const workspaceRoot = createNode('main', events);
   workspaceRoot.id = 'workspaceRoot';
+  workspaceRoot.style.setProperty('display', 'block', 'important');
+  const secondaryRoot = createNode('aside', events);
+  secondaryRoot.id = 'secondaryRoot';
+  secondaryRoot.style.setProperty('display', 'block', 'important');
+  const alreadyConcealedRoot = createNode('aside', events);
+  alreadyConcealedRoot.id = 'alreadyConcealedRoot';
+  alreadyConcealedRoot.style.setProperty('display', 'none', 'important');
   document.body.appendChild(workspaceRoot);
+  document.body.appendChild(secondaryRoot);
+  document.body.appendChild(alreadyConcealedRoot);
 
   const dependencies = {
     events,
     workspaceRoot,
+    secondaryRoot,
+    alreadyConcealedRoot,
     document,
     window: { SutraRevocationWipe: { readGuard: () => ({ status: 'cleaning' }) } },
     pendingAppSave: 11,
@@ -140,6 +181,7 @@ function createLockHarness({ persistenceCommitQueue, attachmentPromise }) {
        scheduleSave: scheduleAppSave,
        document,
        workspaceRoot,
+       backgroundRoots: [workspaceRoot, secondaryRoot, alreadyConcealedRoot],
        events,
        state: () => ({
          persistenceWritesBlocked,
@@ -158,11 +200,30 @@ function createLockHarness({ persistenceCommitQueue, attachmentPromise }) {
 
 function assertScreenConcealsWorkspace(harness) {
   const screen = harness.document.getElementById('sutraRevokedDeviceScreen');
+  const concealmentStyle = harness.document.getElementById('sutraRevocationConcealmentStyle');
   assert.ok(screen, 'the revoked screen is mounted before cleanup waits');
-  assert.equal(harness.document.body.children.includes(harness.workspaceRoot), true);
-  assert.equal(harness.workspaceRoot.hidden, true);
-  assert.equal(harness.workspaceRoot.inert, true);
-  assert.equal(harness.workspaceRoot.attributes.get('aria-hidden'), 'true');
+  assert.equal(screen.parentNode, harness.document.body, 'the revoked screen is a direct body child');
+  assert.equal(harness.document.body.classList.contains('sutra-revocation-locked'), true);
+  assert.ok(concealmentStyle, 'a document-level concealment rule is installed');
+  assert.equal(concealmentStyle.parentNode, harness.document.head);
+  assert.equal(concealmentStyle.textContent,
+    'body.sutra-revocation-locked > :not(#sutraRevokedDeviceScreen) { display: none !important; }',
+    'the lock rule conceals every other direct body child while excluding the recovery screen');
+  for (const root of harness.backgroundRoots) {
+    assert.equal(harness.document.body.children.includes(root), true);
+    assert.equal(root.style.getPropertyValue('display'), 'none', `${root.id} is forced out of view`);
+    assert.equal(root.style.getPropertyPriority('display'), 'important', `${root.id} overrides its prior display style`);
+    const displayWrites = harness.events.filter(event => event.startsWith(`style:${root.id}:display:`));
+    assert.equal(displayWrites.length, root.id === 'alreadyConcealedRoot' ? 1 : 2,
+      `${root.id} avoids a redundant write when it is already concealed`);
+    assert.equal(root.inert, true, `${root.id} cannot receive user input`);
+    assert.equal(root.attributes.get('aria-hidden'), 'true', `${root.id} is hidden from assistive technology`);
+    assert.equal(root.hidden, false, `${root.id} is concealed without the slow hidden setter`);
+    assert.equal(harness.events.includes(`hidden:true:${root.id}`), false,
+      `${root.id} never uses the native hidden setter`);
+  }
+  assert.equal(harness.document.body.children.includes(screen), true);
+  assert.equal(screen.id, 'sutraRevokedDeviceScreen', 'the CSS exclusion keeps the recovery screen visible');
   assert.ok(harness.events.includes('screen:focus'));
 }
 
