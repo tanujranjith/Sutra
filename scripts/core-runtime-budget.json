@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-29T13:47:30.634Z",
-  "reviewedReason": "Replace-measured-WebKit-hidden-setter-stalls-with-idempotent-CSS-concealment",
-  "maxBytes": 5010890,
-  "maxLines": 87026
+  "blessedAt": "2026-10-29T14:25:00.931Z",
+  "reviewedReason": "Serialize-revocation-guard-transitions-and-terminal-session-finalization-across-tabs",
+  "maxBytes": 5013388,
+  "maxLines": 87061
 }

@@ -151,7 +151,9 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
   connection, every Sutra tab in that browser locks and conceals its workspace
   before waiting for pending local saves to settle. It then deletes local workspace,
   attachments, Assistant history/memory, compatibility mirrors, sync/auth state,
-  and other Sutra origin storage, then acknowledges completion. Unsynchronized
+  and other Sutra origin storage, then acknowledges completion. Concurrent tabs
+  preserve an already acknowledged wipe and finish their own session cleanup
+  before offering empty-workspace reuse. Unsynchronized
   work on that device is lost. A browser that stays offline or powered off cannot
   be remotely erased; downloaded backups/external files are not browser data.
 - Sync persists the Supabase **refresh token** in its own account-scoped

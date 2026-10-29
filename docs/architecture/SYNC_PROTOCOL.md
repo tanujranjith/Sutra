@@ -532,8 +532,13 @@ generic `revoked` errors remain locked/non-destructive.
 After verification, all tabs block writes, cancel pending saves, clear vault
 material, and conceal rendered workspace content before waiting for in-flight
 persistence work. Handles close only after the corresponding pending work settles;
-tabs coordinate over
-`sutra-sync-events-v1`. The canonical wipe deletes this origin's local/session
+tabs coordinate over `sutra-sync-events-v1`. Where Web Locks are available,
+the same origin-wide lock serializes guard transitions, deletion, acknowledgement,
+and each follower's session finalization. A queued, independently verified tab
+that finds `complete` or `complete-unverified` finalizes its own session without
+restarting deletion or acknowledgement, and preserves the verification status.
+Each tab remains locked until its own finalization succeeds.
+The canonical wipe deletes this origin's local/session
 storage plus `noteflow_atelier_db`, `noteflow_attachments_db`, `sutra_sync_db`,
 `sutra-drive-sync-keys`, `sutra-fs-config`, and `sutra_share_target_db`, verifies
 deletion, then calls `sync_acknowledge_device_wipe` and clears the remaining auth

@@ -2949,7 +2949,7 @@ function populateProgressDashboard() {
             return status === 'complete';
         }
 
-        function mountSutraRevokedScreen(message) {
+        function mountSutraRevokedScreen(message, options = {}) {
             let screen = document.getElementById('sutraRevokedDeviceScreen');
             if (!screen) {
                 screen = document.createElement('section');
@@ -3021,7 +3021,7 @@ function populateProgressDashboard() {
             if (copy) copy.textContent = String(message || 'Local Sutra user data has been removed from this browser.');
             const guard = window.SutraRevocationWipe && window.SutraRevocationWipe.readGuard();
             const action = screen.querySelector('#sutraRevokedDeviceReuse');
-            if (action) action.hidden = !guard || !sutraRevocationCleanupFinished(guard.status);
+            if (action) action.hidden = options.allowReuse === false || !guard || !sutraRevocationCleanupFinished(guard.status);
             const retry = screen.querySelector('#sutraRevokedDeviceRetry');
             if (retry) retry.hidden = !guard || guard.status !== 'cleanup-error' || !sutraSyncRuntime || !sutraSyncRuntime.transport;
             try { screen.querySelector('h1').focus(); } catch (error) {}
@@ -62984,7 +62984,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 try { sutraSyncRuntime.engine.setVaultKey(null); } catch (error) {}
                 try { sutraSyncRuntime.engine.stop(); } catch (error) {}
             }
-            mountSutraRevokedScreen('This device was revoked. Sutra is securely removing local user data.');
+            mountSutraRevokedScreen('This device was revoked. Sutra is securely removing local user data.', { allowReuse: false });
             try { await persistenceCommitQueue; } catch (error) {}
             try { workspaceCoordinator.close(); } catch (error) {}
             try { workspaceDb.close(); } catch (error) {}
@@ -63081,24 +63081,43 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         async function performVerifiedSutraRevocationWipe(transport) {
             if (sutraRevocationWipePromise) return sutraRevocationWipePromise;
             const channel = getSutraSyncBroadcastChannel();
-            try { window.SutraRevocationWipe.writeGuard(null, 'verified'); } catch (error) {}
-            try { if (channel) channel.postMessage({ type: 'revoke-wipe-start' }); } catch (error) {}
             sutraRevocationWipePromise = (async () => {
-                await enterSutraRevocationLock();
+                // Conceal and block this tab immediately, even while another tab
+                // owns the wipe lock. Retain failures without an unhandled promise.
+                const lockBarrier = enterSutraRevocationLock().then(
+                    () => ({ ok: true }), error => ({ ok: false, error })
+                );
                 const run = async () => {
-                    await window.SutraRevocationWipe.wipe({ preserveSessionUntilAcknowledged: true });
-                    const acknowledged = await transport.acknowledgeDeviceWipe({ at: new Date().toISOString() });
-                    if (!acknowledged || acknowledged.ok === false) {
-                        throw new Error('Local data was removed, but the server could not record the wipe acknowledgement.');
+                    try {
+                        const guard = window.SutraRevocationWipe.readGuard();
+                        const alreadyAcknowledged = guard && (guard.status === 'complete' || guard.status === 'complete-unverified');
+                        if (!alreadyAcknowledged) {
+                            window.SutraRevocationWipe.writeGuard(null, 'verified');
+                            try { if (channel) channel.postMessage({ type: 'revoke-wipe-start' }); } catch (error) {}
+                        }
+                        const locked = await lockBarrier;
+                        if (!locked.ok) throw locked.error;
+                        // A queued, independently verified tab must not turn a
+                        // completed origin wipe back into a new cleaning pass.
+                        if (!alreadyAcknowledged) {
+                            await window.SutraRevocationWipe.wipe({ preserveSessionUntilAcknowledged: true });
+                            const acknowledged = await transport.acknowledgeDeviceWipe({ at: new Date().toISOString() });
+                            if (!acknowledged || acknowledged.ok === false) {
+                                throw new Error('Local data was removed, but the server could not record the wipe acknowledgement.');
+                            }
+                        }
+                        window.SutraRevocationWipe.finalize();
+                        sutraRevocationGuard = window.SutraRevocationWipe.readGuard();
+                        clearSutraRevokedInMemoryData();
+                        try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
+                        mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
+                            ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                            : 'Local Sutra user data has been removed from this browser.');
+                        return true;
+                    } catch (error) {
+                        try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', error && error.message); } catch (guardError) {}
+                        throw error;
                     }
-                    window.SutraRevocationWipe.finalize();
-                    sutraRevocationGuard = window.SutraRevocationWipe.readGuard();
-                    clearSutraRevokedInMemoryData();
-                    try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
-                    mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
-                        ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
-                        : 'Local Sutra user data has been removed from this browser.');
-                    return true;
                 };
                 try {
                     if (navigator.locks && typeof navigator.locks.request === 'function') {
@@ -63106,10 +63125,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     }
                     return await run();
                 } catch (error) {
-                    try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', error && error.message); } catch (guardError) {}
+                    // A failed lock acquisition must not erase an existing
+                    // completion. If no guard exists, retain a recovery sentinel.
+                    try {
+                        if (!window.SutraRevocationWipe.readGuard()) {
+                            window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', 'Secure cleanup could not acquire its browser lock.');
+                        }
+                    } catch (guardError) {}
                     clearSutraRevokedInMemoryData({ preserveAuth: true });
                     sutraRevocationWipePromise = null;
-                    mountSutraRevokedScreen('Cleanup is incomplete. Sutra remains locked and will not show or save workspace data.');
+                    mountSutraRevokedScreen('Cleanup is incomplete. Sutra remains locked and will not show or save workspace data.', { allowReuse: false });
                     throw error;
                 }
             })();
@@ -63152,18 +63177,28 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     } else if (message && message.type === 'revoke-wipe-start') {
                         enterSutraRevocationLock().catch(() => {});
                     } else if (message && message.type === 'revoke-wipe-complete') {
-                        let followerCleanupComplete = true;
-                        try { window.SutraRevocationWipe.finalize(); } catch (error) {
-                            followerCleanupComplete = false;
-                            try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', 'A tab could not clear its session data.'); } catch (guardError) {}
+                        const finishFollower = () => {
+                            let followerCleanupComplete = true;
+                            try { window.SutraRevocationWipe.finalize(); } catch (error) {
+                                followerCleanupComplete = false;
+                                try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', error && error.message || 'A tab could not clear its session data.'); } catch (guardError) {}
+                            }
+                            clearSutraRevokedInMemoryData();
+                            const followerGuard = window.SutraRevocationWipe ? window.SutraRevocationWipe.readGuard() : null;
+                            mountSutraRevokedScreen(!followerCleanupComplete
+                                ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
+                                : (followerGuard && followerGuard.status === 'complete-unverified'
+                                    ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                                    : 'Local Sutra user data has been removed from this browser.'), { allowReuse: followerCleanupComplete });
+                        };
+                        if (navigator.locks && typeof navigator.locks.request === 'function') {
+                            navigator.locks.request('sutra-revoke-wipe-v1', { mode: 'exclusive' }, finishFollower).catch(() => {
+                                clearSutraRevokedInMemoryData();
+                                mountSutraRevokedScreen('Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.', { allowReuse: false });
+                            });
+                        } else {
+                            finishFollower();
                         }
-                        clearSutraRevokedInMemoryData();
-                        const followerGuard = window.SutraRevocationWipe ? window.SutraRevocationWipe.readGuard() : null;
-                        mountSutraRevokedScreen(!followerCleanupComplete
-                            ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
-                            : (followerGuard && followerGuard.status === 'complete-unverified'
-                                ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
-                                : 'Local Sutra user data has been removed from this browser.'));
                     }
                 };
             } catch (error) {
