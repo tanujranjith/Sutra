@@ -141,6 +141,9 @@ function expectPageBoundaries(layout) {
 }
 
 test('Pages mode paginates long paragraphs and keeps auto gaps out of stored content', async ({ page }) => {
+  // This large-document workflow includes edits, responsive layout, reload,
+  // persisted content and zoom; each stage shares the overall browser budget.
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await openNotes(page);
   // HTML parsing normalizes a paragraph's trailing space. Keep the fixture
