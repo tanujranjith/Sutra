@@ -2131,6 +2131,12 @@
             event.preventDefault(); event.stopPropagation(); return;
         }
         if (!ctx.slashOpen) return;
+        if ((event.key === 'Enter' || event.key === 'Tab') && ctx.slashRange && !ctx.slashRange.selection) {
+            // The menu is normally refreshed on an animation frame. A fast
+            // activation can arrive before that frame reflects the latest text.
+            maybeSlash();
+            if (!ctx.slashOpen) return;
+        }
         if (ctx.slashRange && ctx.slashRange.selection && (/^[a-z]$/i.test(event.key) || event.key === 'Backspace')) {
             ctx.slashFilter = event.key === 'Backspace' ? ctx.slashFilter.slice(0, -1) : ctx.slashFilter + event.key.toLowerCase();
             ctx.slashItems = slashItemDefs().filter(function (item) { return item.writingCommand && item.keywords.indexOf(ctx.slashFilter) === 0; });

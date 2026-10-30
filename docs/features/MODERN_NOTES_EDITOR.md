@@ -264,6 +264,8 @@ their Open action retains the normal note navigation and authorization path.
 
 Both modern and classic slash menus keep the selected command visible during
 arrow-key navigation without scrolling the document behind the menu.
+In the modern editor, Enter or Tab uses the current typed query even if the
+menu has not yet visually updated after the latest keystroke.
 
 An authored timeline is a separate Canvas object from scheduled-item cards.
 Read its scrollable body, drag its header to move it, or use **Edit timeline**

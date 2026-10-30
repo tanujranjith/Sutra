@@ -2286,6 +2286,46 @@ test('slash menu inserts a block and consumes the trigger text', async ({ page }
   expect(text).not.toContain('/table');
 });
 
+test('slash activation uses the latest query before the menu refreshes', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 fast slash');
+
+  for (const key of ['Enter', 'Tab']) {
+    await page.evaluate(() => window.SutraNotesEditorV2.setContent('<p></p>'));
+    await page.click(PM_SELECTOR);
+    await page.keyboard.type('/t');
+    // This item matches /t, but not /table, proving which menu is displayed.
+    await expect(page.locator('.editor-v2-slash-item').filter({ hasText: 'Bulleted list' })).toBeVisible();
+    await expect(page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' })).toHaveCount(0);
+
+    const result = await page.evaluate(({ sel, key }) => {
+      const pm = document.querySelector(sel);
+      pm.editor.commands.insertContent('able');
+      const menu = document.querySelector('.editor-v2-slash-menu');
+      const before = {
+        text: pm.editor.state.doc.textContent,
+        visible: !!menu && getComputedStyle(menu).display !== 'none',
+        labels: Array.from(menu.querySelectorAll('.editor-v2-slash-item'), item => item.textContent)
+      };
+      // No animation frame can run between the transaction and this keydown.
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      pm.dispatchEvent(event);
+      return { before, prevented: event.defaultPrevented, html: window.SutraNotesEditorV2.getStorageHtml(), text: pm.textContent };
+    }, { sel: PM_SELECTOR, key });
+
+    expect(result.before.text).toBe('/table');
+    expect(result.before.visible).toBe(true);
+    expect(result.before.labels).toContain('Bulleted list');
+    expect(result.before.labels).toContain('Table');
+    expect(result.before.labels).not.toContain('/grammar');
+    expect(result.prevented).toBe(true);
+    expect(result.html).toContain('<table');
+    expect(result.text).not.toContain('/table');
+  }
+});
+
 test('smart paste recovers Google Docs style-based bold/italic as semantics', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);
