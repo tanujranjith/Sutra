@@ -206,6 +206,9 @@ Web Locks, with an expiring IndexedDB lease fallback; status travels over
 BroadcastChannel. A tab made stale by another tab's save pauses its syncing
 and the app shows its usual reload prompt. Keep one active tab per device.
 
+Pause stops further Sync steps from the current cycle. A request already sent
+may still finish; local edits are preserved and reconciled when Sync resumes.
+
 ## Troubleshooting
 
 The Sync card labels its success time **Synced to cloud (this session)**.

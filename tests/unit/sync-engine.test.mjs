@@ -834,6 +834,336 @@ test('a deliberate pause wins over an auth error from an already in-flight cycle
   assert.equal((await engine.syncNow()).skipped, true, 'the paused engine makes no follow-up request');
 });
 
+function barrier() {
+  let enter;
+  let release;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  return { entered, release, async wait() { enter(); await gate; } };
+}
+
+test('pause invalidates a queued cycle even if resume happens before the lock is acquired', async () => {
+  const lock = barrier();
+  let pulls = 0;
+  const engine = engineApi.create({
+    store: makeMemoryStore(),
+    transport: { async pull() { pulls += 1; return { ok: true, ops: [], cursor: 0 }; } },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-queued-pause', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    acquireCycleLock: async work => { await lock.wait(); await work(); return true; },
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  const cycle = engine.syncNow();
+  await lock.entered;
+  engine.pause();
+  engine.resume();
+  lock.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(pulls, 0);
+  assert.equal(engine.getStatus().state, 'idle');
+});
+
+test('pause during a pull preserves the queued edit and resume sends it', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const bridge = makeBridge(starterWorkspace());
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-paused-pull' });
+  const gate = barrier();
+  const scheduled = [];
+  let blockPull = false;
+  const engine = engineApi.create({
+    store, bridge,
+    transport: { ...base, async pull(input) { if (blockPull) await gate.wait(); return base.pull(input); } },
+    identity: { deviceId: 'device-paused-pull', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: fn => { scheduled.push(fn); return scheduled.length; }, clearTimeout: () => {} }
+  });
+  await engine.syncNow();
+  bridge.holder.workspace.pages[0].title = 'Queued while paused';
+  blockPull = true;
+  const cycle = engine.syncNow();
+  await gate.entered;
+  const before = server.state.ops.length;
+  const baseline = store.state.baseline;
+  engine.pause();
+  gate.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(server.state.ops.length, before);
+  assert.equal(store.state.baseline, baseline);
+  assert.ok((await store.getOutbox()).length > 0);
+  assert.equal(engine.getStatus().state, 'paused');
+  blockPull = false;
+  engine.resume();
+  assert.equal(scheduled.length, 1, 'resume schedules a fresh cycle');
+  const resumed = await engine.syncNow();
+  assert.ok(resumed.pushed > 0);
+  assert.equal(store.state.outbox.size, 0);
+});
+
+test('pause before push prevents the captured local diff from being sent', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const bridge = makeBridge(starterWorkspace());
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-pre-push' });
+  const gate = barrier();
+  let blockInventory = false;
+  bridge.getSyncAssetInventory = async () => { if (blockInventory) await gate.wait(); return []; };
+  const engine = engineApi.create({
+    store, bridge, transport: base,
+    identity: { deviceId: 'device-pre-push', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  await engine.syncNow();
+  bridge.holder.workspace.pages[0].title = 'Do not push yet';
+  blockInventory = true;
+  const cycle = engine.syncNow();
+  await gate.entered;
+  const before = server.state.ops.length;
+  const baseline = store.state.baseline;
+  engine.pause();
+  gate.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(server.state.ops.length, before);
+  assert.equal(store.state.baseline, baseline);
+  assert.ok((await store.getOutbox()).length > 0);
+  blockInventory = false;
+  engine.resume();
+  assert.ok((await engine.syncNow()).pushed > 0);
+});
+
+test('pause during an accepted push retains the outbox and starts no acknowledgement or compaction', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const bridge = makeBridge(starterWorkspace());
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-push-pause' });
+  const gate = barrier();
+  let blockPush = false;
+  let touches = 0;
+  const vaultKey = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const engine = engineApi.create({
+    store, bridge,
+    transport: {
+      ...base,
+      async push(input) { const result = await base.push(input); if (blockPush) await gate.wait(); return result; },
+      async touchDevice(input) { touches += 1; return base.touchDevice(input); }
+    },
+    identity: { deviceId: 'device-push-pause', schemaVersion: 5 },
+    vaultKey,
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  await engine.syncNow();
+  bridge.holder.workspace.pages[0].title = 'Accepted before pause';
+  const baseline = store.state.baseline;
+  blockPush = true;
+  const cycle = engine.syncNow();
+  await gate.entered;
+  const touchCount = touches;
+  const acceptedCount = server.state.ops.length;
+  const acceptedId = server.state.ops.at(-1).envelope.meta.opId;
+  engine.pause();
+  bridge.holder.workspace.pages[0].title = 'Edited while paused';
+  gate.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(engine.getStatus().state, 'paused');
+  assert.equal(store.state.baseline, baseline);
+  assert.ok(store.state.outbox.size > 0);
+  assert.equal(touches, touchCount);
+  blockPush = false;
+  engine.resume();
+  const reconciled = await engine.syncNow();
+  assert.ok(!reconciled.error, String(reconciled.error));
+  assert.ok(reconciled.pushed > 0, 'the intervening edit must be sent after resume');
+  assert.equal(server.state.ops.length, acceptedCount + 1);
+  assert.equal(server.state.ops.filter(row => row.envelope.meta.opId === acceptedId).length, 1);
+  const newest = await syncCrypto.decryptOpEnvelope(vaultKey, server.state.ops.at(-1).envelope);
+  assert.match(JSON.stringify(newest.payload), /Edited while paused/);
+  assert.equal(store.state.outbox.size, 0);
+});
+
+test('locking or stopping during a pull preserves the explicit state and does not push', async () => {
+  for (const action of ['lock', 'stop']) {
+    const gate = barrier();
+    const store = makeMemoryStore();
+    let pushes = 0;
+    const engine = engineApi.create({
+      store,
+      transport: {
+        async pull() { await gate.wait(); return { ok: true, ops: [], cursor: 0 }; },
+        async push() { pushes += 1; return { ok: true, cursor: 1 }; }
+      },
+      bridge: makeBridge(starterWorkspace()),
+      identity: { deviceId: `device-${action}-inflight`, schemaVersion: 5 },
+      vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+      timers: { setTimeout: () => 1, clearTimeout: () => {} }
+    });
+    const cycle = engine.syncNow();
+    await gate.entered;
+    if (action === 'lock') engine.setVaultKey(null);
+    else engine.stop();
+    gate.release();
+    assert.equal((await cycle).reason, 'cancelled');
+    assert.equal(engine.getStatus().state, action === 'lock' ? 'locked' : 'stopped');
+    if (action === 'stop') {
+      engine.resume();
+      engine.setVaultKey(null);
+      assert.equal(engine.getStatus().state, 'stopped');
+    }
+    assert.equal(pushes, 0);
+    assert.equal(store.state.baseline, null);
+    assert.ok((await store.getOutbox()).length > 0);
+  }
+});
+
+test('pause while fetching a bootstrap snapshot prevents the next pull', async () => {
+  const gate = barrier();
+  let pulls = 0;
+  const engine = engineApi.create({
+    store: makeMemoryStore(),
+    transport: {
+      async getSnapshot() { await gate.wait(); return { ok: true, snapshot: null }; },
+      async pull() { pulls += 1; return { ok: true, ops: [], cursor: 0 }; }
+    },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-snapshot-pause', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  const cycle = engine.syncNow();
+  await gate.entered;
+  engine.pause();
+  gate.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(pulls, 0);
+  assert.equal(engine.getStatus().state, 'paused');
+});
+
+test('pause during an already-started local commit prevents cursor acknowledgement', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const commit = store.commitCycleState;
+  const gate = barrier();
+  let blockCommit = false;
+  store.commitCycleState = async value => { await commit(value); if (blockCommit) await gate.wait(); };
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-commit-pause' });
+  let touches = 0;
+  const engine = engineApi.create({
+    store,
+    transport: { ...base, async touchDevice(input) { touches += 1; return base.touchDevice(input); } },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-commit-pause', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  blockCommit = true;
+  const cycle = engine.syncNow();
+  await gate.entered;
+  assert.ok(store.state.baseline, 'the already-started commit was accepted');
+  engine.pause();
+  gate.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(touches, 0);
+  assert.equal(engine.getStatus().state, 'paused');
+});
+
+test('pause during device acknowledgement prevents compaction and preserves paused status', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const getMeta = store.getMeta;
+  let compactionChecks = 0;
+  store.getMeta = async key => { if (key === 'lastSnapshotCursor') compactionChecks += 1; return getMeta(key); };
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-touch-pause' });
+  const gate = barrier();
+  const engine = engineApi.create({
+    store,
+    transport: { ...base, async touchDevice(input) { const result = await base.touchDevice(input); await gate.wait(); return result; } },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-touch-pause', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  const cycle = engine.syncNow();
+  await gate.entered;
+  engine.pause();
+  gate.release();
+  assert.equal((await cycle).reason, 'cancelled');
+  assert.equal(compactionChecks, 0);
+  assert.equal(engine.getStatus().state, 'paused');
+  assert.ok(store.state.baseline, 'the commit before the in-flight acknowledgement stays durable');
+});
+
+test('pause during manual compaction prevents metadata and prune after the snapshot request', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-compact-pause' });
+  const gate = barrier();
+  let prunes = 0;
+  const engine = engineApi.create({
+    store,
+    transport: {
+      ...base,
+      async putSnapshot(input) { const result = await base.putSnapshot(input); await gate.wait(); return result; },
+      async pruneOps() { prunes += 1; return base.pruneOps(); }
+    },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-compact-pause', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  await engine.syncNow();
+  const compaction = engine.compactNow();
+  await gate.entered;
+  engine.pause();
+  gate.release();
+  await assert.rejects(compaction, error => error.code === 'cycle-cancelled');
+  assert.equal(store.state.meta.has('lastSnapshotCursor'), false);
+  assert.equal(prunes, 0);
+  assert.equal((await engine.compactNow()).reason, 'paused');
+  assert.equal(engine.getStatus().state, 'paused');
+});
+
+test('resume after a terminal cycle error does not revive an older compaction', async () => {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const base = transportApi.createMemoryTransport(server, { deviceId: 'device-terminal-compact' });
+  const gate = barrier();
+  let failPull = false;
+  let snapshotCalls = 0;
+  let prunes = 0;
+  const engine = engineApi.create({
+    store,
+    transport: {
+      ...base,
+      async pull(input) {
+        if (failPull) { const error = new Error('session expired'); error.code = 'auth-expired'; throw error; }
+        return base.pull(input);
+      },
+      async putSnapshot(input) { snapshotCalls += 1; const result = await base.putSnapshot(input); await gate.wait(); return result; },
+      async pruneOps() { prunes += 1; return base.pruneOps(); }
+    },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-terminal-compact', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    timers: { setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  assert.ok(!(await engine.syncNow()).error);
+  const compaction = engine.compactNow();
+  await gate.entered;
+  failPull = true;
+  assert.ok((await engine.syncNow()).error);
+  assert.equal(engine.getStatus().state, 'auth-expired');
+  engine.resume();
+  gate.release();
+  await assert.rejects(compaction, error => error.code === 'cycle-cancelled');
+  assert.equal(snapshotCalls, 1);
+  assert.equal(prunes, 0);
+  assert.equal(store.state.meta.has('lastSnapshotCursor'), false);
+  assert.equal(engine.getStatus().state, 'idle');
+  failPull = false;
+  assert.ok(!(await engine.syncNow()).error, 'a new cycle can run after resume');
+});
+
 test('retry backoff includes deterministic jitter through the injected timer seam', async () => {
   const delays = [];
   const store = makeMemoryStore();

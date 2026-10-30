@@ -432,6 +432,14 @@ States: `disabled → locked → idle → syncing → idle`, plus `offline`
 `auth-expired`, `quota-exceeded`, `schema-mismatch`, `update-required`,
 `revoked`, and `encryption-error`.
 
+Pausing, locking, or stopping invalidates an in-progress cycle, including one
+waiting for the cycle lock. It cannot start another pull, push, asset request,
+remote apply, snapshot, or cursor acknowledgement after cancellation. Work
+already issued to the browser or server cannot be retracted. If a push may have
+landed before cancellation, the old baseline and durable outbox remain for
+idempotent reconciliation on a new cycle; a local transaction or apply already
+started may finish. Resume schedules a new cycle and never revives the old one.
+
 Multi-tab model: all tabs of one browser profile share one deviceId, one sync
 database, and one workspace IndexedDB. Cycles are single-flight across tabs
 via the `sutra-sync-cycle-v1` Web Lock (`ifAvailable`: a busy lock skips the

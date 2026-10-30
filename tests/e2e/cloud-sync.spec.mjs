@@ -157,6 +157,93 @@ test('Cloud automatically sends saved edits, resumes offline work, and honors pa
   }
 });
 
+test('pausing an in-flight pull holds local edits until Sync resumes', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const server = createSyncMockServer();
+  const A = await openDevice(browser, server, 'pause-in-flight');
+  let B;
+  let releasePull;
+  let resolvePullStarted;
+  let gateTimeout;
+  let cycle;
+  let deviceId;
+  const pullStarted = new Promise(resolve => { resolvePullStarted = resolve; });
+  const pullGate = new Promise(resolve => { releasePull = resolve; });
+  const pullUrl = `${SYNC_MOCK_ORIGIN}/rest/v1/rpc/sync_pull`;
+  const holdPull = async route => {
+    const request = route.request();
+    if (request.method() !== 'POST' || deviceId) return route.fallback();
+    deviceId = request.postDataJSON().deviceId;
+    resolvePullStarted(deviceId);
+    await pullGate;
+    await route.fallback();
+  };
+  const titleOn = page => page.evaluate(() => window.serializeWorkspace().pages.find(p => p.id === 'page-shared').title);
+  const deviceOpCount = id => server.state.ops.filter(entry => entry.envelope.meta.deviceId === id).length;
+  try {
+    await seedBaseline(A.page);
+    await enableSync(A.page);
+    // Settle a complete cycle and pause in the same browser task so a pending
+    // automatic cycle cannot take ownership of the gated pull.
+    await expect.poll(() => A.page.evaluate(async () => {
+      const result = await window.SutraSync.syncNow();
+      if (result.error) throw result.error;
+      if (result.skipped) return false;
+      window.SutraCloud.pauseSync();
+      return true;
+    }), { timeout: 30_000 }).toBe(true);
+    await A.context.route(pullUrl, holdPull);
+    cycle = A.page.evaluate(() => {
+      window.SutraCloud.resumeSync();
+      return window.SutraSync.syncNow();
+    });
+    // Attach a rejection handler immediately; the result is still checked below.
+    cycle.catch(() => {});
+    const capturedId = await Promise.race([
+      pullStarted,
+      new Promise((_, reject) => { gateTimeout = setTimeout(() => reject(new Error('Sync pull did not reach the route gate')), 30_000); })
+    ]);
+    clearTimeout(gateTimeout);
+    expect(capturedId).toBeTruthy();
+    const before = deviceOpCount(capturedId);
+
+    await A.page.evaluate(() => window.SutraCloud.pauseSync());
+    await A.page.evaluate(async () => {
+      const workspace = window.serializeWorkspace();
+      workspace.pages.find(p => p.id === 'page-shared').title = 'Edit while pull is paused';
+      window.deserializeWorkspace(workspace);
+      await window.saveWorkspaceLocally();
+    });
+    releasePull();
+    const pausedCycle = await cycle;
+    expect(pausedCycle).toMatchObject({ skipped: true, reason: 'cancelled' });
+    expect(await A.page.evaluate(() => window.SutraSync.status().state)).toBe('paused');
+    expect(deviceOpCount(capturedId)).toBe(before);
+    expect(await titleOn(A.page)).toBe('Edit while pull is paused');
+
+    await A.context.unroute(pullUrl, holdPull);
+    await A.page.evaluate(() => window.SutraCloud.resumeSync());
+    await expect.poll(async () => {
+      await syncNow(A.page);
+      return deviceOpCount(capturedId);
+    }, { timeout: 30_000 }).toBeGreaterThan(before);
+
+    B = await openDevice(browser, server, 'pause-follower');
+    await seedBaseline(B.page);
+    await enableSync(B.page);
+    await expect.poll(async () => {
+      await syncNow(B.page);
+      return titleOn(B.page);
+    }, { timeout: 30_000 }).toBe('Edit while pull is paused');
+  } finally {
+    clearTimeout(gateTimeout);
+    releasePull();
+    await A.context.unroute(pullUrl, holdPull);
+    await A.context.close();
+    if (B) await B.context.close();
+  }
+});
+
 test.describe('Sutra Sync Beta opt-in boundaries', () => {
   test.describe.configure({ timeout: 180_000 });
 
