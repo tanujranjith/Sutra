@@ -1714,6 +1714,10 @@ test('locked native split pages never mount until unlocked and relocking dispose
   await page.locator('#notesSidebarPair').getByRole('button', { name: 'Native lock HTML', exact: true }).click();
   await page.locator('#lockScreenPinInput').fill('4826');
   await page.locator('#lockScreenForm button[type="submit"]').click();
+  // PIN verification is asynchronous. Finish unlocking before programmatic
+  // navigation; leaving early correctly discards the stale verification result.
+  await expect.poll(() => page.evaluate(id => window.flowAtelier.isPageContentAuthorized(id), ids.right)).toBe(true);
+  await expect(page.locator('#lockedPageScreen')).toBeHidden();
   await page.evaluate(id => window.flowAtelier.openPageInSplitView(id), ids.left);
   await page.locator('#splitNoteSelect').selectOption(ids.right);
   const frame = page.frameLocator('.create-split-frame');
