@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
+
+test.describe.configure({ timeout: 120_000 });
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/Sutra.html?today-dashboard-test=1');
@@ -6,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => !!window.SutraTodayDashboard
     && !!window.flowAtelier
     && typeof window.flowAtelier.flushAppSaveNow === 'function');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('today-dashboard-ready'));
+  await waitForAppReady(page);
 });
 
 async function openHomeCustomizer(page) {
@@ -61,7 +64,7 @@ test('Today widgets can be shown, resized, reordered, and persisted', async ({ p
   await page.waitForFunction(() => !!window.SutraTodayDashboard
     && !!window.flowAtelier
     && typeof window.flowAtelier.flushAppSaveNow === 'function');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('today-dashboard-reload-ready'));
+  await waitForAppReady(page);
   await expect(page.locator('#view-today .today-panel-habits')).toBeVisible();
   await expect(page.locator('#todayReviewCard')).toHaveClass(/today-widget-size-wide/);
 

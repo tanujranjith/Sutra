@@ -6,6 +6,7 @@
 // generated content, cancellation, persistence + export round-trips, and the
 // GUI-audit editor/theme regressions fixed in the same pass.
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Network stubs must own requests in every engine, including WebKit. Service
 // worker behavior is covered separately by the offline/chaos suites.
@@ -46,6 +47,7 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');
@@ -185,6 +187,9 @@ test('attachments never upload before send, stay visible when incompatible, and 
 });
 
 test('study-material generation creates an editable guide Note and an interactive Testing Hub test with intact relationships', async ({ page }) => {
+  // Generation, reviewed edits, a practice attempt, reload and round-trip all
+  // share this budget, including canonical startup on slower browser runners.
+  test.setTimeout(120_000);
   await openApp(page);
   await mockAnthropic(page, JSON.stringify(STRUCTURED_OK));
   await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');

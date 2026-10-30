@@ -99,6 +99,60 @@ test('automatic backup takes an atomic cross-tab lock and rechecks the receipt',
   assert.equal((await run()).reason, 'locks-unavailable');
 });
 
+test('independent tab runtimes contend for one automatic backup lock', { timeout: 5000 }, async () => {
+  const compile = loadAppFunction('runSutraCloudAutoBackup', [
+    'sutraCloudAutoReady', 'sutraCloudRuntime', 'sutraCloudBackupNow', 'navigator',
+    'sutraRemoteCommitPending', 'persistenceWritesBlocked', 'loadSutraCloudMeta',
+    'window', 'persistSutraCloudMeta', 'updateSutraCloudUi', 'sutraCloudMeta',
+    'getSyncWorkspaceSnapshot', 'getSutraCloudDailySchedule'
+  ]);
+  const meta = { autoBackup: { enabled: true, frequency: 'close' } };
+  const requests = [];
+  const uploads = [];
+  let lockHeld = false;
+  const navigator = { onLine: true, locks: { request: async (name, options, work) => {
+    requests.push({ name, options });
+    if (lockHeld) return work(null);
+    lockHeld = true;
+    try { return await work({}); } finally { lockHeld = false; }
+  } } };
+  let uploadStarted;
+  let releaseUpload;
+  const started = new Promise(resolve => { uploadStarted = resolve; });
+  const release = new Promise(resolve => { releaseUpload = resolve; });
+  const upload = async options => {
+    uploads.push(options);
+    uploadStarted();
+    await release;
+    meta.lastAutoBackupHash = options.workspaceHash;
+    return { uploaded: true };
+  };
+  const window = {
+    SutraSyncProjection: { buildProjection: value => value, hashProjection: async () => ({ page: 'content' }) },
+    SutraSyncProtocol: { stableStringify: JSON.stringify, hashText: async () => 'confirmed-root' }
+  };
+  const makeTab = () => compile(() => true, { backupPassphrase: 'session-key', busy: false }, upload,
+    navigator, false, false, () => meta, window, () => {}, () => {}, null, async () => ({}), () => ({ due: true }));
+  const firstTab = makeTab();
+  const secondTab = makeTab();
+  const first = firstTab('close');
+  await started;
+  try {
+    assert.deepEqual(await secondTab('close'), { skipped: true, reason: 'lock-held' });
+    assert.equal(requests.length, 2, 'both independent tabs requested the lock');
+    assert.deepEqual(requests, Array.from({ length: 2 }, () => ({
+      name: 'sutra-cloud-auto-backup-v1', options: { ifAvailable: true }
+    })));
+    assert.equal(uploads.length, 1);
+  } finally {
+    releaseUpload();
+  }
+  assert.deepEqual(await first, { uploaded: true });
+  assert.deepEqual(await secondTab('close'), { skipped: true, reason: 'unchanged' });
+  assert.equal(requests.length, 3, 'the second tab rechecks after the lock is released');
+  assert.equal(uploads.length, 1, 'the shared receipt prevents a duplicate upload');
+});
+
 test('folder backup is gated on picker support and explains the permission', () => {
   const supported = extractFunction(app, 'sutraFsSupported');
   assert.ok(supported, 'sutraFsSupported is a top-level declaration');

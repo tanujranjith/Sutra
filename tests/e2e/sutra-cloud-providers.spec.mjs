@@ -653,6 +653,8 @@ test('a ready non-Supabase provider lists its backups (provider-agnostic refresh
 });
 
 test('retention keeps the latest 10 backups', async ({ page }) => {
+  // Twelve real encrypted uploads can exceed the default budget on WebKit CI.
+  test.setTimeout(120000);
   await openApp(page);
   await seedWorkspace(page, 'R');
   await useSupabaseSignedIn(page);
@@ -676,8 +678,9 @@ test('switching destination signs out the old provider and keeps the local works
   expect(after.auto).toBe(false);          // auto re-opt-in per destination
 });
 
-test('scheduled backups upload ciphertext once across two tabs and stop when disabled', async ({ page, context }) => {
-  test.setTimeout(90000);
+test('scheduled backup skips a stale tab, uploads from the current tab, and stops when disabled', async ({ page, context }) => {
+  // Allow normal reload recovery if another tab commits during WebKit startup.
+  test.setTimeout(240000);
   const supa = await openApp(page);
   // Daily/weekly reminder receipts can otherwise autosave from the first tab
   // after the second hydrates. Model reminders already shown for this backup
@@ -707,30 +710,100 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   // correctly trip the cross-tab stale-workspace guard before this test starts.
   await waitForAppHydrated(second);
   await second.evaluate(({ email }) => window.SutraCloudSync.verifyCode(email, '123456'), { email: EMAIL });
-  await second.evaluate(async passphrase => {
+  // Observe an actual remote commit before trying the stale tab's hidden trigger.
+  await page.evaluate(() => {
+    window.addEventListener('sutra:workspace-remote-commit', () => {
+      document.documentElement.dataset.backupFixtureRemoteCommit = 'seen';
+    }, { once: true });
+  });
+  // A first-tab autosave can arrive during second-tab hydration. Recover only
+  // from the real stale-workspace rejection, using the same reload a user would.
+  // The failed attempt must never upload an incomplete or stale snapshot.
+  let secondBackup;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const beforeAttempt = supa.uploads.length;
+    secondBackup = await second.evaluate(async passphrase => {
+      try {
+        return { result: await window.SutraCloud.backupNow({ passphrase }) };
+      } catch (error) {
+        if (error.name !== 'WorkspaceConflictError') throw error;
+        return { conflict: error.name };
+      }
+    }, PASS);
+    if (!secondBackup.conflict) break;
+    expect(supa.uploads.length).toBe(beforeAttempt);
+    if (attempt === 2) break;
+    await second.reload();
+    await waitForAppHydrated(second);
+    await second.evaluate(({ email }) => window.SutraCloudSync.verifyCode(email, '123456'), { email: EMAIL });
+  }
+  expect(secondBackup).toMatchObject({ result: { uploaded: true } });
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.backupFixtureRemoteCommit), { timeout: 30_000 }).toBe('seen');
+
+  // The accepted second-tab commit makes the first tab stale. Its cached
+  // passphrase must not allow it to overwrite the current workspace or upload.
+  const beforeStaleBackup = supa.uploads.length;
+  const staleBackup = await page.evaluate(async passphrase => {
     try {
       await window.SutraCloud.backupNow({ passphrase });
+      return 'uploaded';
     } catch (error) {
-      // A rejected stale write must stay rejected. Include only the existing
-      // conflict metadata so CI identifies the competing writer without
-      // printing workspace content or provider credentials.
-      if (error.workspaceConflictDetails) {
-        const diagnostic = `\nBackup fixture conflict: ${JSON.stringify(error.workspaceConflictDetails)}`;
-        error.message += diagnostic;
-        error.stack += diagnostic;
-      }
-      throw error;
+      if (error.name !== 'WorkspaceConflictError') throw error;
+      return error.name;
     }
   }, PASS);
+  expect(staleBackup).toBe('WorkspaceConflictError');
+  expect(supa.uploads.length).toBe(beforeStaleBackup);
   await second.evaluate(() => window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'close' }));
+  await expect.poll(() => page.evaluate(() => {
+    const { enabled, frequency } = window.SutraCloudSync.getMeta().autoBackup;
+    return { enabled, frequency };
+  }), { timeout: 30_000 }).toEqual({ enabled: true, frequency: 'close' });
   const before = supa.uploads.length;
   const hide = tab => tab.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await Promise.all([hide(page), hide(second)]);
-  await expect.poll(() => supa.uploads.length).toBe(before + 1);
-  await expect.poll(() => second.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupAt)).toBeTruthy();
+  await hide(page);
+  await page.waitForTimeout(1000);
+  expect(supa.uploads.length).toBe(before);
+  // Hold the real cross-tab lock while the current tab attempts its scheduled
+  // backup. Observe the denied request without changing either tab's state.
+  await page.evaluate(() => {
+    window.backupFixtureLockHeld = false;
+    window.backupFixtureLockTask = navigator.locks.request('sutra-cloud-auto-backup-v1', async () => {
+      window.backupFixtureLockHeld = true;
+      await new Promise(resolve => { window.releaseBackupFixtureLock = resolve; });
+    });
+  });
+  await expect.poll(() => page.evaluate(() => window.backupFixtureLockHeld), { timeout: 30_000 }).toBe(true);
+  try {
+    await second.evaluate(() => {
+      const locks = navigator.locks;
+      const original = locks.request;
+      window.restoreBackupFixtureLockRequest = () => { locks.request = original; };
+      window.backupFixtureLockDenied = false;
+      locks.request = function (name, options, callback) {
+        if (name !== 'sutra-cloud-auto-backup-v1') return original.apply(this, arguments);
+        return original.call(this, name, options, lock => {
+          if (!lock) window.backupFixtureLockDenied = true;
+          return callback(lock);
+        });
+      };
+    });
+    await hide(second);
+    await expect.poll(() => second.evaluate(() => window.backupFixtureLockDenied), { timeout: 30_000 }).toBe(true);
+    expect(supa.uploads.length).toBe(before);
+  } finally {
+    await second.evaluate(() => window.restoreBackupFixtureLockRequest?.());
+    await page.evaluate(async () => {
+      window.releaseBackupFixtureLock();
+      await window.backupFixtureLockTask;
+    });
+  }
+  await hide(second);
+  await expect.poll(() => supa.uploads.length, { timeout: 30_000 }).toBe(before + 1);
+  await expect.poll(() => second.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupAt), { timeout: 30_000 }).toBeTruthy();
   await Promise.all([hide(page), hide(second)]);
   await second.waitForTimeout(1000);
   expect(supa.uploads.length).toBe(before + 1);

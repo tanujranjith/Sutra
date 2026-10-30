@@ -29,6 +29,9 @@ tests/e2e/spreadsheet-formula-note-import.spec.mjs
 tests/e2e/student-academic-editing.spec.mjs
 tests/e2e/student-assistant-model-context.spec.mjs
 tests/e2e/student-os-phase3.spec.mjs
+tests/e2e/sutra-cloud-providers.spec.mjs
+tests/e2e/sutra-envelope-tamper.spec.mjs
+tests/e2e/sutra-intelligence-harness.spec.mjs
 tests/e2e/today-dashboard-customization.spec.mjs
 tests/e2e/today-redesign.spec.mjs
 tests/e2e/workspace-empty-root-recovery.spec.mjs
