@@ -24,6 +24,5 @@ test('completed Timeline blocks leave deadline and overdue calculations but rema
   assert.ok(collector && mutate, 'deadline collection and Recovery mutation exist');
   assert.match(collector.body, /if \(block\.completed === true\) return;/);
   assert.match(mutate.body, /item\.source === 'timeline'/);
-  assert.match(mutate.body, /row\.completed = true/);
-  assert.match(mutate.body, /saveTimeBlocks/);
+  assert.match(mutate.body, /commitPatch\(row, \{ completed: true, completedAt, updatedAt: completedAt \}, \(\) => saveTimeBlocks\(\)\)/);
 });

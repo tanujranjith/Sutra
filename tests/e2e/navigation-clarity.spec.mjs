@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openApp(page, width = 1440) {
   await page.setViewportSize({ width, height: 900 });
@@ -7,7 +8,7 @@ async function openApp(page, width = 1440) {
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await page.waitForFunction(() => !!window.flowAtelier
     && typeof window.flowAtelier.flushAppSaveNow === 'function');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('navigation-clarity-ready'));
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');
@@ -33,6 +34,171 @@ async function enableAdvancedPacks(page) {
     window.setActiveView('today');
   });
   await expect(page.locator('#moreViewsWrapper')).toBeVisible();
+}
+
+async function getHeaderGeometry(page) {
+  return page.evaluate(() => {
+    const row = document.querySelector('.view-tabs');
+    const shell = document.querySelector('.tabs-shell');
+    const utility = document.querySelector('.nav-utility-group');
+    const brand = document.querySelector('.global-app-brand');
+    const launcher = document.getElementById('commandPaletteLauncher');
+    if (!row || !shell || !utility || !brand || !launcher) return null;
+
+    const rowRect = row.getBoundingClientRect();
+    const utilityRect = utility.getBoundingClientRect();
+    const brandRect = brand.getBoundingClientRect();
+    const launcherRect = launcher.getBoundingClientRect();
+    const launcherTarget = document.elementFromPoint(
+      launcherRect.left + launcherRect.width / 2,
+      launcherRect.top + launcherRect.height / 2
+    );
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const utilityChildrenFit = Array.from(utility.children).filter(visible).every((child) => {
+      const rect = child.getBoundingClientRect();
+      return rect.left >= utilityRect.left - 1
+        && rect.right <= utilityRect.right + 1
+        && rect.top >= utilityRect.top - 1
+        && rect.bottom <= utilityRect.bottom + 1;
+    });
+    const visibleDestinationFitResults = Array.from(row.children).filter(visible).map((control) => {
+      const controlRect = control.getBoundingClientRect();
+      const label = document.createRange();
+      label.selectNodeContents(control);
+      const labelRect = label.getBoundingClientRect();
+      const fits = controlRect.left >= rowRect.left - 1 && controlRect.right <= rowRect.right + 1
+        && labelRect.left >= rowRect.left - 1 && labelRect.right <= rowRect.right + 1;
+      const round = (value) => Math.round(value * 100) / 100;
+      return {
+        id: control.id || null,
+        view: control.dataset.view || null,
+        label: (control.getAttribute('aria-label') || control.textContent || '').trim().replace(/\s+/g, ' '),
+        control: {
+          left: round(controlRect.left), right: round(controlRect.right), top: round(controlRect.top), bottom: round(controlRect.bottom),
+          width: round(controlRect.width), height: round(controlRect.height)
+        },
+        text: {
+          left: round(labelRect.left), right: round(labelRect.right), top: round(labelRect.top), bottom: round(labelRect.bottom),
+          width: round(labelRect.width), height: round(labelRect.height)
+        },
+        fits
+      };
+    });
+    const round = (value) => Math.round(value * 100) / 100;
+    const box = (rect) => ({
+      left: round(rect.left), right: round(rect.right), top: round(rect.top), bottom: round(rect.bottom),
+      width: round(rect.width), height: round(rect.height)
+    });
+    const hitDetails = element => {
+      if (!element) return null;
+      const style = getComputedStyle(element);
+      return {
+        tag: element.tagName, id: element.id || null, classes: element.getAttribute('class') || '',
+        rect: box(element.getBoundingClientRect()), position: style.position, zIndex: style.zIndex,
+        pointerEvents: style.pointerEvents, visibility: style.visibility, opacity: style.opacity
+      };
+    };
+
+    return {
+      viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+      bodyClasses: document.body.className,
+      workspaceBoot: document.body.dataset.sutraWorkspaceBoot || null,
+      theme: {
+        key: document.body.getAttribute('data-theme-key'),
+        name: document.body.getAttribute('data-theme'),
+        colorScheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+        fontsStatus: document.fonts ? document.fonts.status : 'unsupported'
+      },
+      boxes: {
+        shell: box(shell.getBoundingClientRect()), row: box(rowRect), utility: box(utilityRect), brand: box(brandRect),
+        launcher: box(launcherRect)
+      },
+      utilitySharesTabsShell: utility.parentElement === row.parentElement && row.parentElement === shell,
+      rowLeft: rowRect.left,
+      rowRight: rowRect.right,
+      utilityLeft: utilityRect.left,
+      brandRight: brandRect.right,
+      launcherWidth: launcherRect.width,
+      launcherHeight: launcherRect.height,
+      launcherRadius: parseFloat(getComputedStyle(launcher).borderTopLeftRadius) || 0,
+      launcherOwnsHitTarget: !!launcherTarget && (launcherTarget === launcher || launcherTarget.closest('#commandPaletteLauncher') === launcher),
+      launcherStyle: hitDetails(launcher),
+      launcherHitTarget: hitDetails(launcherTarget),
+      launcherHitStack: document.elementsFromPoint(launcherRect.left + launcherRect.width / 2,
+        launcherRect.top + launcherRect.height / 2).slice(0, 8).map(hitDetails),
+      utilityChildrenFit,
+      utilityChildFitResults: Array.from(utility.children).filter(visible).map((child) => {
+        const rect = child.getBoundingClientRect();
+        return {
+          id: child.id || null,
+          label: (child.getAttribute('aria-label') || child.textContent || '').trim().replace(/\s+/g, ' '),
+          left: round(rect.left), right: round(rect.right), top: round(rect.top), bottom: round(rect.bottom),
+          fits: rect.left >= utilityRect.left - 1 && rect.right <= utilityRect.right + 1
+            && rect.top >= utilityRect.top - 1 && rect.bottom <= utilityRect.bottom + 1
+        };
+      }),
+      destinationOverflow: row.scrollWidth - row.clientWidth,
+      visibleDestinationLabelsFit: visibleDestinationFitResults.every((result) => result.fits),
+      visibleDestinationFitResults,
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+}
+
+async function expectHeaderGeometry(page, stage = 'header layout') {
+  await page.waitForFunction(() => {
+    const row = document.querySelector('.view-tabs');
+    const utility = document.querySelector('.nav-utility-group');
+    const brand = document.querySelector('.global-app-brand');
+    if (!row || !utility || !brand) return false;
+    return row.getBoundingClientRect().right < utility.getBoundingClientRect().left
+      && brand.getBoundingClientRect().right < row.getBoundingClientRect().left;
+  });
+
+  let geometry;
+  try {
+    await expect.poll(async () => {
+      geometry = await getHeaderGeometry(page);
+      return geometry?.launcherOwnsHitTarget;
+    }, { timeout: 10_000 }).toBe(true);
+  } catch (cause) {
+    throw new Error(`${stage}: ${JSON.stringify(geometry)}\n${cause.stack || cause}`, { cause });
+  }
+  const diagnostic = `${stage}: ${JSON.stringify(geometry)}`;
+  expect(geometry, `${stage}: header geometry was not available`).not.toBeNull();
+  expect(geometry.utilitySharesTabsShell, diagnostic).toBe(true);
+  expect(geometry.rowRight, diagnostic).toBeLessThan(geometry.utilityLeft);
+  expect(geometry.brandRight, diagnostic).toBeLessThan(geometry.rowLeft);
+  expect(geometry.launcherWidth, diagnostic).toBeGreaterThanOrEqual(44);
+  expect(geometry.launcherHeight, diagnostic).toBeGreaterThanOrEqual(44);
+  expect(geometry.launcherRadius, diagnostic).toBeGreaterThan(0);
+  expect(geometry.launcherOwnsHitTarget, diagnostic).toBe(true);
+  expect(geometry.utilityChildrenFit, diagnostic).toBe(true);
+  expect(geometry.documentOverflow, diagnostic).toBeLessThanOrEqual(1);
+}
+
+async function enableBuiltInQuickLaunchers(page) {
+  await page.evaluate(() => window.setActiveView('settings'));
+  await page.locator('#view-settings [data-settings-nav="integrations"]').click();
+
+  let changed = false;
+  for (const provider of ['spotify', 'chatgpt']) {
+    const checkbox = page.locator(`#view-settings [data-pref-path="integrations.${provider}Enabled"]`);
+    if (!(await checkbox.isChecked())) {
+      await checkbox.check();
+      changed = true;
+    }
+  }
+
+  if (changed) await page.locator('#settingsApplyBtnTop').click();
+  await page.evaluate(() => window.setActiveView('today'));
+  await expect(page.locator('#quickAppLaunchers')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.spotify')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.chatgpt')).toBeVisible();
 }
 
 test('desktop navigation keeps the daily loop direct and groups advanced packs in More', async ({ page }) => {
@@ -65,6 +231,47 @@ test('desktop navigation keeps the daily loop direct and groups advanced packs i
   await expect(page.locator('body')).toHaveAttribute('data-view', 'business');
   await expect(more).toContainText('Business');
   await expect(more).toHaveAttribute('aria-label', /current section Business/);
+});
+
+test('header utilities stay clear of centered navigation across desktop and tablet widths', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page, 1644);
+
+  // Check the actual startup layout before enabling any optional shortcut providers.
+  await expectHeaderGeometry(page, 'startup at 1644px');
+  const startupGeometry = await getHeaderGeometry(page);
+  expect(startupGeometry.destinationOverflow, `startup at 1644px: ${JSON.stringify(startupGeometry)}`).toBeLessThanOrEqual(1);
+  expect(startupGeometry.visibleDestinationLabelsFit, `startup at 1644px: ${JSON.stringify(startupGeometry)}`).toBe(true);
+
+  // Use the real Integrations preferences at a wide desktop size so the built-in
+  // launchers are visible before the exact screenshot width is tested. The
+  // canonical overflow manager may compact the dock at narrower widths.
+  await page.setViewportSize({ width: 2000, height: 900 });
+  await enableBuiltInQuickLaunchers(page);
+  await expectHeaderGeometry(page, 'built-in launchers at 2000px');
+  await page.setViewportSize({ width: 1644, height: 900 });
+  await expectHeaderGeometry(page, 'built-in launchers at 1644px');
+  await expect(page.locator('#quickAppLaunchers')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.spotify')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.chatgpt')).toBeVisible();
+  const desktopGeometry = await getHeaderGeometry(page);
+  expect(desktopGeometry.destinationOverflow, `built-in launchers at 1644px: ${JSON.stringify(desktopGeometry)}`).toBeLessThanOrEqual(1);
+  expect(desktopGeometry.visibleDestinationLabelsFit, `built-in launchers at 1644px: ${JSON.stringify(desktopGeometry)}`).toBe(true);
+
+  const launcher = page.locator('#commandPaletteLauncher');
+  await launcher.click();
+  const dialog = page.locator('#commandPaletteModal');
+  const input = page.locator('#commandPaletteInput');
+  await expect(dialog).toHaveAttribute('aria-hidden', 'false');
+  await expect(input).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveAttribute('aria-hidden', 'true');
+  await expect(dialog).not.toHaveClass(/active/);
+
+  for (const width of [1440, 1220, 981, 980, 700]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expectHeaderGeometry(page, `responsive at ${width}px`);
+  }
 });
 
 test('desktop shell keeps Notes contextual and gives major workspaces the full canvas', async ({ page }) => {
@@ -137,13 +344,14 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
       const rect = element.getBoundingClientRect();
       return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
     };
-    const primaryControls = Array.from(document.querySelectorAll('.view-tabs > .view-tab')).filter(isVisible);
+    const primaryControls = Array.from(document.querySelectorAll('.view-tabs > .view-tab, .view-tabs > .view-tab-add')).filter(isVisible);
     const more = document.querySelector('.view-tabs > .view-more');
     if (more && isVisible(more)) primaryControls.push(more);
     const primaryRects = primaryControls.map((control) => control.getBoundingClientRect());
     const primaryLeft = Math.min(...primaryRects.map((rect) => rect.left));
     const primaryRight = Math.max(...primaryRects.map((rect) => rect.right));
     const utilityRect = document.querySelector('.nav-utility-group').getBoundingClientRect();
+    const rowRect = document.querySelector('.view-tabs').getBoundingClientRect();
     return {
       navLeft: Math.round(nav.left),
       navWidth: Math.round(nav.width),
@@ -151,13 +359,14 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
       sidebarWidth: Math.round(sidebarRect.width),
       mainLeft: Math.round(mainRect.left),
       primaryCenter: Math.round((primaryLeft + primaryRight) / 2),
+      availableCenter: Math.round((rowRect.left + rowRect.right) / 2),
       primaryRight: Math.round(primaryRight),
       utilityLeft: Math.round(utilityRect.left)
     };
   });
   expect(geometry.navLeft).toBe(0);
   expect(geometry.navWidth).toBe(geometry.viewportWidth);
-  expect(Math.abs(geometry.primaryCenter - Math.round(geometry.viewportWidth / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs(geometry.primaryCenter - geometry.availableCenter)).toBeLessThanOrEqual(2);
   expect(geometry.utilityLeft).toBeGreaterThan(geometry.primaryRight);
   expect(geometry.mainLeft).toBe(geometry.sidebarWidth);
   await expect(topNav).toBeVisible();

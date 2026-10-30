@@ -204,7 +204,6 @@ test('custom tabs: authored widget content is not silently truncated', async ({ 
         { id: 'w-check-long', type: 'checklist', config: { items: [] } },
         { id: 'w-pad-long', type: 'scratchpad', config: { text: '' } },
         { id: 'w-sticky-long', type: 'sticky', config: { text: '', color: '#ffd97d' } },
-        { id: 'w-gratitude-long', type: 'gratitude', config: { entries: {} } },
         { id: 'w-ask-long', type: 'asksutra', config: {} },
         { id: 'w-reading-long', type: 'reading', config: { title: 'R'.repeat(100), totalPages: 1 } }
       ]
@@ -218,13 +217,11 @@ test('custom tabs: authored widget content is not silently truncated', async ({ 
   const checklistText = 'Checklist item ' + 'C'.repeat(240);
   const scratchpadText = 'Scratchpad ' + 'S'.repeat(20100);
   const stickyText = 'Sticky ' + 'K'.repeat(2100);
-  const gratitudeText = 'Gratitude ' + 'G'.repeat(600);
   const askText = 'Question ' + 'A'.repeat(340);
   await section.locator('.ctab-widget', { hasText: 'Checklist' }).locator('.ctab-add-input').fill(checklistText);
   await section.locator('.ctab-widget', { hasText: 'Checklist' }).locator('.ctab-add-btn').click();
-  await section.locator('.ctab-scratchpad:not(.ctab-gratitude-text)').fill(scratchpadText);
+  await section.locator('.ctab-scratchpad').fill(scratchpadText);
   await section.locator('.ctab-sticky-text').fill(stickyText);
-  await section.locator('.ctab-gratitude-text').fill(gratitudeText);
   const askInput = section.locator('.ctab-widget', { hasText: 'Ask Sutra' }).locator('input').first();
   await askInput.fill(askText);
   expect(await askInput.getAttribute('maxlength')).toBeNull();
@@ -237,14 +234,12 @@ test('custom tabs: authored widget content is not silently truncated', async ({ 
     return {
       checklist: config('w-check-long').items[0].text,
       scratchpad: config('w-pad-long').text,
-      sticky: config('w-sticky-long').text,
-      gratitude: config('w-gratitude-long').entries[Object.keys(config('w-gratitude-long').entries)[0]]
+      sticky: config('w-sticky-long').text
     };
   });
   expect(saved.checklist).toBe(checklistText);
   expect(saved.scratchpad).toBe(scratchpadText);
   expect(saved.sticky).toBe(stickyText);
-  expect(saved.gratitude).toBe(gratitudeText);
 
   const roundTrip = await page.evaluate(() => {
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
@@ -327,9 +322,6 @@ const NEW_WIDGETS = [
   ['dash_lms_sync', 'Sync Status', 'connections'],
   ['dash_recent_grades', 'Latest Grades', 'connections'],
   // Interactive widgets (self-contained; state lives in widget.config).
-  ['water', 'Water Tracker', 'wellness'],
-  ['eyebreak', '20-20-20 Breaks', 'wellness'],
-  ['gratitude', 'Gratitude Prompt', 'wellness'],
   ['reading', 'Currently Reading', 'reading'],
   ['flashcard', 'Flashcard of the Day', 'reading'],
   ['decision', 'Decision Spinner', 'tools'],
@@ -343,14 +335,20 @@ const NEW_WIDGETS = [
 test('custom tabs: dashboard + interactive widgets register, render, and persist config', async ({ page }) => {
   await openApp(page);
 
+  const retiredTypes = ['water', 'eyebreak', 'gratitude'];
   const newTypes = NEW_WIDGETS.map(w => w[0]);
-  const registry = await page.evaluate((types) =>
-    window.SutraCustomTabs.getWidgetTypes()
-      .filter(widget => types.includes(widget.type))
-      .map(widget => ({ type: widget.type, label: widget.label, cat: widget.cat })), newTypes);
-  expect(registry.map(widget => widget.type).sort()).toEqual(newTypes.slice().sort());
+  const registry = await page.evaluate(({ types, retired }) => {
+    const allTypes = window.SutraCustomTabs.getWidgetTypes();
+    return {
+      active: allTypes.filter(widget => types.includes(widget.type))
+        .map(widget => ({ type: widget.type, label: widget.label, cat: widget.cat })),
+      retired: allTypes.filter(widget => retired.includes(widget.type)).map(widget => widget.type)
+    };
+  }, { types: newTypes, retired: retiredTypes });
+  expect(registry.active.map(widget => widget.type).sort()).toEqual(newTypes.slice().sort());
+  expect(registry.retired).toEqual([]);
   for (const [type, label, cat] of NEW_WIDGETS) {
-    expect(registry).toContainEqual({ type, label, cat });
+    expect(registry.active).toContainEqual({ type, label, cat });
   }
 
   const chunks = [NEW_WIDGETS.slice(0, 10), NEW_WIDGETS.slice(10)];
@@ -359,7 +357,11 @@ test('custom tabs: dashboard + interactive widgets register, render, and persist
       id: `qa-new-${tabIndex}`,
       name: `New ${tabIndex + 1}`,
       icon: 'fa-layer-group',
-      widgets: chunk.map(([type], widgetIndex) => ({ id: `nw-${tabIndex}-${widgetIndex}`, type, config: null }))
+      widgets: chunk.map(([type], widgetIndex) => ({
+        id: `nw-${tabIndex}-${widgetIndex}`,
+        type,
+        config: type === 'reading' ? { title: 'Regression reading', currentPage: 0, totalPages: 1 } : null
+      }))
     })));
     window.SutraCustomTabs.refresh();
   }, chunks);
@@ -389,18 +391,88 @@ test('custom tabs: dashboard + interactive widgets register, render, and persist
     }
   }
 
-  // Interactive state persists through the bridge: tapping the water tracker's
-  // "+" twice should store count: 2 in that widget's config.
+  // Interactive state persists through the bridge: advancing the reading
+  // widget updates its saved page count.
   await activateTab(0);
-  const waterCard = page.locator('#view-custom-qa-new-0 .ctab-widget[data-widget-id="nw-0-8"]');
-  await waterCard.locator('button[title="Add a glass"]').click();
-  await waterCard.locator('button[title="Add a glass"]').click();
-  const waterCount = await page.evaluate(() => {
+  const readingCard = page.locator('#view-custom-qa-new-0 .ctab-widget[data-widget-id="nw-0-8"]');
+  await expect(readingCard.locator('.ctab-progress-label')).toContainText('Page 0 / 1');
+  await readingCard.locator('button[title="Forward a page"]').click();
+  const currentPage = await page.evaluate(() => {
     const tab = window.SutraCustomTabsBridge.getTabs().find(t => t.id === 'qa-new-0');
     const w = tab && tab.widgets.find(x => x.id === 'nw-0-8');
-    return w && w.config ? w.config.count : null;
+    return w && w.config ? w.config.currentPage : null;
   });
-  expect(waterCount).toBe(2);
+  expect(currentPage).toBe(1);
+  await expect(readingCard.locator('.ctab-progress-label')).toContainText('Page 1 / 1');
+});
+
+test('custom tabs: retired wellness widgets stay opaque and show a neutral notice after reload', async ({ page }) => {
+  await openApp(page);
+  const legacyTab = {
+    id: 'qa-retired-wellness',
+    name: 'Legacy Wellness',
+    icon: 'fa-box-archive',
+    widgets: [
+      { id: 'legacy-water', type: 'water', config: { count: 6, vendorField: { source: 'old-water' } } },
+      { id: 'legacy-eyebreak', type: 'eyebreak', config: { lastBreak: '2025-03-04T12:30:00Z', customFlag: true } },
+      { id: 'legacy-gratitude', type: 'gratitude', config: { entries: { '2025-03-04': 'saved legacy reflection' } } }
+    ]
+  };
+  const registry = await page.evaluate(() => window.SutraCustomTabs.getWidgetTypes().map(widget => widget.type));
+  expect(registry).not.toContain('water');
+  expect(registry).not.toContain('eyebreak');
+  expect(registry).not.toContain('gratitude');
+
+  await page.evaluate((tab) => {
+    window.SutraCustomTabsBridge.setTabs([tab]);
+    window.SutraCustomTabs.refresh();
+    window.setActiveView('custom-' + tab.id);
+  }, legacyTab);
+  const section = page.locator('#view-custom-qa-retired-wellness');
+  await expect(section).toBeVisible();
+  for (const widget of legacyTab.widgets) {
+    const card = section.locator(`.ctab-widget[data-widget-id="${widget.id}"]`);
+    await expect(card.locator('.ctab-empty-msg')).toHaveText('This feature has been retired. Its saved data remains in your workspace and backups.');
+    await expect(card.locator('.ctab-widget-body button, .ctab-widget-body input, .ctab-widget-body select, .ctab-widget-body textarea')).toHaveCount(0);
+  }
+  const viewText = await section.innerText();
+  expect(viewText).not.toMatch(/Water Tracker|20-20-20 Breaks|Gratitude Prompt/);
+  const picker = section.locator('.ctab-action', { hasText: 'Add widget' });
+  await picker.click();
+  const pickerText = await page.locator('.ctab-picker-panel').innerText();
+  expect(pickerText).not.toMatch(/Water Tracker|20-20-20 Breaks|Gratitude Prompt/);
+  await page.keyboard.press('Escape');
+
+  const backupWidgets = await page.evaluate(async (tabId) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    await window.deserializeWorkspace(payload);
+    window.SutraCustomTabs.refresh();
+    window.setActiveView('custom-' + tabId);
+    const tab = window.SutraCustomTabsBridge.getTabs().find(item => item.id === tabId);
+    return tab ? tab.widgets.map(({ id, type, config }) => ({ id, type, config })) : null;
+  }, legacyTab.id);
+  expect(backupWidgets).toEqual(legacyTab.widgets.map(({ id, type, config }) => ({ id, type, config })));
+  await expect(section.locator('.ctab-empty-msg')).toHaveCount(3);
+  await page.evaluate(async () => window.flowAtelier.flushAppSaveNow('retired-custom-widget-reload'));
+
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForAppReady(page);
+  await completeOnboarding(page);
+  await page.waitForFunction(() => !!window.SutraCustomTabsBridge && !!window.SutraCustomTabs);
+  await page.evaluate(() => window.SutraCustomTabs.refresh());
+  const restored = await page.evaluate((tabId) => {
+    const tab = window.SutraCustomTabsBridge.getTabs().find(item => item.id === tabId);
+    return tab ? tab.widgets.map(({ id, type, config }) => ({ id, type, config })) : null;
+  }, legacyTab.id);
+  expect(restored).toEqual(legacyTab.widgets.map(({ id, type, config }) => ({ id, type, config })));
+
+  await page.evaluate((tabId) => window.setActiveView('custom-' + tabId), legacyTab.id);
+  const restoredSection = page.locator('#view-custom-qa-retired-wellness');
+  await expect(restoredSection).toBeVisible();
+  await expect(restoredSection.locator('.ctab-empty-msg')).toHaveCount(3);
+  await expect(restoredSection.locator('.ctab-empty-msg').first()).toHaveText('This feature has been retired. Its saved data remains in your workspace and backups.');
+  await expect(restoredSection.locator('.ctab-widget-body button, .ctab-widget-body input, .ctab-widget-body select, .ctab-widget-body textarea')).toHaveCount(0);
 });
 
 test('custom tabs: normalizer enforces ids, caps, and serializability', async ({ page }) => {

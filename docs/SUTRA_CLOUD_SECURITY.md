@@ -1,7 +1,8 @@
 # Sutra Cloud — Security model
 
-Sutra Cloud is designed so that **no provider — and not Sutra — can read your
-workspace.** This page is the plain-English security model.
+Sutra Cloud encrypts backups locally so **backup providers cannot read their
+workspace contents**. Sutra itself reads the unlocked workspace on your device;
+no central Sutra service is required. This page describes the backup security model.
 
 ## Encryption (local-first)
 - Your workspace is packaged into a `.sutra` envelope and **encrypted on your
@@ -42,8 +43,9 @@ workspace.** This page is the plain-English security model.
   `SutraSafeStorage` (keys like `sutra:cloudProvider:<id>:v1`) — **never** inside
   a `.sutra` backup or workspace export, so each device chooses its own
   destination.
-- Supabase: the device-local session token is stored locally; the **anon key** is
-  public configuration.
+- Supabase session persistence and its explicit encrypted device-local Remember me
+  option are documented in [Sutra Cloud](features/SUTRA_CLOUD.md#whats-protected).
+  The **anon key** is public configuration.
 
 ## Never paste powerful keys
 - **Supabase:** never paste the `service_role` / secret key — it bypasses Row
@@ -58,8 +60,8 @@ workspace.** This page is the plain-English security model.
 
 ## Consent-first guarantees
 - A **fresh profile makes zero cloud-provider requests.**
-- Opening Sutra makes zero provider requests until you open Sutra Cloud **and**
-  take an explicit action.
+- Opening Sutra does not enable providers. Previously enabled automatic backup
+  may run while its provider and session passphrase remain ready.
 - **Saving a provider configuration uploads nothing.**
 - **Test connection** runs only when you click it.
 - **Auto-backup is off by default** and only runs after you explicitly enable it,
@@ -67,22 +69,21 @@ workspace.** This page is the plain-English security model.
   it off stops automatic uploads immediately.
 
 ## CSP / hosted-build security
-- The hosted build pins exact provider origins in its Content Security Policy and
-  **forbids wildcards**, so a malicious page cannot trick Sutra into talking to an
-  arbitrary origin.
-- Custom origins (your WebDAV/S3/Custom HTTP/other Supabase project) are therefore
-  blocked in the hosted build and require a **self-hosted build** with your origin
-  added to the CSP. Sutra surfaces this rather than failing silently.
+- The hosted policy permits reviewed origins and a bounded set of wildcard
+  host families. Arbitrary custom origins cannot be added dynamically.
+- The canonical destination matrix and reviewed wildcard exceptions are in
+  [Setup → Hosted vs self-hosted](SUTRA_CLOUD_SETUP.md#hosted-vs-self-hosted).
+  Add other origins only through the self-hosted CSP workflow described there.
 
 ## Threat-model summary
 | Threat | Mitigation |
 |---|---|
 | Provider reads your data | Client-side encryption; ciphertext only |
-| Sutra reads your data | No central backend required; ciphertext only; passphrase never sent |
-| Lost device / stolen backup file | Useless without the passphrase |
+| Backup provider or central service compromise | Remote backups contain ciphertext; the local app reads unlocked data and decrypts only with your passphrase |
+| Stolen encrypted backup file | Cannot decrypt without the passphrase; this does not encrypt live browser storage |
 | Forgotten passphrase | Unrecoverable by design — warned clearly |
 | Wrong passphrase on restore | Fails safely; workspace untouched |
-| Malicious origin via XSS | Strict CSP, no wildcards |
+| Unapproved network origin | Canonical CSP restricts connections to reviewed origins and host families |
 | Pasted admin/root key | Rejected where detectable; warned in UI |
 
 See also: [Setup](SUTRA_CLOUD_SETUP.md) · [Providers](SUTRA_CLOUD_PROVIDERS.md) ·

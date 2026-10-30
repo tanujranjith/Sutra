@@ -176,4 +176,5 @@ notes/tasks/timeline blocks go through Sutra's normal stores — never a paralle
 ```
 
 Save as `hello.sutra-plugin` (or the legacy `hello.atelier-plugin`), then
-**Settings ▸ Customization ▸ Plugins ▸ Import plugin…**.
+enable **Settings ▸ Advanced ▸ Developer / Experimental ▸ Local Plugins
+(Experimental)**, then choose **Import plugin…** in its revealed controls.

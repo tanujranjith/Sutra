@@ -1,6 +1,29 @@
 /* Cross-tab workspace write coordination (Web Locks + BroadcastChannel). */
 (function (global) {
   'use strict';
+  var defaultTabId = null;
+
+  function getDefaultTabId(random) {
+    if (!defaultTabId) {
+      defaultTabId = 'tab-' + Date.now().toString(36) + '-' + random().toString(36).slice(2, 9);
+    }
+    return defaultTabId;
+  }
+
+  // Keep this byte-for-byte compatible with app.js's canonical workspace hash.
+  // The coordinator also uses it for boot-time recovery notifications, which
+  // must be attributable by already-open app instances using the same hash.
+  function hashRecord(value) {
+    if (value === null || value === undefined) return null;
+    var text = JSON.stringify(value);
+    text = String(text || '');
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+  }
 
   function create(options) {
     var config = options || {};
@@ -14,7 +37,12 @@
     var channelName = String(config.channelName || 'sutra-workspace-events-v1');
     var now = typeof config.now === 'function' ? config.now : function () { return new Date().toISOString(); };
     var random = typeof config.random === 'function' ? config.random : Math.random;
-    var tabId = String(config.tabId || ('tab-' + Date.now().toString(36) + '-' + random().toString(36).slice(2, 9)));
+    // Multiple coordinator instances can exist in one document (the boot
+    // migration and app.js each own a short-lived/long-lived coordinator). They
+    // must share an identity so a local publish is not mistaken for another tab.
+    // Separate documents load separate module instances and therefore get
+    // distinct defaults; tests and special callers may still inject an ID.
+    var tabId = config.tabId ? String(config.tabId) : getDefaultTabId(random);
     var localQueue = Promise.resolve();
     var channel = null;
     var closed = false;
@@ -97,7 +125,7 @@
     };
   }
 
-  var api = { create: create };
+  var api = { create: create, hashRecord: hashRecord };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraWorkspaceCoordinator = api;
 }(typeof window !== 'undefined' ? window : globalThis));

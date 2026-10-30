@@ -84,7 +84,8 @@ test('heavy workspace: real startup, render, encrypted export, import, and resto
     return { seedMs: Math.round(performance.now() - start), notes: pages.length, homework: homework.length, reviewCards: 2500, timeline: timeBlocks.length, attachments: attachments.length };
   }, { count: NOTES });
 
-  const measurements = await page.evaluate(async ({ pass }) => {
+  const searchCanaryTitle = `Bench Note ${Math.min(NOTES - 1, 777)}`;
+  const measurements = await page.evaluate(async ({ pass, searchCanaryTitle }) => {
     const measure = async (fn) => { const start = performance.now(); const value = await fn(); return { ms: Math.round(performance.now() - start), value }; };
     const beforeResources = performance.getEntriesByType('resource').map((entry) => entry.name);
     const disabledPackAssets = Object.values(window.SUTRA_FEATURE_MANIFEST || {})
@@ -98,11 +99,38 @@ test('heavy workspace: real startup, render, encrypted export, import, and resto
 
     const today = await measure(async () => { window.setActiveView('today'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return document.querySelectorAll('#view-today [data-task-id], #view-today .task-item, #view-today .today-item').length; });
     const timeline = await measure(async () => { window.setActiveView('timeline'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return document.querySelectorAll('#view-timeline .time-block, #view-timeline [data-block-id]').length; });
+    const searchModal = window.SutraGlobalSearchModal;
+    const searchInput = document.getElementById('globalSearchInput');
+    const searchResults = document.getElementById('globalSearchResults');
+    if (!searchModal || typeof searchModal.open !== 'function' || !searchModal.open('') || !searchInput || !searchResults) {
+      throw new Error('Workspace search modal is unavailable or not configured.');
+    }
     const search = await measure(async () => {
-      if (typeof window.globalSearchAll === 'function') return window.globalSearchAll('Assignment 777');
-      const input = document.getElementById('globalSearchInput');
-      if (input) { input.value = 'Assignment 777'; input.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => requestAnimationFrame(r)); }
-      return document.querySelectorAll('.global-search-result').length;
+      const renderedCanary = new Promise((resolve, reject) => {
+        const findCanary = () => Array.from(searchResults.querySelectorAll('.global-search-item'))
+          .find(item => item.textContent.includes(searchCanaryTitle));
+        const observer = new MutationObserver(() => {
+          const item = findCanary();
+          if (item) {
+            observer.disconnect();
+            clearTimeout(timeout);
+            resolve(item);
+          }
+        });
+        const timeout = setTimeout(() => {
+          observer.disconnect();
+          reject(new Error(`Workspace search did not render the seeded canary: ${searchCanaryTitle}`));
+        }, 10000);
+        observer.observe(searchResults, { childList: true, subtree: true });
+      });
+      searchInput.value = searchCanaryTitle;
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      const canary = await renderedCanary;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const canaryTitle = canary.querySelector('.global-search-item-title')?.textContent?.trim() || '';
+      const resultCount = searchResults.querySelectorAll('.global-search-item').length;
+      searchModal.close();
+      return { canaryTitle, resultCount };
     });
     const serialize = await measure(() => window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false }));
     const save = await measure(() => window.saveWorkspaceLocally());
@@ -116,6 +144,8 @@ test('heavy workspace: real startup, render, encrypted export, import, and resto
       todayRenderMs: today.ms, todayRows: today.value,
       timelineRenderMs: timeline.ms, timelineRows: timeline.value,
       searchMs: search.ms,
+      searchCanaryTitle: search.value.canaryTitle,
+      searchResultCount: search.value.resultCount,
       serializeMs: serialize.ms,
       serializedBytes: JSON.stringify(serialize.value).length,
       saveMs: save.ms,
@@ -129,7 +159,9 @@ test('heavy workspace: real startup, render, encrypted export, import, and resto
       heapBytes: performance.memory?.usedJSHeapSize || null,
       longTasks: window.__benchLongTasks || []
     };
-  }, { pass: PASS });
+  }, { pass: PASS, searchCanaryTitle });
+
+  expect(measurements.searchCanaryTitle).toBe(searchCanaryTitle);
 
   const encryptedBuffer = Buffer.from(await page.evaluate(() => window.__benchEncryptedBytes));
   const importStart = Date.now();

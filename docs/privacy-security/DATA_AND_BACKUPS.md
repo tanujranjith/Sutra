@@ -1,4 +1,22 @@
-﻿# Data and Backups
+# Data and Backups
+
+Automatic backup failures retry with increasing session-local delays (one minute
+through thirty minutes), without marking the due daily slot as complete. A
+successful upload or unchanged-work check clears the delay. Returning online
+allows another attempt; foreground and save triggers respect the current delay.
+Local saving continues throughout. Raw provider errors are not persisted in backup
+status; diagnostic details pass through the credential scrubber.
+
+A restore whose required attachment writes fail is incomplete. Recovered content
+remains available, but Cloud, Drive, and file import callers must not show a full
+restore success. Keep the original backup, free up storage, and import again.
+Local snapshot recovery also avoids automatically reloading after this failure.
+Restore completion messages wait for both workspace and attachment writes. If
+both fail, the recovery warning reports both problems; an apply/save error never
+claims that the original workspace is unchanged after replacement has started.
+Metadata-only JSON recovery and local snapshots also check required file keys
+against the attachment database after pending writes finish. An empty write
+queue or a copy in the session cache does not establish a complete restore.
 
 _How Sutra stores your workspace locally, and how the `.sutra` backup format
 exports and restores it. For a verified, implementation-level audit of the
@@ -13,6 +31,11 @@ Sutra keeps your workspace on your device in a small number of local stores.
 Several store names are **legacy-named compatibility identifiers** — retained
 unchanged across the rename to Sutra so existing installs keep working. The name
 is only an identifier; the data is always local.
+
+The device-local workspace PIN is a privacy screen, not encryption. Lock setup
+and changes to its PIN or timeout use a cross-tab Web Lock so a stale tab cannot
+overwrite a newer verifier. If Web Locks are unavailable, these settings changes
+are paused with an explanation; an existing PIN can still unlock the workspace.
 
 ### Primary store — the workspace (IndexedDB)
 
@@ -40,6 +63,15 @@ fixtures by `npm run check:migrations`.
   deliberately emptied and successfully saved workspace is never replaced by
   older data.
   These device-local recovery records are not separate cloud or portable backups.
+- Startup recovery and legacy onboarding repair use the same workspace writer
+  lock and conditional root comparison as foreground saves. A newer root wins:
+  the stale boot candidate is discarded, never retried over the newer data.
+  Accepted repair journals the prior meaningful root; recovery journals the
+  displaced empty root. Both update the confirmation marker atomically and
+  announce the canonical hash to other tabs. Coordinators in one document share
+  an identity, so a boot repair does not flag its own page as another writer.
+  Read/write failures remain visible through the startup safety gate. Genuine
+  stale-tab edits still require recovery or reload before saving.
 
 ### Attachments — binary files (IndexedDB)
 
@@ -59,22 +91,22 @@ fixtures by `npm run check:migrations`.
   verification as other canonical attachments. A backup is not reported as
   complete when a required source is missing.
 
-### Homework — localStorage mirror
+### Homework — established store and legacy compatibility
 
-- Homework is the homework module's own source of truth in **localStorage**:
-  `hwCourses:v2` and `hwTasks:v2` (with legacy `:v1` keys read for migration).
-- It is **mirrored** into `appData.homeworkWorkspace` at save time and **restored
-  to localStorage** on import, so it travels in backups while remaining the live
-  source of truth at runtime.
-- **Failure handling (storage hardening).** Homework writes go through the shared
-  `SutraSafeStorage` wrapper. If a write fails (quota exhausted, private-mode
-  security error, etc.), Homework **does not crash and does not lose your change
-  in memory**: the new/edited item stays on screen and a **clear, durable warning
-  banner** appears (`#sutraStorageWarningBanner`) offering an emergency backup.
-  This is **separate** from the catastrophic core IndexedDB save-failure banner
-  (`#sutraSaveFailureBanner`), which is reserved for the canonical workspace
-  pipeline — a Homework/localStorage hiccup never falsely claims total workspace
-  data loss. The warning clears automatically once a write succeeds again.
+Homework UI reads and writes through `SutraHomeworkStore`; workspace backups
+carry its `homeworkWorkspace` records. Legacy `hwCourses:v2`, `hwTasks:v2`, and
+older input formats remain compatibility identifiers. Do not write another task
+store or rename these keys.
+
+The [Homework migration and recovery contract](../architecture/HOMEWORK_STORAGE_MIGRATION.md)
+documents the existing July migration and the October decision to retain canonical
+workspace persistence for the current Homework UI. Raw v2 keys are preserved as
+recovery input and are not maintained as live mirrors. The migration adapter also
+reads v1 keys, but separate legacy connected-view paths still read and mutate v1
+arrays; these are not mirrors of canonical edits. Once legacy import is complete,
+replaying stale arrays can resurrect deleted work. No tasks are rewritten by this
+documentation reconciliation. Save failures must remain visible; an in-memory
+task is not proof of a confirmed durable write.
 
 ### Other local data
 
@@ -407,7 +439,8 @@ makes **zero** Sutra Cloud requests.
 system from every backup layer above, with its own spec
 ([`docs/architecture/SYNC_PROTOCOL.md`](../architecture/SYNC_PROTOCOL.md)) and
 user guide ([`docs/features/CLOUD_SYNC.md`](../features/CLOUD_SYNC.md)). It is
-**off by default**, lives behind the save bar's **Sync** button, and never
+**off by default**, opens in **Sutra Cloud → Sync** (legacy Sync actions route
+to the same hub), and never
 replaces backups: sync replicates *changes*, backups preserve *moments*.
 
 The three guarantees are distinct and the Sync panel reports each one:
@@ -459,7 +492,8 @@ required fresh sign-in/device registration. This browser-origin cleanup cannot
 erase downloaded backups, external files, service-worker application caches, or
 an offline browser before it reconnects.
 
-The synchronized portable workspace is the schema-v7 `mode: "sync"` payload,
+The synchronized portable workspace uses the `mode: "sync"` contract introduced
+in schema v7 (the current migration registry supports v8),
 not the plaintext JSON-recovery payload. It includes all classified durable user
 content: notes and version history, tasks/planning/Homework, academic/study/
 college/life/work data, custom tabs, trash, private documents, supported
@@ -548,7 +582,7 @@ Two deliberate details:
 - **Assistant chat history from a backup** when its encrypted/plaintext backup
   setting is off. This backup preference does not suppress encrypted Sutra Sync:
   when durable chat history is enabled, visible conversations synchronize.
-  - **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
+- **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
   in-session unlocked-page set) — not exported; locked pages correctly require
   the PIN again after a reload.
 
@@ -599,12 +633,12 @@ round-trip in a browser.
 | `noteflow_atelier_db` (store `workspace`, key `root`) | IndexedDB | The whole `appData` workspace | Legacy-named compatibility identifier |
 | `noteflow_atelier_db` recovery keys | IndexedDB | Last meaningful root, displaced empty candidate, and confirmed-root marker | Device-local recovery journal and commit marker; not exported separately |
 | `noteflow_attachments_db` (store `blobs`) | IndexedDB | Course-file binaries | Legacy-named compatibility identifier |
-| `hwCourses:v2`, `hwTasks:v2` | localStorage | Homework (source of truth) | Mirrored into `appData.homeworkWorkspace` |
+| `hwCourses:v2`, `hwTasks:v2` | localStorage legacy inputs | One-time migration and recovery compatibility | Canonical `homeworkWorkspace` is exported; raw legacy keys are not live mirrors |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
 | API keys | sessionStorage (default), encrypted `sutra_credentials_db` when remembered | Provider credentials | Never exported |
 | `appData.assistantChatHistory` | canonical IndexedDB workspace | Optional visible conversations, ids/order/citations/receipts | Encrypted sync and encrypted backup by default; plaintext recovery opt-in |
 | Managed Assistant chat localStorage keys | localStorage compatibility mirror | One-time legacy import, then canonical-to-mirror only | Never authoritative after migration; stale/empty values cannot erase canonical history |
 
-For the authoritative, line-referenced behavior and the verification scripts,
+For dated implementation evidence and the verification scripts at that audit,
 read [`sutra-save-systems-audit.md`](../architecture/sutra-save-systems-audit.md).

@@ -36,7 +36,7 @@ Ranked by impact ÷ effort. Detail and evidence are in the sections that follow.
 
 - `node scripts/mobile-audit.mjs --deep` → 28 surfaces × 4 viewports (360/390/430/844). Artifacts: `.tmp/mobile-audit/*.png` + `report.json`.
 - `npx playwright test full-app-audit` → per-view render/error/overflow/focus/motion. AUDIT:: markers in `.tmp/playwright-results/`.
-- `node scripts/capture-final.mjs` → desktop reference screenshots (`assets/screenshots/*.png`, **regenerated then restored via `git checkout`** to keep the tree clean).
+- `node scripts/capture-final.mjs` → desktop reference screenshots (`assets/marketing/screenshots/*.png`, **regenerated then restored via `git checkout`** to keep the tree clean).
 - Source review of the shared systems and per-view render functions (cited inline).
 
 **Viewports:** narrow 360, iphone 390, phablet 430, landscape 844 (mobile-audit); 1440×900 (desktop capture); 390 + 1280 (full-app-audit).
@@ -132,23 +132,23 @@ Independent families: `.neumo-btn` (`microinteractions.css:32`), `.icon-btn` (`:
 
 Rubric per view: **Layout · Hierarchy · States · Mobile · Theme · A11y.** Screenshot refs are relative to repo root.
 
-### Today  ·  `app.js` renderTodayView  ·  `assets/screenshots/today.png`, `assets/screenshots/mobile-today.png`
+### Today  ·  `app.js` renderTodayView  ·  `assets/marketing/screenshots/today.png`, `assets/marketing/screenshots/mobile-today.png`
 - **States/polish:** top-bar live clock ticks per second (`app.js:1893`, interval `:2201`) — visual noise + a per-second reflow; default seconds OFF. Greeting + rotating subline at `app.js:20008-20019` (deterministic by day-of-month).
 - **Hierarchy:** right-column stat cards (Overdue/Due today/Events/Cards due) *do* have labels (`Sutra.html:486-513`, `app.js:19986`) — readable, but low-emphasis/small; consider larger numerals + clearer grouping.
 - **Mobile:** the "⌘K" button shows a desktop shortcut on phones (`Sutra.html:457`) — hide the kbd hint under the mobile breakpoint. FAB cluster + bottom storage bar crowd the bottom-right (see §5).
 - **A11y:** no app-level h1 (Today leads with h2).
 
-### Timeline  ·  `app.js` renderTimeline  ·  `assets/screenshots/timeline-weekly.png`, `timeline-daily.png`
+### Timeline  ·  `app.js` renderTimeline  ·  `assets/marketing/screenshots/timeline-weekly.png`, `timeline-daily.png`
 - **States:** empty week cells render **both** "0 events" and "No events" (`app.js:60057-60058`) — suppress the count line when `count===0`.
 - **Layout:** day-of-week label appears twice (column header + in-cell corner) — redundant.
 - **Positive:** Day/Week/Month toggle, date picker, "+ Block" are clean; no overflow.
 
-### Notes  ·  `app.js`  ·  `assets/screenshots/notes-editor.png`
+### Notes  ·  `app.js`  ·  `assets/marketing/screenshots/notes-editor.png`
 - **Layout:** the formatting toolbar overflows horizontally (a `>` scroll chevron) — consider grouping/overflow-menu instead of horizontal scroll.
 - **Hierarchy:** clean editor; tags + title well done.
 - **A11y:** verify toolbar buttons expose `aria-pressed`/labels (toolbar uses `.toolbar-btn`, see §3.4 focus mismatch).
 
-### Homework  ·  `features/study/homework.js`  ·  `assets/screenshots/homework.png`
+### Homework  ·  `features/study/homework.js`  ·  `assets/marketing/screenshots/homework.png`
 - **States:** stat cards compute correctly (`homework.js:883-897`) but **"Active Tracks" is mislabeled** — it's `courses.length` (all courses), not active ones; rename to "Tracks" or filter.
 - **Layout:** clean class/extracurricular sections with empty CTAs.
 
@@ -157,15 +157,15 @@ Rubric per view: **Layout · Hierarchy · States · Mobile · Theme · A11y.** S
 - **Mobile a11y:** `.acc-refresh` button shrinks to 17–21px (below 32px floor) — flexbox shrink, no `flex:0 0 auto` (`academic-command-center.css:24`, render `academic-command-center.js:320`).
 - **Positive:** good stat cards + `cw-empty-state` (the richest empty-state pattern).
 
-### All Due  ·  `app.js`  ·  `.tmp/mobile-audit/phablet-alldue.png`, `assets/screenshots/deadline-radar.png`
+### All Due  ·  `app.js`  ·  `.tmp/mobile-audit/phablet-alldue.png`, `assets/marketing/screenshots/deadline-radar.png`
 - Same "All Courses" select-arrow overlap (`app.js:25901`).
 - Clean stat grid (Overdue/Due Today/Due This Week/Exams/Open) and a strong `cw-empty-state` (`app.js:25918`). Deadline Radar modal is clean.
 
-### Testing Hub (apstudy) + Cram Hub  ·  `features/study/ap-study.js`  ·  `assets/screenshots/testing-hub.png`, `.tmp/mobile-audit/phablet-apstudy.png`
+### Testing Hub (apstudy) + Cram Hub  ·  `features/study/ap-study.js`  ·  `assets/marketing/screenshots/testing-hub.png`, `.tmp/mobile-audit/phablet-apstudy.png`
 - **States:** good "Pin an exam to get started" empty state — but it's a **bespoke** next-action object (`app.js:36603-36607`), not the shared empty-state component (see §4 empty-state note).
 - Tab bar (Dashboard/Exams/Review/Cram/Practice/Mistakes/Resources) is the one place with proper `role="tablist"` (`Sutra.html:4449`) — good model to copy.
 
-### Review  ·  `features/study/review.js`  ·  `assets/screenshots/testing-hub-review.png`
+### Review  ·  `features/study/review.js`  ·  `assets/marketing/screenshots/testing-hub-review.png`
 - Well-isolated modal with its own Escape/`Ctrl+Enter` (`review.js:129-132`); honors reduced-motion + `prefers-contrast` in cards. Strong baseline; main risk is its `.is-visible` open-signal differing from older modals (see §3.3).
 
 ### College  ·  `app.js` renderCollegeApp  ·  `.tmp/mobile-audit/phablet-collegeapp.png`
@@ -180,7 +180,7 @@ Rubric per view: **Layout · Hierarchy · States · Mobile · Theme · A11y.** S
 - **States:** empty states use a *third* pattern — bare `business-muted-copy` sentences (`business-workspace.js:1603,884,1255`) with no icon/structure, weaker than `cw-empty-state`.
 - **Mobile:** "Overdue" section clipped by the storage bar (§5).
 
-### Settings  ·  `app.js` renderSettingsView  ·  `assets/screenshots/themes-customization.png`
+### Settings  ·  `app.js` renderSettingsView  ·  `assets/marketing/screenshots/themes-customization.png`
 - **Positive:** the redesigned Settings is the strongest surface — real landmarks (`<main class="cc-main">`, `<nav class="cc-sidebar-nav">`), the `.cc-btn*` system, live preview, category nav. **This is the design quality bar the rest of the app should rise to.**
 - Its slider/field styling is `.cc-page`-scoped, which is why Life's slider misses out — extract the good parts to shared scope.
 
@@ -229,7 +229,7 @@ Severity: **P0** broken/inaccessible · **P1** noticeable polish/consistency · 
 | B24 | P2 | M | `--z-*` ladder; cap `2147483000` | global | `sutra-pro.css:74`; `app.js:58768` |
 | B25 | P2 | S | Consolidate scattered `:root` blocks | global | `styles.css:7,20702` |
 | B26 | P2 | M | Collapse/document `data-theme` vs `data-theme-key` | theming | `app.js:29128,29699` |
-| B27 | P2 | S | Notes toolbar: overflow menu instead of horizontal scroll | Notes | `assets/screenshots/notes-editor.png` |
+| B27 | P2 | S | Notes toolbar: overflow menu instead of horizontal scroll | Notes | `assets/marketing/screenshots/notes-editor.png` |
 | B28 | P2 | S | Install webkit + re-run audit (Safari coverage) | tooling | `npx playwright install webkit` |
 
 ### Environmental note on B01 — RESOLVED
@@ -255,7 +255,7 @@ The jszip deletion was a **working-tree state** (initial `git status` showed `D 
 
 - Mobile audit: `.tmp/mobile-audit/*.png` (28 surfaces × 4 viewports) + `.tmp/mobile-audit/report.json`
 - Full-app audit: `.tmp/playwright-results/` (AUDIT:: JSON markers; failures = jszip 404 + missing webkit binary only)
-- Desktop reference shots: `assets/screenshots/*.png` (regenerated during audit, then restored via `git checkout`)
+- Desktop reference shots: `assets/marketing/screenshots/*.png` (regenerated during audit, then restored via `git checkout`)
 - Tooling: `scripts/mobile-audit.mjs`, `tests/e2e/full-app-audit.spec.mjs`, `scripts/capture-final.mjs`
 - Architecture/load-order reference: `docs/architecture/SUTRA_ARCHITECTURE.md` §11-15
 

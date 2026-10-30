@@ -1,6 +1,359 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
+// Generation is stubbed only in CI fixtures. These workflows spend no credits.
+async function stageWritingProvider(page) {
+  await page.evaluate(() => {
+    window.setWorkspacePreference('assistant.enabled', true, {});
+    window.applyWorkspacePreferences({});
+    window.__qaWritingRequests = [];
+    window.SutraIntelligenceBridge.generateText = async options => {
+      window.__qaWritingRequests.push({ userText: options.userText, attachments: options.attachments });
+      return { ok: true, text: 'This is a corrected sentence.' };
+    };
+  });
+}
+
+async function selectEditorTextAndWait(page, editor, text) {
+  await editor.click();
+  await editor.press('Home');
+  await editor.press('Shift+End');
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(text);
+}
+
+test('Assistant sidebar reserves editor space and moves workspace controls with it', async ({page}) => {
+  await openApp(page); await openNotesView(page); await stageWritingProvider(page);
+  await page.locator('#chatbotBtn').click();
+  await expect(page.locator('body')).toHaveClass(/sutra-assistant-sidebar-open/);
+  await expect(page.locator('#chatbotPanel .sutra-sidebar-avatar .chatbot-mascot')).toBeVisible();
+  await expect(page.locator('#chatbotPanel .sutra-sidebar-avatar .sutra-editing-eyes')).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(()=>{
+    const panel=document.querySelector('#chatbotPanel').getBoundingClientRect();
+    const view=document.querySelector('#view-notes').getBoundingClientRect();
+    return Math.abs(panel.right-innerWidth)<2 && view.right<=panel.left+2;
+  })).toBe(true);
+  const composer = page.locator('#chatbotPanel .chatbot-input');
+  const input = page.locator('#chatInput');
+  await expect.poll(() => input.evaluate(element => {
+    const field = element.getBoundingClientRect(), parent = element.parentElement.getBoundingClientRect();
+    return field.width > parent.width * .8 && field.left >= parent.left && field.right <= parent.right;
+  })).toBe(true);
+  await input.fill('This message should use the full composer width.');
+  await expect(input).toHaveValue('This message should use the full composer width.');
+  await expect(composer).toBeVisible();
+  for(const id of ['feedbackFabBtn','focusModeQuickToggle','storageOptions']) {
+    await expect.poll(()=>page.evaluate(id=>{
+      const control=document.getElementById(id),panel=document.querySelector('#chatbotPanel').getBoundingClientRect();
+      return !control || getComputedStyle(control).display==='none' || control.getBoundingClientRect().right<=panel.left;
+    },id)).toBe(true);
+  }
+  await page.locator('#chatInput').press('Escape');
+  await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
+  await expect(page.locator('#chatbotPanel')).toBeHidden();
+});
+
+test('the full Assistant tab hides the docked sidebar and releases its space', async ({ page }) => {
+  await openApp(page); await openNotesView(page); await stageWritingProvider(page);
+  await page.locator('#chatbotBtn').click();
+  await expect(page.locator('#chatbotPanel')).toBeVisible();
+  const assistantTab = page.locator('#tabAssistantView');
+  if (await assistantTab.isVisible()) {
+    await assistantTab.click();
+  } else {
+    await page.locator('#moreViewsToggle').click();
+    await page.getByRole('menuitem', { name: 'Assistant', exact: true }).click();
+  }
+  await expect(page.locator('#view-assistantview')).toHaveClass(/active/);
+  await expect(page.locator('#chatbotPanel')).toBeHidden();
+  await expect(page.locator('body')).not.toHaveClass(/sutra-assistant-sidebar-open/);
+  await expect.poll(() => page.locator('#view-assistantview').evaluate(view => {
+    return Math.abs(view.getBoundingClientRect().right - document.getElementById('mainContent').getBoundingClientRect().right);
+  })).toBeLessThan(2);
+});
+
+test('inline correction decorations never enter saved note content and clear on Cancel', async ({page}) => {
+  await openApp(page); await openNotesView(page); await createBlankNote(page,'QA inline preview'); await enableEditorV2(page);
+  await stageWritingProvider(page);
+  await page.evaluate(()=>{window.SutraIntelligenceBridge.generateText=async()=>({ok:true,text:'This is a sentence.'});});
+  const editor=page.locator('#editorV2Host .ProseMirror');
+  const before='This are a sentence.'; await editor.fill(before); await selectEditorTextAndWait(page,editor,before);
+  await editor.press('/'); await page.locator('.editor-v2-slash-item').filter({hasText:'/grammar'}).click();
+  const review=page.locator('.sutra-inline-ai-workbench');
+  const send=review.getByRole('button',{name:'Generate draft',exact:true});
+  await expect(send).toBeVisible(); await expect(send).toHaveText('Send');
+  await expect.poll(()=>send.evaluate(button=>button.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44);
+  await send.click();
+  await expect(editor.locator('.sutra-ai-change-new')).toHaveText('is');
+  const html=await page.evaluate(()=>window.SutraNotesEditorV2.getStorageHtml());
+  expect(html).toContain(before); expect(html).not.toContain('sutra-ai-change'); expect(html).not.toContain('This is a sentence.');
+  await review.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(editor.locator('.sutra-ai-change-new')).toHaveCount(0); await expect(editor).toHaveText(before);
+});
+
+test('passage writing command reviews, cancels, applies edited text, and supports Undo', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'QA passage writing');
+  await enableEditorV2(page);
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  const original = 'This are a sentence.';
+  await editor.fill(original);
+  await expect(editor).toHaveText(original);
+  await expect.poll(() => page.evaluate(() => window.SutraNotesEditorV2.getStorageHtml())).toContain(original);
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(original);
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveText(original);
+
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+  await review.getByText('View or edit full draft', {exact:true}).click();
+  await review.getByLabel('Assistant draft — edit before accepting').fill('This is my reviewed sentence.');
+  const request = await page.evaluate(() => window.__qaWritingRequests[0]);
+  expect(JSON.parse(request.userText).passage).toBe(original);
+  expect(request.attachments).toBeUndefined();
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toHaveText('This is my reviewed sentence.');
+  await editor.press('ControlOrMeta+z');
+  await expect(editor).toHaveText(original);
+});
+
+test('empty writing slash command requires an explicit passage and Cancel preserves the query', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'QA explicit passage');
+  await enableEditorV2(page);
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  // Type through ProseMirror so its focused selection and slash-query handler
+  // see the same keyboard input as a student.
+  await editor.click();
+  await page.keyboard.type('/spelling');
+  await expect(editor).toHaveText('/spelling');
+  await expect(page.locator('.editor-v2-slash-menu')).toBeVisible();
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/spelling' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue('');
+  await expect(review.getByRole('button', { name: 'Generate draft', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveText('');
+});
+
+test('caret grammar command preloads note text and applies reviewed blocks without losing paragraph structure', async ({ page }) => {
+  await openApp(page); await openNotesView(page);
+  await createBlankNote(page, 'QA whole-note grammar'); await enableEditorV2(page);
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('This are first.'); await editor.press('End'); await editor.press('Enter');
+  await editor.pressSequentially('These is second.'); await editor.press('Enter');
+  await editor.pressSequentially('/grammar');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue('This are first.\n\nThese is second.');
+  await expect(editor).not.toContainText('/grammar');
+  await expect(review.getByRole('button', {name:'Generate draft',exact:true})).toBeEnabled();
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', {name:'Generate draft',exact:true}).click();
+  await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+  await review.getByRole('button', {name:'Apply',exact:true}).click();
+  await expect(review).toContainText('Keep 2 paragraphs');
+  await review.getByText('View or edit full draft', {exact:true}).click();
+  await review.getByLabel('Assistant draft — edit before accepting').fill('This is first.\n\nThis is second.');
+  await review.getByRole('button', {name:'Apply',exact:true}).click();
+  await expect(editor.locator('p').nth(0)).toHaveText('This is first.');
+  await expect(editor.locator('p').nth(1)).toHaveText('This is second.');
+  await expect(editor).not.toContainText('/grammar');
+  await editor.press('ControlOrMeta+z');
+  await expect(editor).toContainText('This are first.');
+  await expect(editor).toContainText('These is second.');
+});
+
+test('Classic Notes writing command cancels, applies through undo, and persists the undone text after reload', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await enableEditorV2(page);
+  await createBlankNote(page, 'QA Classic writing command');
+  await page.evaluate(() => {
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.applyWorkspacePreferences({});
+  });
+  const editor = page.locator('#editor');
+  await expect(editor).toBeVisible();
+  await stageWritingProvider(page);
+  const original = 'This are a Classic Notes sentence.';
+  await editor.fill(original);
+
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('#slashMenuItems .slash-menu-item').filter({ hasText: '/grammar' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(original);
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveText(original);
+
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('#slashMenuItems .slash-menu-item').filter({ hasText: '/grammar' }).click();
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  const preview = review.getByLabel('Assistant draft — edit before accepting');
+  await expect(preview).toHaveValue('This is a corrected sentence.');
+  await preview.fill('My reviewed Classic Notes sentence.');
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toHaveText('My reviewed Classic Notes sentence.');
+
+  await editor.press('ControlOrMeta+z');
+  await expect(editor).toHaveText(original);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-classic-writing-undo'));
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await openNotesView(page);
+  await expect(page.locator('#pageTitle')).toHaveValue('QA Classic writing command');
+  await expect(page.locator('#editor')).toBeVisible();
+  await expect(page.locator('#editor')).toHaveText(original);
+});
+
+test('full Assistant writing review returns an editable draft to its composer and preserves pending context', async ({ page }) => {
+  await openApp(page);
+  await stageWritingProvider(page);
+  await page.evaluate(() => window.setActiveView('assistantview'));
+  const input = page.locator('#asstInput');
+  const panel = page.locator('#chatbotPanel');
+  await expect(input).toBeVisible();
+  await expect(panel).toHaveCSS('display', 'none');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--assistant-panel-reserve').trim())).toBe('0px');
+
+  await page.locator('#asstCtxBtn').click();
+  await page.locator('.asst-ctx-dropdown-item').filter({ hasText: 'Paste custom text' }).click();
+  const contextText = 'UNRELATED_CONTEXT_SENTINEL';
+  await page.locator('#atelierDialogTextarea').fill(contextText);
+  await page.locator('#atelierDialogConfirm').click();
+  await expect(page.locator('#asstContextBar')).toContainText(contextText);
+
+  const attachment = await page.evaluate(async () => {
+    const file = new File(['ATTACHMENT_SENTINEL'], 'unrelated-writing-context.txt', { type: 'text/plain' });
+    await window.flowAssistant.addAttachmentFromFile(file);
+    return window.flowAssistant.getAttachments().length;
+  });
+  expect(attachment).toBe(1);
+  const messagesBefore = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent()
+    .messages.map(message => ({ role: message.role, content: message.content })));
+
+  const passage = 'This are an explicit Assistant composer passage.';
+  await input.click();
+  await input.fill('/grammar ' + passage);
+  await expect(input).toHaveValue('/grammar ' + passage);
+  await expect(page.locator('#asstSendBtn')).toBeEnabled();
+  await page.locator('#asstSendBtn').click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(passage);
+  await expect(panel).toHaveCSS('display', 'flex');
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => ({
+    panelDisplay: document.getElementById('chatbotPanel').style.display,
+    panelOpen: document.body.classList.contains('assistant-panel-open'),
+    sidebarOpen: document.body.classList.contains('sutra-assistant-sidebar-open'),
+    reserve: getComputedStyle(document.body).getPropertyValue('--assistant-panel-reserve').trim()
+  }))).toEqual({ panelDisplay: 'none', panelOpen: false, sidebarOpen: false, reserve: '0px' });
+  await expect(input).toHaveValue('/grammar ' + passage);
+  await page.locator('#asstSendBtn').click();
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(passage);
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  const preview = review.getByLabel('Assistant draft — edit before accepting');
+  await expect(preview).toHaveValue('This is a corrected sentence.');
+  const reviewedText = 'My editable reviewed Assistant draft.';
+  await preview.fill(reviewedText);
+  const request = await page.evaluate(() => window.__qaWritingRequests[0]);
+  const payload = JSON.parse(request.userText);
+  expect(Object.keys(payload).sort()).toEqual(['instruction', 'operation', 'passage']);
+  expect(payload.operation).toBe('grammar');
+  expect(payload.passage).toBe(passage);
+  expect(request.attachments).toBeUndefined();
+  expect(request.userText).not.toContain(contextText);
+  expect(request.userText).not.toContain('ATTACHMENT_SENTINEL');
+
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(input).toHaveValue(reviewedText);
+  await expect.poll(() => page.evaluate(() => ({
+    panelDisplay: document.getElementById('chatbotPanel').style.display,
+    panelOpen: document.body.classList.contains('assistant-panel-open'),
+    sidebarOpen: document.body.classList.contains('sutra-assistant-sidebar-open'),
+    reserve: getComputedStyle(document.body).getPropertyValue('--assistant-panel-reserve').trim()
+  }))).toEqual({ panelDisplay: 'none', panelOpen: false, sidebarOpen: false, reserve: '0px' });
+  const messagesAfter = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent()
+    .messages.map(message => ({ role: message.role, content: message.content })));
+  expect(messagesAfter).toEqual(messagesBefore);
+  expect(await page.evaluate(() => window.flowAssistant.getAttachments().length)).toBe(1);
+  await expect(page.locator('#asstContextBar')).toContainText(contextText);
+});
+
+test('editing the original note while a writing review is open prevents Apply', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await enableEditorV2(page);
+  await createBlankNote(page, 'QA stale writing source');
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  const original = 'This are the selected source sentence.';
+  await editor.fill(original);
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(original);
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+
+  const newerText = 'A newer source edit must stay untouched.';
+  await editor.fill(newerText);
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toHaveText(newerText);
+  await expect(review).toBeVisible();
+  await expect(review).toContainText('The source note changed');
+  await expect(review.getByRole('button', { name: 'Apply', exact: true })).toBeHidden();
+});
+
+test('Enter consumes grammar immediately and same-note refresh keeps a pending writing request open', async ({ page }) => {
+  await openApp(page); await openNotesView(page); await createBlankNote(page, 'QA grammar refresh'); await enableEditorV2(page);
+  await stageWritingProvider(page);
+  await page.evaluate(() => {
+    window.SutraIntelligenceBridge.generateText = () => new Promise(resolve => { window.__qaResolveGrammar = resolve; });
+  });
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('This are a sentence.'); await editor.press('End'); await editor.press('Enter');
+  await editor.pressSequentially('/grammar');
+  await expect(page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' })).toBeVisible();
+  await editor.press('Enter');
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review).toBeVisible(); await expect(editor).not.toContainText('/grammar');
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__qaResolveGrammar)).toBe('function');
+  await page.evaluate(() => {
+    const api = window.SutraNotesEditorV2;
+    api.setContent(api.getStorageHtml());
+    window.dispatchEvent(new CustomEvent('noteflow:view-changed', { detail: { view: 'notes' } }));
+    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', { detail: { pageId: window.flowAtelier.currentPageId } }));
+    window.__qaResolveGrammar({ ok: true, text: 'This is a sentence.' });
+  });
+  await expect(review).toBeVisible();
+  await expect(review.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toContainText('This are a sentence.'); await expect(editor).not.toContainText('/grammar');
+});
+
 // Modern Notes Editor (TipTap engine, shipped 2026-07-07; enabled by default
 // with editor.editorV2Enabled as a compatibility toggle). Regression coverage:
 //   1. THE bug: typing "1. item" produces ONE ordered-list marker — the typed
@@ -46,9 +399,10 @@ async function openApp(page) {
     typeof window.setWorkspacePreference === 'function' &&
     typeof window.applyWorkspacePreferences === 'function');
   // The static shell and v2 module exist before the async canonical workspace
-  // hydrate completes. Wait through the public durability seam so tests never
+  // hydrate completes. Cross its readiness gate and durability seam so tests never
   // simulate typing into boot defaults that a real user cannot reach beneath
   // the startup overlay.
+  await waitForAppHydrated(page);
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
   await completeOnboarding(page);
 }
@@ -62,6 +416,7 @@ async function openAppForSplitLayout(page) {
     typeof window.flowAtelier.flushAppSaveNow === 'function' &&
     typeof window.setWorkspacePreference === 'function' &&
     typeof window.applyWorkspacePreferences === 'function');
+  await waitForAppHydrated(page);
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
   await completeOnboarding(page);
 }
@@ -405,6 +760,133 @@ test('legacy anchors, math, and checklists survive a v2 round-trip', async ({ pa
   expect(result.checkedPreserved).toBe(true);
 });
 
+test('generated Help keeps its anchors in Modern Editor while same-title notes stay editable', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+
+  const readCanonicalHelp = () => page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const help = hooks.getHelpPageForSpace(hooks.getActiveSpaceId());
+    return help && (help.systemRole === 'help-docs' || help.builtInId === 'help-docs')
+      ? { id: help.id, content: help.content }
+      : null;
+  });
+  const help = await readCanonicalHelp();
+  expect(help && help.id).toBeTruthy();
+  await page.evaluate(id => window.loadPage(id), help.id);
+  const pm = page.locator('#editorV2Host .ProseMirror');
+  const helpRoot = pm.locator('.sutra-help-document');
+  await expect(pm).not.toBeEditable();
+  await expect(pm).toHaveAttribute('aria-readonly', 'true');
+  await expect(helpRoot.locator('h1[id="editorV2Host--help-top"]')).toContainText('Sutra Help & Docs');
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-toc"]')).toContainText('Table of Contents');
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-student-setup"]')).toBeAttached();
+  const tocButton = helpRoot.locator('button.help-anchor-btn[data-editor-anchor="editorV2Host--help-student-setup"]');
+  const backButton = helpRoot.locator('[id="editorV2Host--help-student-setup"]').locator(
+    'xpath=following-sibling::p[.//button[contains(@class,"help-anchor-top-btn")][@data-editor-anchor="editorV2Host--help-top"]][1]//button[@data-editor-anchor="editorV2Host--help-top"]'
+  );
+  await expect(tocButton).toBeVisible();
+  await expect(backButton).toBeAttached();
+
+  const helpAnchorIds = await page.evaluate(() => {
+    const allIds = Array.from(document.querySelectorAll('[id]')).map(element => element.id);
+    return Array.from(document.querySelectorAll('#editorV2Host .ProseMirror .sutra-help-document [id]'))
+      .map(element => ({ id: element.id, count: allIds.filter(id => id === element.id).length }));
+  });
+  expect(helpAnchorIds.length).toBeGreaterThan(0);
+  expect(helpAnchorIds.every(anchor => anchor.count === 1)).toBe(true);
+
+  const headingState = targetId => page.evaluate(id => {
+    const heading = Array.from(document.querySelectorAll('#editorV2Host .ProseMirror .sutra-help-document [id]'))
+      .find(element => element.id === id);
+    if (!heading) return { top: null, visible: false };
+    const top = heading.getBoundingClientRect().top;
+    const toolbar = document.querySelector('.toolbar-wrapper');
+    const style = toolbar && getComputedStyle(toolbar);
+    const rect = toolbar && toolbar.getBoundingClientRect();
+    const toolbarBottom = rect && style.display !== 'none' && style.visibility !== 'hidden' ? rect.bottom : 0;
+    return { top, visible: top >= toolbarBottom && top < window.innerHeight };
+  }, targetId);
+  const expectFocusedHeadingVisible = async targetId => {
+    const heading = helpRoot.locator('[id="' + targetId + '"]');
+    await expect(heading).toBeFocused();
+    await expect.poll(async () => (await headingState(targetId)).visible).toBe(true);
+  };
+  const activate = async (button, mode) => {
+    if (mode === 'mouse') return button.click();
+    await button.focus();
+    await page.keyboard.press('Enter');
+  };
+  for (const mode of ['mouse', 'keyboard']) {
+    const sectionBefore = (await headingState('editorV2Host--help-student-setup')).top;
+    expect(sectionBefore).toBeGreaterThan(page.viewportSize().height);
+    await activate(tocButton, mode);
+    await expectFocusedHeadingVisible('editorV2Host--help-student-setup');
+    expect((await headingState('editorV2Host--help-student-setup')).top).toBeLessThan(sectionBefore - 100);
+    const topBefore = (await headingState('editorV2Host--help-top')).top;
+    await activate(backButton, mode);
+    await expectFocusedHeadingVisible('editorV2Host--help-top');
+    expect((await headingState('editorV2Host--help-top')).top).toBeGreaterThan(topBefore + 100);
+  }
+
+  const savedHelp = await page.evaluate(async id => {
+    window.SutraNotesEditorV2.flushToMirror();
+    const editorHtml = window.SutraNotesEditorV2.getStorageHtml();
+    await window.saveWorkspaceLocally();
+    const help = window.flowAtelier.pages.find(item => item.id === id);
+    return { editorHtml, content: help && help.content };
+  }, help.id);
+  expect(savedHelp.content).toContain('id="top"');
+  expect(savedHelp.content).toContain('id="toc"');
+  expect(savedHelp.content).toContain('id="student-setup"');
+  expect(savedHelp.content).toContain('data-editor-anchor="student-setup"');
+  expect(savedHelp.editorHtml).toContain('id="student-setup"');
+  expect(savedHelp.content).not.toContain('editorV2Host--help-');
+  expect(savedHelp.editorHtml).not.toContain('editorV2Host--help-');
+  expect(savedHelp.editorHtml).not.toContain('sutra-help-document');
+  expect(savedHelp.content).not.toContain('sutra-help-document');
+
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await openNotesView(page);
+  const reloadedHelp = await readCanonicalHelp();
+  expect(reloadedHelp && reloadedHelp.id).toBe(help.id);
+  expect(reloadedHelp.content).toContain('id="student-setup"');
+  expect(reloadedHelp.content).not.toContain('sutra-help-document');
+  await page.evaluate(id => window.loadPage(id), help.id);
+  await expect(helpRoot.locator('h1[id="editorV2Host--help-top"]')).toBeAttached();
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-toc"]')).toBeAttached();
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-student-setup"]')).toBeAttached();
+  await expect(tocButton).toBeVisible();
+
+  const ordinary = await page.evaluate(() => {
+    const page = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace(
+      'Help & Docs', '<h2>Ordinary note</h2><p>Start typing here.</p>'
+    );
+    return { id: page.id, title: page.title };
+  });
+  expect(ordinary.id).not.toBe(help.id);
+  expect(ordinary.title).toBe('Help & Docs');
+  await page.evaluate(id => window.loadPage(id), ordinary.id);
+
+  const ordinaryEditor = page.locator('#editorV2Host .ProseMirror');
+  await expect(ordinaryEditor).toContainText('Start typing here.');
+  await expect(ordinaryEditor).toBeEditable();
+  await expect(ordinaryEditor.locator('.sutra-help-document')).toHaveCount(0);
+  await ordinaryEditor.fill('Ordinary note edit sentinel');
+  await expect(ordinaryEditor).toHaveText('Ordinary note edit sentinel');
+  const savedOrdinary = await page.evaluate(async id => {
+    window.SutraNotesEditorV2.flushToMirror();
+    await window.saveWorkspaceLocally();
+    const note = window.flowAtelier.pages.find(item => item.id === id);
+    return note && note.content;
+  }, ordinary.id);
+  expect(savedOrdinary).toContain('Ordinary note edit sentinel');
+  expect(savedOrdinary).not.toContain('sutra-help-document');
+});
+
 test('toolbar globals drive schema commands when v2 is active', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);
@@ -530,7 +1012,13 @@ test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async
   await page.locator(PM_SELECTOR).click();
   await page.evaluate(() => { window.insertHtmlEmbed(); });
   await expect(page.locator('#htmlEmbedModal')).toHaveClass(/active/);
-  await page.locator('#htmlEmbedModalInput').fill('<section><h2>First embed</h2></section>');
+  const input = page.locator('#htmlEmbedModalInput');
+  // The dialog focuses and moves the caret on its next frame. Let that run
+  // before Playwright replaces the value, particularly on WebKit.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await expect(input).toBeFocused();
+  await input.fill('<section><h2>First embed</h2></section>');
+  await expect(input).toHaveValue('<section><h2>First embed</h2></section>');
   await page.locator('#htmlEmbedModalConfirmBtn').click();
   const embed = page.locator('#editorV2Host .html-embed-block');
   await expect(embed).toHaveCount(1);
@@ -545,8 +1033,11 @@ test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async
 
   await embed.locator('.html-embed-menu-btn').click();
   await embed.locator('[data-html-embed-action="edit"]').click();
-  await expect(page.locator('#htmlEmbedModalInput')).toHaveValue(/First embed/);
-  await page.locator('#htmlEmbedModalInput').fill('<section><h2>Edited embed</h2></section>');
+  await expect(input).toHaveValue(/First embed/);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await expect(input).toBeFocused();
+  await input.fill('<section><h2>Edited embed</h2></section>');
+  await expect(input).toHaveValue('<section><h2>Edited embed</h2></section>');
   await page.locator('#htmlEmbedModalConfirmBtn').click();
   await expect(embed.locator('.html-embed-block-surface h2')).toHaveText('Edited embed');
   const beforeSize = await page.evaluate(() => {
@@ -821,6 +1312,422 @@ test('Split View mounts independent Modern Editor instances', async ({ page }) =
   await expect(secondaryHandle).toHaveCount(0);
 });
 
+test('paired sidebar notes survive unrelated navigation, reload, and explicit unpairing', async ({ page }) => {
+  // This persistence round trip includes the initial boot and two reloads with
+  // workspace hydration before verifying paired and unpaired state.
+  test.setTimeout(120_000);
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'Pair Alpha');
+  await page.locator('#editorV2Host .ProseMirror').fill('Alpha original');
+  await createBlankNote(page, 'Pair Beta');
+  await page.locator('#editorV2Host .ProseMirror').fill('Beta original');
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  const pairSection = page.locator('#notesSidebarPair');
+  await expect(pairSection).toBeVisible();
+  await expect(page.locator('#notesPageTabs')).toHaveCount(0);
+  await expect(pairSection.locator('.page-title-text')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  const pairCells = await pairSection.locator('.notes-sidebar-pair-cell').evaluateAll(cells =>
+    cells.map(cell => { const r = cell.getBoundingClientRect(); return { top: r.top, left: r.left, right: r.right }; }));
+  expect(Math.abs(pairCells[0].top - pairCells[1].top)).toBeLessThan(1);
+  expect(pairCells[0].right).toBeLessThanOrEqual(pairCells[1].left);
+  await expect(page.locator('#pagesList .page-item').filter({ hasText: 'Pair Alpha' })).toBeHidden();
+  await expect(page.locator('#pagesList .page-item').filter({ hasText: 'Pair Beta' })).toBeHidden();
+  const secondaryEditor = page.locator('#editorV2SecondaryHost .ProseMirror');
+  await secondaryEditor.click();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.type('Alpha pending edit');
+  await expect(secondaryEditor).toHaveText('Alpha pending edit');
+  // Creating a page while the secondary pane is active must not replace either member.
+  await createBlankNote(page, 'Separate Gamma');
+  await page.locator('#editorV2Host .ProseMirror').fill('Gamma original');
+  await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
+  await expect(pairSection.locator('.page-title-text')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  await pairSection.getByRole('button', { name: 'Pair Alpha', exact: true }).click();
+  await expect(page.locator('#pageTitle')).toHaveValue('Pair Beta');
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toHaveText('Alpha pending edit');
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Beta original');
+  await page.locator('#pagesList .page-item').filter({ hasText: 'Separate Gamma' }).locator('.page-title-text').click();
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-pair-reload'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  await completeOnboarding(page);
+  await openNotesView(page);
+  await expect(pairSection.locator('.page-title-text')).toHaveText(['Pair Beta', 'Pair Alpha']);
+  await page.locator('#pagesList .page-item').filter({ hasText: 'Separate Gamma' }).locator('.page-title-text').click();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Gamma original');
+  await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
+  await pairSection.getByRole('button', { name: 'Pair Beta', exact: true }).click();
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toHaveText('Alpha pending edit');
+  await pairSection.getByRole('button', { name: 'Unpair Pair Beta', exact: true }).click();
+  await expect(pairSection).toHaveCount(0);
+  await expect(page.locator('#notesPageTabs')).toHaveCount(0);
+  await expect(page.locator('#editorV2SecondaryHost')).toHaveCount(0);
+  await page.locator('#pagesList').getByText('Pair Alpha', { exact: true }).click();
+  await expect(page.locator('#pageTitle')).toHaveValue('Pair Alpha');
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Alpha pending edit');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-unpair-reload'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  await expect(pairSection).toHaveCount(0);
+});
+
+test('a protected paired tab uses the normal main-pane PIN flow without replacing its partner', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'Protected pair member');
+  await page.locator('#editorV2Host .ProseMirror').fill('Protected pair sentinel');
+  const protectedId = await page.evaluate(() => window.flowAtelier.currentPageId);
+  await page.evaluate(async id => {
+    await window.flowAtelier.flushAppSaveNow('e2e-paired-protected-note');
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(id, '4826');
+  }, protectedId);
+  await createBlankNote(page, 'Public pair member');
+  const publicId = await page.evaluate(() => window.flowAtelier.currentPageId);
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  await expect(page.locator('#editorV2SecondaryHost')).toBeHidden();
+  await page.locator('#notesSidebarPair').getByRole('button', { name: 'Protected pair member', exact: true }).click();
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await expect(page.locator('#pageTitle')).toHaveValue('Protected pair member');
+  expect(await page.evaluate(() => window.flowAtelier.getNotesSplitPair())).toEqual({ left: protectedId, right: publicId });
+  await expect(page.locator('#editor')).not.toContainText('Protected pair sentinel');
+  await expect(page.locator('#editorV2Host')).not.toContainText('Protected pair sentinel');
+  await page.locator('#lockScreenPinInput').fill('4826');
+  await page.locator('#lockScreenForm button[type="submit"]').click();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText('Protected pair sentinel');
+  await expect(page.locator('#notesSidebarPair .page-title-text')).toHaveText(['Protected pair member', 'Public pair member']);
+});
+
+test('Classic paired edits flush before unrelated navigation and return to the same pages', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  for (const name of ['Classic Alpha', 'Classic Beta', 'Classic Gamma']) await createBlankNote(page, name);
+  await page.evaluate(() => {
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.loadPage(window.flowAtelier.pages.find(p => p.title === 'Classic Beta').id);
+    document.getElementById('splitNotesToggleBtn').click();
+  });
+  await page.locator('#editorSecondary').fill('Classic secondary edit');
+  await page.locator('#pagesList .page-item').filter({ hasText: 'Classic Gamma' }).locator('.page-title-text').click();
+  await expect(page.locator('#notesEditorContainer')).not.toHaveClass(/split-active/);
+  await page.locator('#notesSidebarPair').getByRole('button', { name: 'Classic Alpha', exact: true }).click();
+  await expect(page.locator('#pageTitle')).toHaveValue('Classic Beta');
+  await expect(page.locator('#editorSecondary')).toHaveText('Classic secondary edit');
+});
+
+test('one keyboard-accessible note menu contains insert and page tools and preserves the caret', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'Unified tools partner');
+  await createBlankNote(page, 'Unified tools');
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('Before');
+  await editor.press('End');
+  const toggle = page.locator('.notes-toolbar-overflow-toggle');
+  await toggle.press('ArrowDown');
+  const menu = page.getByRole('menu', { name: 'Insert and note tools', exact: true });
+  await expect(menu).toBeVisible();
+  await expect(page.locator('#insertMoreBtn')).toBeHidden();
+  await expect(menu.getByRole('menuitem', { name: 'Video', exact: true })).toBeVisible();
+  await expect(menu.locator('#pagesToggleBtn')).toHaveCount(1);
+  await expect(menu.locator('#splitNotesToggleBtn')).toHaveCount(1);
+  await expect(menu.locator('#editorZoomDisplay')).toHaveText('100%');
+  await menu.getByRole('menuitem', { name: 'Page break', exact: true }).click();
+  await expect(editor.locator('.atelier-page-break')).toHaveCount(1);
+  await expect(menu).toBeHidden();
+  await expect(editor).toContainText('Before');
+  await toggle.press('ArrowDown');
+  await page.keyboard.press('End');
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await expect(menu).toBeVisible();
+  await menu.locator('#splitNotesToggleBtn').click();
+  await expect(page.locator('#notesEditorContainer')).toHaveClass(/split-active/);
+  await expect(page.locator('#notesSidebarPair .notes-sidebar-unpair')).toHaveCount(2);
+});
+
+test('Move to space preserves mixed page models, assets, children, PINs, and pins through reload', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  const staged = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const target = hooks.createSpace('Move destination');
+    hooks.switchSpace('default');
+    const folder = hooks.createNoteInActiveSpace('Mixed folder', '');
+    folder.type = 'folder';
+    const note = hooks.createNoteInActiveSpace('Mixed folder::Document', '<p>Document with asset</p>');
+    note.futureMetadata = { retained: true, assetId: 'stable-asset-reference' };
+    note.blocks = [{ id: 'asset-block', type: 'image', src: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' }];
+    const html = window.SutraHTMLPages.createPage('Mixed folder::HTML');
+    html.htmlDocument.source = '<!doctype html><h1>HTML move sentinel</h1>';
+    const slides = window.SutraSlides.createPage('Mixed folder::Slides');
+    const sheets = window.SutraSheets.createPage('Mixed folder::Sheets');
+    const canvas = hooks.createCanvasInActiveSpace('Mixed folder::Canvas');
+    const nested = hooks.createNoteInActiveSpace('Mixed folder::Document::Child', '<p>Nested child</p>');
+    const outsider = hooks.createNoteInActiveSpace('Unrelated source note', '<p>Stay here</p>');
+    await hooks.lockPageWithPin(html.id, '4826');
+    hooks.togglePinPage(html.id, 'default');
+    window.loadPage(folder.id);
+    await window.flowAtelier.flushAppSaveNow('e2e-before-space-move');
+    const members = [note, html, slides, sheets, canvas, nested].map(item => {
+      const copy = JSON.parse(JSON.stringify(item));
+      delete copy.updatedAt;
+      return copy;
+    });
+    return { target: target.id, folder: folder.id, html: html.id, outsider: outsider.id, members };
+  });
+  await page.getByRole('button', { name: 'More actions for Mixed folder', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Move to space', exact: true });
+  await expect(dialog).toContainText('its 6 child pages');
+  await dialog.getByLabel('Destination space').selectOption(staged.target);
+  await dialog.getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.locator('#spacesCurrentName')).toHaveText('Move destination');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-after-space-move'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  const result = await page.evaluate(({ ids, target }) => ({
+    members: ids.map(id => window.flowAtelier.pages.find(item => item.id === id)),
+    outsider: window.flowAtelier.pages.find(item => item.title === 'Unrelated source note'),
+    pins: window.__sutraPublicBetaTestHooks.getPinnedNoteIds(target),
+    sourcePins: window.__sutraPublicBetaTestHooks.getPinnedNoteIds('default')
+  }), { ids: staged.members.map(item => item.id), target: staged.target });
+  await expect(page.locator('#spacesCurrentName')).toHaveText('Move destination');
+  staged.members.forEach((before, index) => {
+    expect(result.members[index]).toMatchObject({ ...before, spaceId: staged.target });
+  });
+  expect(result.outsider.spaceId).toBe('default');
+  expect(result.pins).toContain(staged.html);
+  expect(result.sourcePins).not.toContain(staged.html);
+});
+
+test('Move to space cancels cleanly, refuses duplicate titles, and rebases a nested subtree', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  const staged = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const target = hooks.createSpace('Existing names');
+    hooks.createNoteInActiveSpace('Child', '<p>Destination original</p>');
+    hooks.switchSpace('default');
+    const parent = hooks.createNoteInActiveSpace('Parent', '<p>Source parent</p>');
+    parent.type = 'folder';
+    const child = hooks.createNoteInActiveSpace('Parent::Child', '<p>Source original</p>');
+    const nested = hooks.createNoteInActiveSpace('Parent::Child::Grandchild', '<p>Grandchild original</p>');
+    window.loadPage(child.id);
+    return { target: target.id, child: child.id, nested: nested.id };
+  });
+  const openMove = async () => {
+    await page.getByRole('button', { name: 'More actions for Child', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Move to space', exact: true });
+  };
+  let dialog = await openMove();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).spaceId, staged.child)).toBe('default');
+  dialog = await openMove();
+  await dialog.getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(dialog.getByRole('status')).toContainText('already has a page');
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.child)).toBe('Parent::Child');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'More actions for Child', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.locator('#renamePageName').fill('Parent::Unique child');
+  await page.locator('#renamePageModal').getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#renamePageModal')).toBeHidden();
+  await expect.poll(() => page.evaluate(id => ({
+    currentPageId: window.flowAtelier.currentPageId,
+    title: window.flowAtelier.getPageById(id)?.title
+  }), staged.child)).toEqual({ currentPageId: staged.child, title: 'Parent::Unique child' });
+  const sourceEditor = page.locator('#editorV2Host .ProseMirror');
+  await expect(sourceEditor).toHaveAttribute('contenteditable', 'true');
+  await sourceEditor.click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('Pending source edit');
+  await expect(sourceEditor).toHaveText('Pending source edit');
+  await page.getByRole('button', { name: 'More actions for Unique child', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Move to space', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Move to space', exact: true }).getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Pending source edit');
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.child)).toBe('Unique child');
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).title, staged.nested)).toBe('Unique child::Grandchild');
+});
+
+test('all Create comparison surfaces save through the host without replacing the main note', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  const ids = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const left = hooks.createNoteInActiveSpace('All types main', '<p>Main note stays intact</p>');
+    const html = window.SutraHTMLPages.createPage('All types HTML');
+    const slides = window.SutraSlides.createPage('All types Slides');
+    const sheets = window.SutraSheets.createPage('All types Sheets');
+    const canvas = hooks.createCanvasInActiveSpace('All types Canvas');
+    const folder = hooks.createNoteInActiveSpace('All types folder', '');
+    folder.type = 'folder';
+    hooks.createNoteInActiveSpace('All types folder::Child', '<p>Child content</p>');
+    window.loadPage(left.id);
+    window.flowAtelier.renderPagesList();
+    return { left: left.id, html: html.id, slides: slides.id, sheets: sheets.id, canvas: canvas.id, folder: folder.id };
+  });
+  await page.getByRole('button', { name: 'More actions for All types main', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Split with another page', exact: true }).click();
+  const choice = page.locator('#splitNoteSelect');
+  const frame = page.frameLocator('.create-split-frame');
+  await choice.selectOption(ids.html);
+  await frame.getByRole('tab', { name: 'Code', exact: true }).click();
+  await frame.getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true }).fill('<h1>Split HTML saved</h1>');
+  await choice.selectOption(ids.sheets);
+  await frame.getByRole('gridcell', { name: 'A1', exact: true }).click();
+  await frame.getByRole('textbox', { name: 'Formula or value', exact: true }).fill('=6*7');
+  // Switching away must commit a still-open cell draft.
+  await choice.selectOption(ids.canvas);
+  await frame.getByRole('button', { name: 'Add text', exact: true }).click();
+  await frame.getByRole('textbox', { name: 'Canvas object text', exact: true }).fill('Split Canvas saved');
+  await choice.selectOption(ids.slides);
+  await frame.getByRole('button', { name: 'New slide', exact: true }).click();
+  await expect(frame.getByRole('complementary', { name: 'Slide order', exact: true })).toContainText('2 of 2');
+  await choice.selectOption(ids.folder);
+  await expect(frame.getByRole('button', { name: /Child$/ })).toBeVisible();
+  expect(await page.locator('.create-split-frame').evaluate(el =>
+    el.contentWindow.flowAtelier.pages === window.flowAtelier.pages)).toBe(true);
+  expect(await page.locator('.create-split-frame').evaluate(el =>
+    Array.from(el.contentDocument.scripts).some(script => /src\/core\/app\.js/.test(script.src)))).toBe(false);
+  await expect(page.locator('#editorV2Host .ProseMirror')).toHaveText('Main note stays intact');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-all-create-splits'));
+  await page.reload();
+  await waitForAppHydrated(page);
+  await openNotesView(page);
+  await expect(frame.getByRole('heading', { name: 'Pages in this folder', exact: true })).toBeVisible();
+  await choice.selectOption(ids.sheets);
+  await expect(frame.getByRole('gridcell', { name: 'A1', exact: true })).toHaveText('42');
+  const saved = await page.evaluate(ids => ({
+    html: window.flowAtelier.getPageById(ids.html).htmlDocument.source,
+    canvas: window.flowAtelier.getPageById(ids.canvas).canvas.objects[0].text,
+    slides: window.flowAtelier.getPageById(ids.slides).slides.slides.length
+  }), ids);
+  expect(saved).toEqual({ html: '<h1>Split HTML saved</h1>', canvas: 'Split Canvas saved', slides: 2 });
+});
+
+for (const kind of ['html', 'slides', 'sheets', 'canvas']) {
+  test(`two ${kind} pages keep independent split editor state`, async ({ page }) => {
+    await openApp(page);
+    await openNotesView(page);
+    const ids = await page.evaluate(kind => {
+      const create = title => kind === 'html' ? window.SutraHTMLPages.createPage(title)
+        : kind === 'slides' ? window.SutraSlides.createPage(title)
+          : kind === 'sheets' ? window.SutraSheets.createPage(title)
+            : window.__sutraPublicBetaTestHooks.createCanvasInActiveSpace(title);
+      const left = create('Same type left');
+      const right = create('Same type right');
+      window.flowAtelier.openPageInSplitView(left.id);
+      return { left: left.id, right: right.id };
+    }, kind);
+    await page.locator('#splitNoteSelect').selectOption(ids.right);
+    const frame = page.frameLocator('.create-split-frame');
+    await expect(page.locator('.create-split-frame')).toBeVisible();
+    if (kind === 'canvas') {
+      await page.locator('#canvasEditor').getByRole('button', { name: 'Add text', exact: true }).click();
+      await page.locator('#canvasEditor').getByRole('textbox', { name: 'Canvas object text', exact: true }).fill('Left canvas');
+      await frame.getByRole('button', { name: 'Add text', exact: true }).click();
+      await frame.getByRole('textbox', { name: 'Canvas object text', exact: true }).fill('Right canvas');
+      expect(await page.evaluate(() => window.SutraCanvas.getContext().pageId)).toBe(ids.right);
+      await expect(page.locator('#canvasEditor').getByRole('textbox', { name: 'Canvas object text', exact: true })).toHaveValue('Left canvas');
+      await frame.getByRole('button', { name: 'Undo', exact: true }).click();
+      await frame.getByRole('button', { name: 'Undo', exact: true }).click();
+      expect(await page.evaluate(id => window.flowAtelier.getPageById(id).canvas.objects.length, ids.left)).toBe(1);
+      expect(await page.evaluate(id => window.flowAtelier.getPageById(id).canvas.objects.length, ids.right)).toBe(0);
+    } else if (kind === 'sheets') {
+      await page.locator('#sheetsEditor').getByRole('gridcell', { name: 'A1', exact: true }).click();
+      await page.locator('#sheetsEditor').getByRole('textbox', { name: 'Formula or value', exact: true }).fill('=2*3');
+      await page.locator('#sheetsEditor').getByRole('button', { name: 'Apply formula', exact: true }).click();
+      await frame.getByRole('gridcell', { name: 'A1', exact: true }).click();
+      await frame.getByRole('textbox', { name: 'Formula or value', exact: true }).fill('=3*3');
+      await frame.getByRole('button', { name: 'Apply formula', exact: true }).click();
+      await expect(page.locator('#sheetsEditor').getByRole('gridcell', { name: 'A1', exact: true })).toHaveText('6');
+      await expect(frame.getByRole('gridcell', { name: 'A1', exact: true })).toHaveText('9');
+    } else if (kind === 'slides') {
+      await page.locator('#slidesEditor').getByRole('button', { name: 'New slide', exact: true }).click();
+      await expect(frame.getByRole('complementary', { name: 'Slide order', exact: true })).toContainText('1 of 1');
+      await frame.getByRole('button', { name: 'New slide', exact: true }).click();
+      expect(await page.evaluate(ids => [ids.left, ids.right].map(id => window.flowAtelier.getPageById(id).slides.slides.length), ids)).toEqual([2, 2]);
+    } else {
+      await page.locator('.html-page-editor').getByRole('button', { name: 'Edit source', exact: true }).click();
+      await page.locator('.html-page-editor').getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true }).fill('<p>Left HTML</p>');
+      await frame.getByRole('tab', { name: 'Code', exact: true }).click();
+      await frame.getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true }).fill('<p>Right HTML</p>');
+      expect(await page.evaluate(ids => [ids.left, ids.right].map(id => window.flowAtelier.getPageById(id).htmlDocument.source), ids)).toEqual(['<p>Left HTML</p>', '<p>Right HTML</p>']);
+    }
+    expect(await page.locator('#notesPrimaryPane').evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(200);
+    expect(await page.locator('#notesSecondaryPane').evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(200);
+    await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-same-type-split'));
+    await page.reload();
+    await waitForAppHydrated(page);
+    await openNotesView(page);
+    await expect(page.locator('.create-split-frame')).toBeVisible();
+    expect(await page.evaluate(() => window.flowAtelier.getNotesSplitPair())).toEqual(ids);
+  });
+}
+
+test('a new space split chooses an available partner instead of a stale other-space page', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  const ids = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const oldLeft = hooks.createNoteInActiveSpace('Old space left', '<p>Old left</p>');
+    hooks.createNoteInActiveSpace('Old space right', '<p>Old right</p>');
+    window.flowAtelier.openPageInSplitView(oldLeft.id);
+    const space = hooks.createSpace('Split destination');
+    const left = hooks.createCanvasInActiveSpace('Destination Canvas');
+    const right = window.SutraSheets.createPage('Destination Sheets');
+    window.flowAtelier.openPageInSplitView(left.id);
+    return { left: left.id, right: right.id, space: space.id };
+  });
+  expect(await page.evaluate(() => window.flowAtelier.getNotesSplitPair())).toEqual({ left: ids.left, right: ids.right });
+  await expect(page.frameLocator('.create-split-frame').getByRole('region', { name: 'Sutra Sheets editor', exact: true })).toBeVisible();
+  await expect(page.locator('#splitNoteSelect')).not.toContainText('Old space');
+});
+
+test('locked native split pages never mount until unlocked and relocking disposes the frame', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  const ids = await page.evaluate(async () => {
+    const note = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace('Native lock main', '<p>Public body</p>');
+    const html = window.SutraHTMLPages.createPage('Native lock HTML', { source: '<h1>Private split sentinel</h1>' });
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(html.id, '4826');
+    html.lockAutoLock = 'session';
+    window.flowAtelier.openPageInSplitView(note.id);
+    return { left: note.id, right: html.id };
+  });
+  await page.locator('#splitNoteSelect').selectOption(ids.right);
+  await expect(page.locator('.create-split-frame')).toHaveCount(0);
+  await expect(page.locator('#editorSecondary')).toContainText('PIN-protected');
+  await expect(page.locator('#notesEditorContainer')).not.toContainText('Private split sentinel');
+  await page.locator('#notesSidebarPair').getByRole('button', { name: 'Native lock HTML', exact: true }).click();
+  await page.locator('#lockScreenPinInput').fill('4826');
+  await page.locator('#lockScreenForm button[type="submit"]').click();
+  // PIN verification is asynchronous. Finish unlocking before programmatic
+  // navigation; leaving early correctly discards the stale verification result.
+  await expect.poll(() => page.evaluate(id => window.flowAtelier.isPageContentAuthorized(id), ids.right)).toBe(true);
+  await expect(page.locator('#lockedPageScreen')).toBeHidden();
+  await page.evaluate(id => window.flowAtelier.openPageInSplitView(id), ids.left);
+  await page.locator('#splitNoteSelect').selectOption(ids.right);
+  const frame = page.frameLocator('.create-split-frame');
+  await frame.getByRole('tab', { name: 'Code', exact: true }).click();
+  await expect(frame.getByRole('textbox', { name: 'HTML, CSS, and JavaScript', exact: true })).toHaveValue('<h1>Private split sentinel</h1>');
+  await page.evaluate(id => window.__sutraPublicBetaTestHooks.lockPageNow(id), ids.right);
+  await expect(page.locator('.create-split-frame')).toHaveCount(0);
+  expect(await page.evaluate(id => window.flowAtelier.getPageById(id).htmlDocument.source, ids.right)).toBe('<h1>Private split sentinel</h1>');
+});
+
 test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);
@@ -863,7 +1770,8 @@ test('secondary pane saves its pending edit before switching pages or closing Sp
 });
 
 test('Split View keeps equal panes aligned, independently scrollable, and clear about the active note', async ({ page }, testInfo) => {
-  test.setTimeout(90000);
+  // Modern and Classic panes, eight tags, theme, close, and viewport flows need a cold WebKit budget.
+  test.setTimeout(process.env.CI && testInfo.project.name === 'webkit' ? 180_000 : 120_000);
   await page.setViewportSize({ width: 1600, height: 900 });
   await openAppForSplitLayout(page);
   await enableEditorV2(page);
@@ -1382,6 +2290,46 @@ test('slash menu inserts a block and consumes the trigger text', async ({ page }
   expect(text).not.toContain('/table');
 });
 
+test('slash activation uses the latest query before the menu refreshes', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 fast slash');
+
+  for (const key of ['Enter', 'Tab']) {
+    await page.evaluate(() => window.SutraNotesEditorV2.setContent('<p></p>'));
+    await page.click(PM_SELECTOR);
+    await page.keyboard.type('/t');
+    // This item matches /t, but not /table, proving which menu is displayed.
+    await expect(page.locator('.editor-v2-slash-item').filter({ hasText: 'Bulleted list' })).toBeVisible();
+    await expect(page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' })).toHaveCount(0);
+
+    const result = await page.evaluate(({ sel, key }) => {
+      const pm = document.querySelector(sel);
+      pm.editor.commands.insertContent('able');
+      const menu = document.querySelector('.editor-v2-slash-menu');
+      const before = {
+        text: pm.editor.state.doc.textContent,
+        visible: !!menu && getComputedStyle(menu).display !== 'none',
+        labels: Array.from(menu.querySelectorAll('.editor-v2-slash-item'), item => item.textContent)
+      };
+      // No animation frame can run between the transaction and this keydown.
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      pm.dispatchEvent(event);
+      return { before, prevented: event.defaultPrevented, html: window.SutraNotesEditorV2.getStorageHtml(), text: pm.textContent };
+    }, { sel: PM_SELECTOR, key });
+
+    expect(result.before.text).toBe('/table');
+    expect(result.before.visible).toBe(true);
+    expect(result.before.labels).toContain('Bulleted list');
+    expect(result.before.labels).toContain('Table');
+    expect(result.before.labels).not.toContain('/grammar');
+    expect(result.prevented).toBe(true);
+    expect(result.html).toContain('<table');
+    expect(result.text).not.toContain('/table');
+  }
+});
+
 test('smart paste recovers Google Docs style-based bold/italic as semantics', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);
@@ -1738,15 +2686,24 @@ test('page-break dividers survive legacy style overrides, themes, reload, and pr
   assertVisibleDividers(await readBreakMetrics());
 
   await page.evaluate(() => window.togglePagesMode());
-  const pageModeMetrics = await page.evaluate(() => Array.from(document.querySelectorAll('#editorV2Host .atelier-page-break')).map((node) => ({
-    height: getComputedStyle(node).height,
-    backgroundColor: getComputedStyle(node).backgroundColor,
-    lineDisplay: getComputedStyle(node, '::after').display,
-    labelDisplay: getComputedStyle(node, '::before').display
-  })));
-  expect(pageModeMetrics.every((metric) => metric.height === '60px')).toBe(true);
-  expect(pageModeMetrics.every((metric) => metric.backgroundColor !== 'rgba(0, 0, 0, 0)')).toBe(true);
-  expect(pageModeMetrics.every((metric) => metric.lineDisplay === 'none' && metric.labelDisplay === 'none')).toBe(true);
+  await expect(page.locator('#editorV2Host [data-notes-auto-page-reason="manual"] .notes-page-auto-break-gap')).toHaveCount(3);
+  const pageModeMetrics = await page.evaluate(() => {
+    const editor = document.querySelector('#editorV2Host .ProseMirror');
+    const pane = document.querySelector('#notesPrimaryPane');
+    const paneRect = pane.getBoundingClientRect();
+    const paneScale = pane.offsetHeight ? paneRect.height / pane.offsetHeight : 1;
+    const manualBreaks = editor.querySelectorAll('.atelier-page-break').length;
+    const manualGaps = Array.from(editor.querySelectorAll('[data-notes-auto-page-reason="manual"] .notes-page-auto-break-gap'))
+      .map(gap => ({
+        height: gap.getBoundingClientRect().height / paneScale,
+        backgroundColor: getComputedStyle(gap).backgroundColor
+      }));
+    return { manualBreaks, manualGaps };
+  });
+  expect(pageModeMetrics.manualBreaks).toBe(3);
+  expect(pageModeMetrics.manualGaps).toHaveLength(3);
+  expect(pageModeMetrics.manualGaps.every(metric => Math.abs(metric.height - 60) < 0.5)).toBe(true);
+  expect(pageModeMetrics.manualGaps.every(metric => metric.backgroundColor !== 'rgba(0, 0, 0, 0)')).toBe(true);
   await page.evaluate(() => window.togglePagesMode());
 
   await page.emulateMedia({ media: 'print' });

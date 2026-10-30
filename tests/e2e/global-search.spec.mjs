@@ -252,6 +252,23 @@ test('keyboard navigation moves the selection and Enter opens the page', async (
   await expect(page.locator('#pageTitle')).toHaveValue(/Cell Structure/i);
 });
 
+test('Enter refreshes a pending query before opening a result', async ({ page }) => {
+  await seedWorkspace(page);
+  await searchFor(page, 'biology');
+
+  // Press Enter inside the debounce window. It must not open a stale Biology
+  // result after the input has already changed to a query with no matches.
+  await page.evaluate(() => {
+    const input = document.getElementById('globalSearchInput');
+    input.value = 'zzzznothing';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  });
+
+  await expect(page.locator('#globalSearchPanel')).toBeVisible();
+  await expect(page.locator('#globalSearchResults .global-search-empty')).toContainText('No matches');
+});
+
 test('clicking a result opens the underlying item', async ({ page }) => {
   await seedWorkspace(page);
   await searchFor(page, 'photosynthesis');

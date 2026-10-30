@@ -15,6 +15,21 @@ on:
         required: false
         type: boolean
         default: false
+      regression_only:
+        description: "Diagnostic run of the current CI regressions; does not replace the full release gate"
+        required: false
+        type: boolean
+        default: false
+      regression_filter:
+        description: "Optional Playwright title regex for a diagnostic regression-only run"
+        required: false
+        type: string
+        default: ""
+      regression_repeat_each:
+        description: "Repeat each desktop test in a diagnostic-only run (1-10)"
+        required: false
+        type: string
+        default: "1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -24,15 +39,18 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
+  SUTRA_REGRESSION_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.regression_only && '1' || '0' }}
+  SUTRA_REGRESSION_FILTER: ${{ inputs.regression_filter }}
+  SUTRA_REGRESSION_REPEAT_EACH: ${{ inputs.regression_repeat_each || '1' }}
 
 jobs:
   build-and-check:
     name: Build, static checks, and unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -41,7 +59,7 @@ jobs:
       - run: npm run test:unit
       - run: npm run build:deploy
       - run: npm run check:deploy
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-deploy-${{ github.sha }}
           path: .deploy/
@@ -53,19 +71,19 @@ jobs:
     name: Browser tests (Chromium shard ${{ matrix.shard }}, verified artifact)
     needs: build-and-check
     if: ${{ github.event_name != 'schedule' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: verified-deploy-${{ github.sha }}
           path: .deploy
@@ -84,7 +102,18 @@ jobs:
         # context. Two workers keep the three shards parallel without
         # overloading the shared GitHub runner during cold startup.
         run: |
+          if [ "$SUTRA_REGRESSION_ONLY" = "1" ]; then
+            if ! [[ "$SUTRA_REGRESSION_REPEAT_EACH" =~ ^([1-9]|10)$ ]]; then
+              echo "Diagnostic repeats must be an integer from 1 to 10."
+              exit 1
+            fi
+            mapfile -t specs < tests/ci-regressions.txt
+            npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --repeat-each="$SUTRA_REGRESSION_REPEAT_EACH" --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            exit 0
+          fi
           if [ "${{ matrix.shard }}" = "2" ]; then
+            # Surface paper-boundary regressions before the longer editor shard.
+            npx playwright test tests/e2e/notes-page-layout.spec.mjs --workers=1 --project=chromium
             # Check Homework picker containment before the longer regression shard.
             npx playwright test tests/e2e/notes-sidebar-containment.spec.mjs --grep 'scrolling the Homework class picker' --workers=1 --project=chromium
             # Verify the clean HTML restore baseline before the full shard.
@@ -92,24 +121,27 @@ jobs:
           fi
           if [ "${{ matrix.shard }}" = "3" ]; then
             # Surface cross-tab backup conflicts before the full shard output.
-            npx playwright test tests/e2e/sutra-cloud-providers.spec.mjs --grep 'scheduled backups upload ciphertext once across two tabs and stop when disabled' --workers=1 --project=chromium
+            npx playwright test tests/e2e/sutra-cloud-providers.spec.mjs --grep 'scheduled backup skips a stale tab, uploads from the current tab, and stops when disabled' --workers=1 --project=chromium
           fi
           npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-      - name: Upload failure diagnostics
-        if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - name: Upload failure and retry diagnostics
+        if: ${{ !cancelled() && (failure() || success()) }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-chromium-failure-${{ github.sha }}
-          path: .tmp/playwright-results/
+          name: playwright-chromium-failure-${{ github.sha }}-${{ matrix.shard }}
+          path: |
+            .tmp/playwright-results/**/trace.zip
+            .tmp/playwright-results/**/test-failed-*.png
+            .tmp/playwright-results/**/error-context.md
           if-no-files-found: ignore
           include-hidden-files: true
-          retention-days: 14
+          retention-days: 7
 
   browser-compatibility-matrix:
     name: Browser compatibility (${{ matrix.label }}, verified artifact)
     needs: build-and-check
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_browser_matrix) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       # Sutra is a large classic-script application. Running every engine in one
       # two-worker Playwright process caused independent browser contexts to
@@ -119,30 +151,92 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: Desktop Chrome
+          - label: Desktop Chrome shard 1
             id: chrome
             project_args: --project=chrome
             browser_install: chrome
-          - label: Desktop Firefox
+            shard: 1
+            shard_total: 3
+          - label: Desktop Chrome shard 2
+            id: chrome
+            project_args: --project=chrome
+            browser_install: chrome
+            shard: 2
+            shard_total: 3
+          - label: Desktop Chrome shard 3
+            id: chrome
+            project_args: --project=chrome
+            browser_install: chrome
+            shard: 3
+            shard_total: 3
+          - label: Desktop Firefox shard 1
             id: firefox
             project_args: --project=firefox
             browser_install: firefox
-          - label: Desktop WebKit
+            shard: 1
+            shard_total: 3
+          - label: Desktop Firefox shard 2
+            id: firefox
+            project_args: --project=firefox
+            browser_install: firefox
+            shard: 2
+            shard_total: 3
+          - label: Desktop Firefox shard 3
+            id: firefox
+            project_args: --project=firefox
+            browser_install: firefox
+            shard: 3
+            shard_total: 3
+          - label: Desktop WebKit shard 1
             id: webkit
             project_args: --project=webkit
             browser_install: webkit
+            shard: 1
+            shard_total: 6
+          - label: Desktop WebKit shard 2
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 2
+            shard_total: 6
+          - label: Desktop WebKit shard 3
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 3
+            shard_total: 6
+          - label: Desktop WebKit shard 4
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 4
+            shard_total: 6
+          - label: Desktop WebKit shard 5
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 5
+            shard_total: 6
+          - label: Desktop WebKit shard 6
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 6
+            shard_total: 6
           - label: Responsive devices
             id: responsive
             project_args: --project=mobile-chromium --project=mobile-webkit --project=tablet --project=narrow-desktop
             browser_install: chromium firefox webkit
+            shard: full
+            shard_total: full
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: verified-deploy-${{ github.sha }}
           path: .deploy
@@ -157,13 +251,61 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
           SUTRA_SERVE_ROOT: .deploy
-        run: npx playwright test --workers=1 ${{ matrix.project_args }}
-      - name: Upload failure diagnostics
-        if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        run: |
+          if [ "$SUTRA_REGRESSION_ONLY" = "1" ]; then
+            if ! [[ "$SUTRA_REGRESSION_REPEAT_EACH" =~ ^([1-9]|10)$ ]]; then
+              echo "Diagnostic repeats must be an integer from 1 to 10."
+              exit 1
+            fi
+            mapfile -t specs < tests/ci-regressions.txt
+            if [ "${{ matrix.id }}" = "responsive" ]; then
+              # Keep the responsive smoke check single-pass during desktop flake diagnostics.
+              npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --workers=1 ${{ matrix.project_args }}
+            else
+              npx playwright test "${specs[@]}" --grep "${SUTRA_REGRESSION_FILTER:-.}" --repeat-each="$SUTRA_REGRESSION_REPEAT_EACH" --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
+            fi
+            exit 0
+          fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "2" ]; then
+            # Report Drive prompt/lock regressions before the longer WebKit shard.
+            npx playwright test tests/e2e/google-drive-sync.spec.mjs --grep 'locking Drive sync|Drive restore rejects wrong password' --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "3" ]; then
+            npx playwright test tests/e2e/settings-global-search.spec.mjs --grep '320px' --workers=1 --project=webkit
+            npx playwright test tests/e2e/update-banner-layering.spec.mjs --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "4" ]; then
+            npx playwright test tests/e2e/navigation-clarity.spec.mjs --grep 'header utilities stay clear' --workers=1 --project=webkit
+            npx playwright test tests/e2e/notes-editor-v2.spec.mjs --grep 'full Assistant writing review' --workers=1 --project=webkit
+            npx playwright test tests/e2e/notes-search-wave-b.spec.mjs --grep 'math blocks render from their LaTeX source' --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "5" ]; then
+            npx playwright test tests/e2e/notes-editor-v2.spec.mjs --grep 'passage writing command reviews' --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "webkit" ] && [ "${{ matrix.shard }}" = "6" ]; then
+            npx playwright test tests/e2e/navigation-clarity.spec.mjs --grep 'header utilities stay clear' --workers=1 --project=webkit
+          fi
+          if [ "${{ matrix.id }}" = "firefox" ] && [ "${{ matrix.shard }}" = "3" ]; then
+            npx playwright test tests/e2e/student-editing-controls.spec.mjs --grep 'plain-text paste strips' --workers=1 --project=firefox
+          fi
+          if [ "${{ matrix.id }}" = "firefox" ] && [ "${{ matrix.shard }}" = "2" ]; then
+            npx playwright test tests/e2e/notes-editor-v2.spec.mjs --grep 'passage writing command reviews' --workers=1 --project=firefox
+            npx playwright test tests/e2e/notes-page-layout.spec.mjs --grep 'Pages mode paginates long paragraphs' --workers=1 --project=firefox
+          fi
+          if [ "${{ matrix.id }}" = "responsive" ]; then
+            npx playwright test --workers=1 ${{ matrix.project_args }}
+          else
+            npx playwright test --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/${{ matrix.shard_total }}
+          fi
+      - name: Upload failure and retry diagnostics
+        if: ${{ !cancelled() && (failure() || success()) }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-compatibility-failure-${{ github.sha }}-${{ matrix.id }}
-          path: .tmp/playwright-results/
+          name: playwright-compatibility-failure-${{ github.sha }}-${{ matrix.id }}-${{ matrix.shard }}
+          path: |
+            .tmp/playwright-results/**/trace.zip
+            .tmp/playwright-results/**/test-failed-*.png
+            .tmp/playwright-results/**/error-context.md
           if-no-files-found: ignore
           include-hidden-files: true
-          retention-days: 14
+          retention-days: 7

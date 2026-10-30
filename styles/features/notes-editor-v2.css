@@ -759,3 +759,59 @@ body.notes-pages-mode #view-notes .editor-v2-host .atelier-page-break {
     margin-left: calc(-1 * var(--notes-page-pad-x, 96px));
     margin-right: calc(-1 * var(--notes-page-pad-x, 96px));
 }
+
+/* ProseMirror page-layout widgets contain no document content. The transparent
+   part preserves the paper's bottom margin; only the final segment paints the
+   gray gap between sheets. Inline dimensions account for editor zoom. */
+body.notes-pages-mode #view-notes .notes-pane-primary {
+    --notes-page-auto-gap-height: 60px;
+}
+body.notes-pages-mode #view-notes .editor-v2-host .ProseMirror .notes-page-auto-break {
+    position: relative;
+    display: block;
+    width: auto;
+    box-sizing: border-box;
+    clear: both;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    line-height: 0;
+    background: transparent;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+body.notes-pages-mode #view-notes .editor-v2-host .notes-page-auto-break-gap {
+    position: absolute;
+    top: var(--notes-auto-gap-top, 0);
+    right: 0;
+    left: 0;
+    height: var(--notes-auto-gap-height, 60px);
+    box-sizing: border-box;
+    background: var(--notes-pages-bg, #dfe1e5);
+    border-top: 1px solid rgba(0, 0, 0, 0.09);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.09);
+    box-shadow:
+        inset 0 6px 10px -4px rgba(0, 0, 0, 0.10),
+        inset 0 -6px 10px -4px rgba(0, 0, 0, 0.10);
+    pointer-events: none;
+}
+[data-theme="dark"] body.notes-pages-mode #view-notes .editor-v2-host .notes-page-auto-break-gap {
+    border-top-color: rgba(255, 255, 255, 0.07);
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+    box-shadow:
+        inset 0 6px 10px -4px rgba(0, 0, 0, 0.30),
+        inset 0 -6px 10px -4px rgba(0, 0, 0, 0.30);
+}
+@media (max-width: 640px) {
+    body.notes-pages-mode #view-notes .notes-pane-primary {
+        --notes-page-auto-gap-height: 40px;
+    }
+}
+/* Generated Help retains native navigation inside its read-only atom. */
+.editor-v2-host .sutra-help-document .help-anchor-btn {
+    min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
+    text-align: start;
+}

@@ -126,6 +126,7 @@ test('imports that omit generated Help restore one canonical page per space imme
 test('imports and assistant-created notes route to the active space and round-trip', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('approved_actions');
     const hooks = window.__sutraPublicBetaTestHooks;
     const spaceA = hooks.createSpace('QA Space A');
     const spaceB = hooks.createSpace('QA Space B');
@@ -135,7 +136,7 @@ test('imports and assistant-created notes route to the active space and round-tr
       type: 'create_page',
       title: 'Assistant Active Space QA',
       body: '# Assistant Active Space QA'
-    });
+    }, { reviewed: true });
     const before = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     window.deserializeWorkspace(before);
     const after = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
@@ -305,6 +306,7 @@ test('nested page rows expose non-interactive indentation guides across rerender
 test('Canvas pages are space-scoped, editable, searchable, assistant-bounded, and persistent', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(async () => {
+    window.SutraAssistantPermissions.setMode('approved_actions');
     const hooks = window.__sutraPublicBetaTestHooks;
     const space = hooks.createSpace('QA Canvas Space');
     const linkedNote = hooks.createNoteInActiveSpace('Linked Canvas Note', '<p>Linked note body for preview.</p>');
@@ -330,7 +332,7 @@ test('Canvas pages are space-scoped, editable, searchable, assistant-bounded, an
     const exportFns = ['exportImage', 'exportPdf', 'exportModel'].every(name => typeof api[name] === 'function');
     const exportModel = api.exportJson();
     hooks.togglePinPage(canvasPage.id, space.id);
-    const assistantAction = window.flowAssistant.applyAction({ type: 'canvas_add_sticky', text: 'Assistant proposed card' });
+    const assistantAction = window.flowAssistant.applyAction({ type: 'canvas_add_sticky', text: 'Assistant proposed card' }, { reviewed: true });
     const canvasActionsHighRisk = window.flowAssistant.ACTION_CATALOG
       .filter(item => String(item.type || '').startsWith('canvas_'))
       .every(item => item.risk === 'high');

@@ -353,7 +353,7 @@ test('Assistant Action Review Center blocks high-risk batch actions and search s
   });
   expect(search.spectrometer.resources.some((item) => /Spectrometer/i.test(item.title))).toBeTruthy();
   expect(search.spectrometer.assistant.some((item) => /spectrometer/i.test(item.title))).toBeTruthy();
-  expect(search.backup.settings.some((item) => /Data & backups/i.test(item.title))).toBeTruthy();
+  expect(search.backup.settings.some((item) => /Data & Backup/i.test(item.context))).toBeTruthy();
   expect(search.momentum.review.some((item) => /Spectrometer/i.test(item.title))).toBeTruthy();
 });
 

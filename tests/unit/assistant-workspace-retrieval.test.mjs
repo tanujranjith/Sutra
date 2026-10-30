@@ -1,0 +1,294 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { createRequire } from 'node:module';
+import { extractFunction } from '../helpers/extract-function.mjs';
+
+const source = readFileSync(new URL('../../src/features/assistant/flow-assistant.js', import.meta.url), 'utf8');
+const privacy = createRequire(import.meta.url)('../../src/features/assistant/assistant-permissions.js');
+const record = (type, id, title, extra = {}) => ({ type, id, key: type + ':' + id, title, text: title, status: 'open', dates: {}, privacy: {}, metadata: {}, ...extra });
+function selector(records, permissions = { mode: 'read_only', areas: {} }, memoryMode = 'stateless', courseHub = null) {
+  privacy.configure({ getPermissions: () => permissions });
+  return new Function('window', 'truncate', 'getChatMemoryMode', extractFunction(source, 'selectRelevantWorkspaceContext').body + ';return selectRelevantWorkspaceContext;')({
+    SutraWorkspaceEntityRegistry: { collectSearchable: () => records }, SutraAssistantPrivacy: privacy, courseHub
+  }, (text, limit) => String(text || '').slice(0, limit), () => memoryMode);
+}
+
+test('visible and explicitly scoped notes survive indirect writing questions without retaining unrelated last-opened notes', () => {
+  const apply = new Function('selectRelevantWorkspaceContext', extractFunction(source, 'applyRelevantWorkspaceContext').body + ';return applyRelevantWorkspaceContext;')(() => ({ workspaceOverview: [] }));
+  const note = { id: 'vt4', title: 'VT #4', excerpt: 'My supplement text' };
+  assert.equal(apply({ depth: 'workspace', view: 'notes', activeNote: note }, 'do you like my supplement?').activeNote, note);
+  assert.equal(apply({ depth: 'workspace', view: 'assistantview', activeNote: note }, 'revise it', { scope: { type: 'note', noteId: 'vt4' } }).activeNote, note);
+  assert.equal(apply({ depth: 'workspace', view: 'home', activeNote: note }, 'what is due tomorrow?').activeNote, undefined);
+});
+
+test('exam dates, task URLs and exact registry citations survive selective retrieval', () => {
+  const result = selector([
+    record('testing_exam', 'sat', 'SAT', { dates: { due: '2026-12-05' } }),
+    record('homework', 'robotics', 'Robotics sensor demo', { text: 'Sensor demo notes edited after reopening', metadata: { taskNotes: 'Sensor demo notes edited after reopening', referenceUrl: 'https://example.com/robotics' } })
+  ])('What is my SAT date and the notes and Reference URL for my Robotics sensor demo task?');
+  assert.equal(result.workspaceLearning[0].dueDate, '2026-12-05');
+  assert.equal(result.homework[0].referenceUrl, 'https://example.com/robotics');
+  assert.equal(result.homework[0].notes, 'Sensor demo notes edited after reopening');
+  assert.equal(result.homework[0].citationUrl, 'sutra://entity/homework%3Arobotics');
+});
+
+test('task follow-up uses preceding user question only in stateful mode', () => {
+  const records = [record('homework', 'robotics', 'Robotics sensor demo', { metadata: { referenceUrl: 'https://example.com/robotics' } })];
+  const options = { conversation: [
+    { role: 'user', content: 'What are my Robotics sensor demo notes?' },
+    { role: 'assistant', content: 'Invented unrelated target' }
+  ] };
+  assert.equal(selector(records, undefined, 'stateful')('What is its Reference URL?', options).homework[0].id, 'robotics');
+  assert.equal(selector(records)('What is its Reference URL?', options).homework, undefined);
+});
+
+test('each question replaces previous cross-workspace selections rather than appending stale sources', () => {
+  const select = selector([record('homework', 'robotics', 'Robotics demo', { metadata: { taskNotes: 'Blue sensor' } })]);
+  const apply = new Function('selectRelevantWorkspaceContext', extractFunction(source, 'applyRelevantWorkspaceContext').body + ';return applyRelevantWorkspaceContext;')(select);
+  const ctx = apply({ depth: 'workspace', view: 'assistantview', workspaceLearning: [{ id: 'old-exam' }], workspacePlanning: [{ id: 'old-task' }] }, 'Robotics task notes');
+  assert.equal(ctx.homework[0].notes, 'Blue sensor');
+  assert.equal(ctx.workspaceLearning, undefined);
+  assert.equal(ctx.workspacePlanning, undefined);
+});
+
+test('a named task-details question excludes incidental shared-prefix records and unrelated notes searches', () => {
+  const result = selector([
+    record('homework', 'robotics', 'QA Robotics prepare sensor demo', { metadata: { taskNotes: 'Use blue sensor' } }),
+    record('homework', 'chem', 'QA Chemistry worksheet'),
+    record('course', 'course', 'QA Robotics'),
+    record('life_record', 'life', 'QA Goal')
+  ])('What are the saved notes for my QA Robotics sensor demo task? One short sentence; cite the task.');
+  assert.deepEqual(result.homework.map(row => row.id), ['robotics']);
+  assert.equal(result.workspaceCourses, undefined);
+  assert.equal(result.workspaceRetrieval.taskDetailsOnly, true);
+});
+
+test('personal saved-data questions cannot be intercepted by product help', () => {
+  let opened = false;
+  let handedOffQuestion = '';
+  const route = new Function('window', extractFunction(source, 'routeProductKnowledge').body + ';return routeProductKnowledge;')({
+    SutraProductKnowledge: { answer: () => ({ entry: { id: 'notes' } }) },
+    SutraLocalHelp: { nodeIdForKnowledge: () => 'notes', open: (_node, options) => { opened = true; handedOffQuestion = options.originalQuestion; return true; } }
+  });
+  const question = 'What is my SAT date and the saved notes for my Robotics task?';
+  assert.equal(route(question, question.toLowerCase()), null);
+  assert.equal(opened, false);
+  const productQuestion = 'How do I use notes in my classes?';
+  assert.equal(route(productQuestion, productQuestion.toLowerCase()).handled, true);
+  assert.equal(handedOffQuestion, productQuestion);
+});
+
+test('personal class-list questions bypass product-help routing', () => {
+  let productLookups = 0;
+  let opened = false;
+  const route = new Function('window', extractFunction(source, 'routeProductKnowledge').body + ';return routeProductKnowledge;')({
+    SutraProductKnowledge: { answer: () => { productLookups += 1; return { entry: { id: 'feature-tour' } }; } },
+    SutraLocalHelp: { nodeIdForKnowledge: () => 'feature-tour', open: () => { opened = true; return true; } }
+  });
+  const questions = [
+    'Can you list all the classes im taking?',
+    'What courses am I enrolled in?',
+    'Which classes do I have?'
+  ];
+
+  for (const question of questions) {
+    assert.equal(route(question, question.toLowerCase()), null, question);
+  }
+  assert.equal(productLookups, 0, 'personal class-list requests should not be scored as product help');
+  assert.equal(opened, false, 'personal class-list requests should not open a Local Help card');
+});
+
+test('class-list retrieval selects active classes, AP courses, and Homework course rows only', () => {
+  const records = [
+    record('course', 'chemistry', 'Chemistry', { text: 'Chemistry', status: 'active' }),
+    record('course', 'ap-biology', 'AP Biology', { text: 'Biology', status: 'active' }),
+    record('course', 'homework-algebra', 'Algebra II', { text: 'Algebra II', status: 'active', metadata: { source: 'homework', courseType: 'class' } }),
+    record('course', 'robotics-activity', 'Robotics', { text: 'Robotics', status: 'active' }),
+    record('course', 'homework-activity', 'Art Club', { text: 'Art Club', status: 'active', metadata: { source: 'homework', courseType: 'misc' } }),
+    record('course', 'archived-history', 'History', { text: 'History', status: 'archived' }),
+    record('homework', 'chem-lab', 'Chemistry lab', { courseId: 'chemistry' }),
+    record('course_file', 'chem-syllabus', 'Chemistry syllabus'),
+    record('task', 'study-chemistry', 'Study chemistry')
+  ];
+  const courseHub = {
+    getCourses: options => {
+      assert.deepEqual(options, { filter: 'active' });
+      return [
+        { id: 'chemistry', type: 'class' },
+        { id: 'ap-biology', type: 'ap' },
+        { id: 'robotics-activity', type: 'activity' }
+      ];
+    }
+  };
+  const result = selector(records, undefined, 'stateless', courseHub)('Can you list all the classes im taking?');
+
+  assert.deepEqual(result.workspaceCourses.map(row => row.id).sort(), ['ap-biology', 'chemistry', 'homework-algebra']);
+  assert.deepEqual(result.workspaceCourses.filter(row => row.courseType).map(row => row.courseType).sort(), ['ap', 'class', 'class']);
+  assert.equal(result.workspacePlanning, undefined);
+  assert.equal(result.workspaceRetrieval.classListOnly, true);
+  assert.equal(result.workspaceRetrieval.selectedCount, 3);
+  assert.equal(result.workspaceRetrieval.limit, 40);
+});
+
+test('class-list retrieval respects denied Courses access before reading Course Hub', () => {
+  let courseHubReads = 0;
+  const result = selector(
+    [record('course', 'chemistry', 'Chemistry', { status: 'active' })],
+    { mode: 'read_only', areas: { courses: 'denied' } },
+    'stateless',
+    { getCourses: () => { courseHubReads += 1; return [{ id: 'chemistry', type: 'class' }]; } }
+  )('Can you list all the classes im taking?');
+
+  assert.equal(result.workspaceCourses, undefined);
+  assert.equal(result.workspaceRetrieval.classListOnly, true);
+  assert.equal(courseHubReads, 0);
+});
+
+test('class-list retrieval reports its bound when more than forty course rows match', () => {
+  const records = Array.from({ length: 45 }, (_, i) => record('course', 'course-' + i, 'Course ' + i, { status: 'active' }));
+  const result = selector(records)('Can you list all the classes im taking?');
+
+  assert.equal(result.workspaceCourses.length, 40);
+  assert.equal(result.workspaceRetrieval.matchedCount, 45);
+  assert.equal(result.workspaceRetrieval.selectedCount, 40);
+  assert.equal(result.workspaceRetrieval.limit, 40);
+  assert.equal(result.workspaceRetrieval.classListOnly, true);
+});
+
+test('Local Help provider handoff stays in the full chat composer', () => {
+  let sentSurface;
+  const input = { value: '', dispatchEvent() {}, focus() {} };
+  const ask = new Function('document', 'window', 'Event', 'pendingHelpProviderPrompt', extractFunction(source, 'askFlow').body + ';return askFlow;')(
+    { getElementById: id => id === 'asstInput' ? input : null },
+    { SutraAssistantConversationController: { send: surface => { sentSurface = surface; } } },
+    class Event {}, ''
+  );
+  ask('How do I use notes?', { send: true, nodeId: 'notes', messagesHost: { id: 'asstMessages' } });
+  assert.equal(input.value, 'How do I use notes?');
+  assert.equal(sentSurface, 'full');
+});
+
+test('reading exam facts does not infer a status-changing proposal from quoted notes', () => {
+  const infer = new Function('window', 'truncate', extractFunction(source, 'inferExamStatusFromReply').body + ';return inferExamStatusFromReply;')({
+    getTestingHubAssistantSummary: () => ({ exams: [{ id: 'sat', name: 'SAT', taken: false }] })
+  }, text => text);
+  const reply = 'Your SAT test date is December 5 as listed in the record; your task notes were updated.';
+  assert.deepEqual(infer(reply, { userText: 'What is my SAT date and my task notes?' }), []);
+  assert.deepEqual(infer('Your SAT test is completed.', { userText: 'Which tests are completed?' }), []);
+  assert.equal(infer('I can mark SAT as taken.', { userText: 'Mark SAT as taken' })[0].type, 'update_exam_status');
+});
+
+test('to-do retrieval includes undated and distant low-priority work across stores', () => {
+  const result = selector([
+    record('task', 'undated', 'Clean locker'),
+    record('task', 'distant', 'History project', { dates: { due: '2099-12-01' }, metadata: { priority: 'low' } }),
+    record('homework', 'assignment', 'Biology worksheet'),
+    record('task', 'finished', 'Completed task', { status: 'completed' }),
+    record('college_record', 'unrelated', 'University visit')
+  ])("what's in my to-do list?");
+  assert.deepEqual(result.tasks.map(row => row.id).sort(), ['distant', 'undated']);
+  assert.equal(result.homework[0].id, 'assignment');
+  assert.equal(result.workspaceCollege, undefined);
+});
+
+test('relevant content can be found beyond the first bounded summary in any registered area', () => {
+  const records = Array.from({ length: 80 }, (_, i) => record('task', 'task-' + i, 'Ordinary task ' + i));
+  records.push(record('course_file', 'source', 'Orchid laboratory guide', { text: 'The Orchid protocol uses three violet cards.' }));
+  const result = selector(records)('Explain the Orchid protocol');
+  assert.equal(result.workspaceCourses[0].id, 'source');
+  assert.equal(result.tasks, undefined);
+  assert.equal(result.workspaceRetrieval.selectedCount, 1);
+});
+
+test('conversational task summaries retrieve work without matching request verbs against task titles', () => {
+  const select = selector([record('task', 'planner', 'Clean locker'), record('homework', 'assignment', 'Biology worksheet'), record('college_record', 'unrelated', 'University visit')]);
+  for (const query of ['can u summarize my todos', 'check my homework', 'could you please summarise my to-dos', 'show all my tasks']) {
+    const context = select(query);
+    assert.equal(context.tasks[0].id, 'planner', query);
+    assert.equal(context.homework[0].id, 'assignment', query);
+    assert.equal(context.workspaceCollege, undefined, query);
+  }
+  assert.equal(select('can u summarize my biology homework').tasks, undefined);
+});
+
+test('irrelevant workspaces and a greeting do not create broad context dumps', () => {
+  const select = selector([record('task', 'task', 'Clean locker'), record('business_record', 'project', 'Client invoice'), record('life_record', 'goal', 'Read a book')]);
+  assert.deepEqual(Object.keys(select('hello')).sort(), ['workspaceRetrieval']);
+  assert.equal(select('Tell me about the book').workspaceLife[0].id, 'goal');
+  assert.equal(select('Tell me about the book').tasks, undefined);
+});
+
+test('asking about one homework topic does not attach every task', () => {
+  const records = Array.from({ length: 60 }, (_, i) => record('task', 'task-' + i, 'Ordinary task ' + i));
+  records.push(record('homework', 'biology', 'Biology worksheet'));
+  const result = selector(records)('show my biology homework');
+  assert.equal(result.homework[0].id, 'biology');
+  assert.equal(result.tasks, undefined);
+  assert.equal(result.workspaceRetrieval.selectedCount, 1);
+});
+
+test('search obeys denied areas, sensitive flags, private locks, and source exclusions', () => {
+  const records = [
+    record('task', 'denied', 'Orchid task'),
+    record('college_record', 'cost', 'Orchid tuition', { metadata: { collection: 'applicationCosts' } }),
+    record('life_record', 'wellness', 'Orchid mood', { metadata: { domain: 'wellness' } }),
+    record('course_file', 'locked', 'Orchid private', { privacy: { locked: true } }),
+    record('course_file', 'excluded', 'Orchid excluded'),
+    record('course_file', 'allowed', 'Orchid course')
+  ];
+  const result = selector(records, { mode: 'read_only', areas: { planning: 'denied' } })('Orchid', { conversationScope: { excludedSourceIds: ['course_file:excluded'] } });
+  assert.deepEqual(result.workspaceCourses.map(row => row.id), ['allowed']);
+  assert.equal(result.tasks, undefined);
+  assert.equal(result.workspaceCollege, undefined);
+  assert.equal(result.workspaceLife, undefined);
+  const gated = privacy.filterContext({ workspaceCourses: result.workspaceCourses, workspacePlanning: [{ id: 'denied' }] });
+  assert.equal(gated.workspacePlanning, undefined);
+  assert.equal(gated.workspaceCourses[0].id, 'allowed');
+});
+
+test('large task requests report a limit rather than pretending the shortlist is complete', () => {
+  const result = selector(Array.from({ length: 60 }, (_, i) => record('task', 'id-' + i, 'Task ' + i)))('show my tasks');
+  assert.equal(result.tasks.length, 40);
+  assert.equal(result.workspaceRetrieval.matchedCount, 60);
+  assert.equal(result.workspaceRetrieval.selectedCount, 40);
+});
+
+test('denied Notes access is identified separately from permitted task retrieval', () => {
+  const select = selector([record('task', 'planner', 'Clean locker')], { mode: 'read_only', areas: { notes: 'denied' } });
+  const retrieve = new Function('window', 'scopedAssistantContextOptions', 'currentLockedPageAccessIds',
+    extractFunction(source, 'retrieveNoteSources').body + ';return retrieveNoteSources;')({
+      SutraAssistantPrivacy: privacy,
+      SutraNotesKnowledgeCore: { buildIndex() {}, search() {} }
+    }, options => options, () => []);
+  const notes = retrieve('check my homework');
+  assert.equal(notes.evidenceStatus, 'permission_required');
+  assert.equal(notes.scope.area, 'notes');
+  assert.equal(select('check my homework').tasks[0].id, 'planner');
+});
+
+test('the local to-do answer reads canonical planner and Homework rows without switching views', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const answer = new Function('window', 'listOpenWorkspaceTasks', extractFunction(source, 'tryReadTodoList').body + ';return tryReadTodoList;')(
+    { SutraAssistantPrivacy: privacy }, () => [
+      { store: 'planner', id: 'planner', title: 'Clean locker', completed: false },
+      { store: 'homework', id: 'homework', title: 'Biology worksheet', completed: false },
+      { store: 'planner', id: 'done', title: 'Finished', completed: true }
+    ]);
+  assert.match(answer("what's in my to-do list?").message, /2 open items/);
+  assert.match(answer("what's in my to-do list?").message, /sutra:\/\/homework\/homework/);
+  assert.ok(!answer("what's in my to-do list?").message.includes('Finished'));
+  for (const query of ['can u summarize my todos', 'check my homework', 'could you please summarise my to-dos']) {
+    assert.match(answer(query).message, /Clean locker/, query);
+    assert.match(answer(query).message, /Biology worksheet/, query);
+    assert.equal(answer(query).source, 'local', query);
+  }
+  assert.equal(answer('can u summarize my biology homework'), null);
+  assert.equal(answer('check off my homework'), null);
+  assert.equal(answer('delete my tasks'), null);
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { planning: 'denied' } }) });
+  assert.match(answer("what's in my to-do list?").message, /access is off/);
+  assert.equal(answer('check my homework').grounding.scope.area, 'planning');
+  assert.equal(answer('can u summarize my todos').grounding.evidenceStatus, 'permission_required');
+  assert.equal(answer('Explain photosynthesis'), null);
+});

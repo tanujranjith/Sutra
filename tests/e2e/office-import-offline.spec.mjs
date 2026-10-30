@@ -19,7 +19,7 @@ test('a fresh installed app can import DOCX and XLSX after going offline', async
     const names = await caches.keys();
     const cache = await caches.open(names.find((name) => name.startsWith('sutra-cache-')));
     const docx = await cache.match('/assets/vendor/office/mammoth.browser.min.js?v=1.8.0');
-    const xlsx = await cache.match('/assets/vendor/office/xlsx.full.min.js?v=0.18.5');
+    const xlsx = await cache.match('/assets/vendor/office/xlsx.full.min.js?v=0.20.3');
 
     const zip = new window.JSZip();
     zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');

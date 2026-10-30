@@ -12,8 +12,8 @@
  *   - leftover Private-Use-Area icon-font escapes in CSS `content:` (broken once
  *     the icon font is gone -- empty glyph boxes)
  *
- * A minimal, justified allowlist covers intentional mojibake (the page-icon
- * migration map). Exits non-zero on any unexplained finding.
+ * A minimal, justified allowlist covers intentional encoding examples in
+ * narrowly bounded source regions. Exits non-zero on any unexplained finding.
  *
  * This file is intentionally pure-ASCII (defects are expressed via char codes /
  * \uXXXX escapes) so it passes its own scan.
@@ -55,6 +55,18 @@ const ALLOW_REGIONS = [
     start: 'const PAGE_ICON_MOJIBAKE_MAP = Object.freeze({',
     end: '});',
     reason: 'Intentional mojibake->clean-icon migration map; keys must stay corrupted to match contaminated stored data.',
+  },
+  {
+    file: 'src/features/workspace/help-docs-refresh.js',
+    start: "html = html.replaceAll('Customization (Custom CSS ",
+    end: " Safe Mode)',",
+    reason: 'Intentional double-escaped built-in label matched to repair generated Help HTML.',
+  },
+  {
+    file: 'tests/unit/student-security-boundaries.test.mjs',
+    start: '  assert.equal(context.escape(',
+    end: "quot;');",
+    reason: 'Intentional assertion that literal entity text is escaped again rather than interpreted.',
   },
 ];
 

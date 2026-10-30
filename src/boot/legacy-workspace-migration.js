@@ -5,6 +5,11 @@
     'use strict';
 
     if (!global || !global.SutraWorkspaceDB || typeof global.SutraWorkspaceDB.create !== 'function') return;
+    // The boot migration runs before app.js, but after the coordinator script.
+    // It uses the same lock as ordinary root commits and closes this private
+    // coordinator as soon as the one-time migration check finishes.
+    if (!global.SutraWorkspaceCoordinator || typeof global.SutraWorkspaceCoordinator.create !== 'function'
+        || typeof global.SutraWorkspaceCoordinator.hashRecord !== 'function') return;
     // A verified device revocation must survive reload without recreating an
     // empty canonical database. The user must explicitly clear the terminal
     // guard and start fresh before any recovery adapter touches IndexedDB.
@@ -80,6 +85,41 @@
         'operatingManual.preferredStudyTimes', 'pinnedPages.life', 'pinnedPages.collegeapp',
         'pinnedPages.notesBySpace'
     ];
+    // These maps are materialized by ordinary workspace reads. Their empty
+    // default records must not make a fresh or deliberately cleared workspace
+    // look meaningful. Keep unrecognized fields conservative for forward
+    // compatibility with newer day-state schemas.
+    const DAY_STATE_DEFAULTS = Object.freeze({
+        'habitTracker.dayStates': Object.freeze({ completedHabitIds: [] }),
+        'streaks.dayStates': Object.freeze({
+            committedTaskIds: [],
+            completedTaskIds: [],
+            freezeUsed: false
+        })
+    });
+    const LIFE_WORKSPACE_FIELDS = new Set([
+        'onboardingSeeded', 'goals', 'habits', 'habitCompletions', 'habitExcused', 'skills',
+        'fitness', 'calories', 'books', 'spending', 'spendingBudgets', 'recurringExpenses',
+        'journals', 'sleepTracker', 'wellness'
+    ]);
+    // Mirror getDefaultLifeSleepTracker() and getDefaultWellnessBreathingPrefs()
+    // in app.js; these generated defaults must not count as saved user data.
+    const LIFE_SLEEP_TRACKER_DEFAULTS = Object.freeze({ targetSleepMinutes: 8 * 60, entries: [] });
+    const LIFE_SLEEP_TRACKER_FIELDS = new Set(Object.keys(LIFE_SLEEP_TRACKER_DEFAULTS));
+    const LIFE_WELLNESS_FIELDS = new Set(['checkIns', 'journalEntries', 'breathing']);
+    const LIFE_WELLNESS_BREATHING_DEFAULTS = Object.freeze({
+        preferredPattern: 'calm-focus',
+        preferredDuration: 120,
+        reducedMotion: false,
+        soundEnabled: false,
+        ambientSound: 'off',
+        breathingCuesEnabled: false,
+        volume: 0.35,
+        muted: false,
+        sessionsCompleted: 0,
+        lastCompletedAt: null
+    });
+    const LIFE_WELLNESS_BREATHING_FIELDS = new Set(Object.keys(LIFE_WELLNESS_BREATHING_DEFAULTS));
     const TESTING_PROFILE_KEYS = ['ap', 'sat', 'act', 'mcat', 'gre', 'lsat', 'gmat', 'psat', 'toefl', 'ielts', 'clep', 'ib', 'state'];
     const TESTING_PROFILE_DATA_KEYS = ['resourceLinks', 'weakAreas', 'practiceTests', 'mistakes', 'tasks'];
     const BUILT_IN_FOCUS_TEMPLATE_IDS = new Set([
@@ -138,6 +178,51 @@
         return true;
     }
 
+    function hasUnknownFieldsWithStoredValues(value, knownFields) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        return Object.keys(value).some(key => !knownFields.has(key) && hasUnknownStoredValue(value[key]));
+    }
+
+    function hasNonDefaultFields(value, defaults) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return hasStoredValue(value);
+        return Object.keys(defaults).some(key => {
+            if (!Object.prototype.hasOwnProperty.call(value, key)) return false;
+            const baseline = defaults[key];
+            return Array.isArray(baseline)
+                ? hasStoredValue(value[key])
+                : !Object.is(value[key], baseline);
+        });
+    }
+
+    function hasMeaningfulDayStateMap(value, defaults) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return hasStoredValue(value);
+        const knownFields = new Set(Object.keys(defaults));
+        return Object.keys(value).some(dayKey => {
+            const state = value[dayKey];
+            if (!state || typeof state !== 'object' || Array.isArray(state)) return hasUnknownStoredValue(state);
+            return hasNonDefaultFields(state, defaults)
+                || hasUnknownFieldsWithStoredValues(state, knownFields);
+        });
+    }
+
+    function hasMeaningfulLifeCompatibilityData(workspace) {
+        const life = valueAtPath(workspace, 'lifeWorkspace');
+        if (!life || typeof life !== 'object' || Array.isArray(life)) return hasStoredValue(life);
+        if (hasUnknownFieldsWithStoredValues(life, LIFE_WORKSPACE_FIELDS)) return true;
+
+        const sleepTracker = life.sleepTracker;
+        if (hasNonDefaultFields(sleepTracker, LIFE_SLEEP_TRACKER_DEFAULTS)
+            || hasUnknownFieldsWithStoredValues(sleepTracker, LIFE_SLEEP_TRACKER_FIELDS)) return true;
+
+        const wellness = life.wellness;
+        if (!wellness || typeof wellness !== 'object' || Array.isArray(wellness)) return hasStoredValue(wellness);
+        if (hasUnknownFieldsWithStoredValues(wellness, LIFE_WELLNESS_FIELDS)) return true;
+
+        const breathing = wellness.breathing;
+        return hasNonDefaultFields(breathing, LIFE_WELLNESS_BREATHING_DEFAULTS)
+            || hasUnknownFieldsWithStoredValues(breathing, LIFE_WELLNESS_BREATHING_FIELDS);
+    }
+
     function isGeneratedHelpPage(page) {
         if (!page || typeof page !== 'object') return false;
         if (page.isSystemPage === true || page.builtInId === 'help-docs' || page.systemRole === 'help-docs') return true;
@@ -155,7 +240,13 @@
         if (!workspace || typeof workspace !== 'object') return false;
         if (Array.isArray(workspace.pages) && workspace.pages.some(page => page && !isGeneratedHelpPage(page))) return true;
         if (hasUserSpaces(workspace.spaces)) return true;
-        if (USER_DATA_PATHS.some(path => hasStoredValue(valueAtPath(workspace, path)))) return true;
+        if (USER_DATA_PATHS.some(path => {
+            const value = valueAtPath(workspace, path);
+            return Object.prototype.hasOwnProperty.call(DAY_STATE_DEFAULTS, path)
+                ? hasMeaningfulDayStateMap(value, DAY_STATE_DEFAULTS[path])
+                : hasStoredValue(value);
+        })) return true;
+        if (hasMeaningfulLifeCompatibilityData(workspace)) return true;
         if (typeof valueAtPath(workspace, 'businessWorkspace.quickCapture') === 'string'
             && valueAtPath(workspace, 'businessWorkspace.quickCapture').trim()) return true;
         if (TESTING_PROFILE_KEYS.some(profileKey => {
@@ -258,55 +349,109 @@
         storeName: STORE_NAME,
         version: CANONICAL_DB_VERSION
     });
-    migrationPromise = Promise.all([
-        migrationAdapter.read(ROOT_KEY),
-        migrationAdapter.read(LAST_MEANINGFUL_KEY),
-        migrationAdapter.read(CONFIRMED_ROOT_KEY)
-    ]).then(async values => {
-        let root = values[0];
+    const migrationCoordinator = global.SutraWorkspaceCoordinator.create({
+        lockName: 'sutra-workspace-write-v1',
+        channelName: 'sutra-workspace-events-v1'
+    });
+    migrationPromise = migrationCoordinator.runExclusive(async () => {
+        const values = await Promise.all([
+            migrationAdapter.read(ROOT_KEY),
+            migrationAdapter.read(LAST_MEANINGFUL_KEY),
+            migrationAdapter.read(CONFIRMED_ROOT_KEY)
+        ]);
+        const observedRoot = values[0];
         const journal = values[1];
         const confirmedRoot = values[2];
-        try {
-            // A matching marker proves the empty/default root was deliberately
-            // accepted by the canonical save path. Do not resurrect older data
-            // over an intentional delete-everything result.
-            if (!hasMeaningfulData(root) && !isConfirmedCanonicalRoot(root, confirmedRoot)) {
-                const recovery = chooseRecoveryCandidate(journal, readLegacyWorkspace());
-                if (recovery) {
-                    // Preserve even the empty/default candidate before replacing it.
-                    // This makes the recovery reversible for diagnostics while the
-                    // richer workspace becomes canonical again.
-                    if (root) await migrationAdapter.write(EMPTY_BEFORE_RECOVERY_KEY, root);
-                    root = recovery.workspace;
-                    await migrationAdapter.write(ROOT_KEY, root);
-                    try {
-                        if (typeof global.SutraReportError === 'function') {
-                            global.SutraReportError('Recovered an empty canonical workspace', {
-                                where: 'legacy-workspace-migration',
-                                source: recovery.source,
-                                score: meaningfulDataScore(root)
-                            }, 'warning');
-                        } else {
-                            console.warn('Recovered an empty canonical workspace from ' + recovery.source + '.');
-                        }
-                    } catch (_) {}
-                }
+        let replacement = observedRoot;
+        let recoverySource = '';
+
+        // A matching marker proves the empty/default root was deliberately
+        // accepted by the canonical save path. Do not resurrect older data
+        // over an intentional delete-everything result.
+        if (!hasMeaningfulData(observedRoot) && !isConfirmedCanonicalRoot(observedRoot, confirmedRoot)) {
+            const recovery = chooseRecoveryCandidate(journal, readLegacyWorkspace());
+            if (recovery) {
+                replacement = recovery.workspace;
+                recoverySource = recovery.source;
             }
-            const healed = healOnboardingState(root);
-            if (healed !== root && healed) await migrationAdapter.write(ROOT_KEY, healed);
-        } finally {
-            try { migrationAdapter.close(); } catch (_) {}
         }
+
+        const healed = healOnboardingState(replacement);
+        if (healed && healed !== replacement) replacement = healed;
+        if (!replacement || replacement === observedRoot) return { written: false, reason: 'unchanged' };
+
+        // A failed comparison means another canonical writer won after our
+        // snapshot. Discard this derived candidate and let app.js hydrate the
+        // winning root; never retry the stale candidate against newer data.
+        const observedRootJson = JSON.stringify(observedRoot);
+        const backupKey = recoverySource ? EMPTY_BEFORE_RECOVERY_KEY : LAST_MEANINGFUL_KEY;
+        const writeAdapter = originalCreate.call(originalApi, {
+            dbName: DB_NAME,
+            storeName: STORE_NAME,
+            version: CANONICAL_DB_VERSION,
+            backupKey: backupKey,
+            shouldBackup(current, _next, key) {
+                if (String(key) !== ROOT_KEY || current === null || current === undefined) return false;
+                return recoverySource
+                    ? true
+                    : hasMeaningfulData(current);
+            },
+            commitKey: CONFIRMED_ROOT_KEY,
+            buildCommit(_current, next, key) {
+                if (String(key) !== ROOT_KEY) return undefined;
+                return { version: 1, meaningful: hasMeaningfulData(next), confirmedAt: new Date().toISOString() };
+            }
+        });
+        let result;
+        try {
+            result = await writeAdapter.writeIf(ROOT_KEY, replacement, current => {
+                return JSON.stringify(current) === observedRootJson;
+            });
+        } finally {
+            try { writeAdapter.close(); } catch (_) {}
+        }
+        if (!result || result.written !== true) {
+            return { written: false, reason: 'superseded' };
+        }
+
+        const hash = global.SutraWorkspaceCoordinator.hashRecord(replacement);
+        migrationCoordinator.publishCommit({
+            reason: recoverySource ? 'boot-workspace-recovery' : 'boot-onboarding-repair',
+            hash: hash,
+            savedAt: new Date().toISOString()
+        });
+
+        if (recoverySource) {
+            try {
+                if (typeof global.SutraReportError === 'function') {
+                    global.SutraReportError('Recovered an empty canonical workspace', {
+                        where: 'legacy-workspace-migration',
+                        source: recoverySource,
+                        score: meaningfulDataScore(replacement)
+                    }, 'warning');
+                } else {
+                    console.warn('Recovered an empty canonical workspace from ' + recoverySource + '.');
+                }
+            } catch (_) {}
+        }
+        return { written: true, hash: hash, source: recoverySource || 'onboarding-repair' };
+    }).finally(() => {
+        try { migrationAdapter.close(); } catch (_) {}
+        try { migrationCoordinator.close(); } catch (_) {}
     }).catch(error => {
         try { console.warn('Legacy workspace migration deferred; canonical startup will report storage errors.', error); } catch (_) {}
+        throw error;
     });
 
     global.SutraWorkspaceDB = {
         ...originalApi,
         create(options) {
             const requested = options && typeof options === 'object' ? options : {};
+            // Match SutraWorkspaceDB.create's default store so callers that
+            // specify the canonical database alone still receive recovery
+            // journaling and the confirmed-root marker.
             const isCanonicalWorkspace = String(requested.dbName || '') === DB_NAME
-                && String(requested.storeName || '') === STORE_NAME;
+                && String(requested.storeName || STORE_NAME) === STORE_NAME;
             const adapterOptions = isCanonicalWorkspace
                 ? {
                     ...requested,

@@ -45,8 +45,9 @@ async function openApp(page) {
 
 test('Release notes open locally from the notification center without network fetch', async ({ page }) => {
   // The standalone top-bar "What's New" control was removed; release notes are
-  // surfaced exclusively through the notification center now. This verifies the
-  // notification-center path still opens release notes locally with no remote fetch.
+  // surfaced through the notification center. On phones, that center is reached
+  // from the canonical More menu because the compact Home header is not active
+  // in every mobile workspace mode.
   const externalRequests = [];
   page.on('request', request => {
     const url = request.url();
@@ -71,10 +72,26 @@ test('Release notes open locally from the notification center without network fe
   // The obsolete top-bar control must be gone.
   await expect(page.locator('#whatsNewBtn')).toHaveCount(0);
 
-  // Open the notification center and click the release notification.
-  await page.locator('#notifBellBtn:visible, [data-mobile-action="notifications"]:visible').first().click();
+  // Open the notification center through the visible canonical navigation.
+  const mobileMore = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  if (await mobileMore.isVisible()) {
+    await mobileMore.click();
+    await page.locator('[data-mobile-more-action="notifications"]').click();
+  } else {
+    await page.locator('#notifBellBtn:visible').click();
+  }
   await expect(page.locator('#notifPanel')).toBeVisible();
-  await page.locator('#notifPanel').getByText(/release notes/i).first().click();
+
+  // Dated release notes can be older than the seven-day notification window.
+  // Expand that explicit archive when needed, then open the release row.
+  const releaseRow = page.locator('#notifPanel [data-source="release"]');
+  if (!(await releaseRow.isVisible())) {
+    const olderNotifications = page.locator('#notifPanel details.notif-older');
+    await expect(olderNotifications).toBeVisible();
+    await olderNotifications.locator('summary').click();
+  }
+  await expect(releaseRow).toBeVisible();
+  await releaseRow.click();
 
   await expect(page.getByRole('dialog', { name: /what's new/i })).toBeVisible();
   await expect(page.locator('.release-note-version')).toContainText('Privacy & Security');
@@ -88,9 +105,10 @@ test('integration registry truthfully gates external services and Smart Import a
 
   const registry = await page.evaluate(() => window.SutraIntegrations.registry());
   const drive = registry.find(item => item.id === 'google-drive-backup');
-  const docs = registry.find(item => item.id === 'google-docs-smart-import');
   expect(drive.status).toBe('Gated');
-  expect(docs.status).toBe('Gated');
+  for (const id of ['google-docs-smart-import', 'google-calendar', 'todoist']) {
+    expect(registry.find(item => item.id === id)).toBeUndefined();
+  }
   expect(registry.find(item => item.id === 'paste-text').status).toBe('Available');
 
   const rejected = await page.evaluate(() => window.SutraSmartImport.parse('<script>alert(1)</script>\n__proto__: polluted').rejected.length);

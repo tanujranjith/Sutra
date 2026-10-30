@@ -1,5 +1,17 @@
 # Academic Planning
 
+Quick Capture asks for a destination when distinct class/activity names match.
+Choosing a class, activity, or explicitly choosing no class resolves the prompt;
+a more specific nested name (AP Biology versus Biology) keeps its direct match.
+Semester Setup excludes metadata labels such as Teacher and Room from course
+headers. Application Sheets checkboxes name their field and college, and college
+and major Decision Matrix score edits update rankings without replacing inputs,
+so Tab and Shift+Tab keep their normal editing order.
+Life → Quick Calculator supports keyboard arithmetic, parentheses, Enter to
+evaluate, Backspace to correct, and Escape/Delete to clear. It shares the bounded,
+CSP-safe arithmetic parser with custom-tab calculators; this API is resolved
+when evaluating a user expression, after the existing custom-tabs script loads.
+
 _The semester-planning layer: Semester Setup, Grade Forecasting & GPA, the
 Assignment Studio, the rotating School Schedule, and reliable reminders. One
 coherent upgrade that reduces setup friction, improves academic decisions, helps
@@ -23,7 +35,7 @@ storage backend, no parallel data model.
 | School schedule | `appData.schoolSchedule` | full `.sutra` / JSON export, Drive sync |
 | Grade planner | `appData.gradePlanner` | full `.sutra` / JSON export, Drive sync |
 | Semester Setup drafts | `appData.semesterSetup` | full `.sutra` / JSON export, Drive sync |
-| Assignment Studio | `task.studio` on each homework task (`hwTasks:v2`) | homework localStorage mirror + `homeworkWorkspace` snapshot |
+| Assignment Studio | `task.studio` on each task in the established Homework store | `homeworkWorkspace` in full workspace exports; preserve legacy compatibility |
 | Reminder state | `sutraNotifications:v1` (localStorage) | `notificationsState` in the export payload |
 
 The three `appData.*` workspaces are registered in `src/core/app.js` exactly like
@@ -31,7 +43,7 @@ every other workspace: declared in `getDefaultAppData()`, merged in
 `mergeAppDataDefaults()`, hydrated in `hydrateStateFromAppData()`, written in
 `persistAppData()`, serialized in `serializeWorkspace()` (both the encrypted
 package and the JSON payload), read back in `deserializeWorkspace()`, and listed
-in `docs/persistence-inventory.json`. The round-trip guard
+in `docs/architecture/persistence-inventory.json`. The round-trip guard
 (`npm run check:roundtrip`) enforces save/export/import parity, so a missing wire
 fails CI.
 
@@ -78,6 +90,13 @@ under `module.exports` for Node and are executed by
   and confidence scoring.
 - **`assignment-studio.js`** — `normalizeStudio` / `computeProgress` (milestones
   weighted double vs. subtasks).
+- **`planning-engine.js`** — plans from all open canonical Tasks and Homework due
+  by the end of the selected preview, including overdue work. It preserves
+  task/homework source IDs and skips items already linked to Timeline blocks;
+  intelligence summaries remain attention signals rather than planning inputs.
+  Browser previews trim today's free windows to the next available minute.
+  Future days retain their full working hours. If a suggested start passes while
+  the preview stays open, Add refuses that block and asks for a fresh plan.
 
 Because the engines are deterministic and tested in isolation, the academic
 *decisions* never depend on a model being available, online, or correct.
@@ -99,6 +118,17 @@ Because the engines are deterministic and tested in isolation, the academic
   on the review screen. Applied imports are logged to Assistant Activity.
 - **Deterministic stays separate from interpretation.** Grades are computed by
   the engine; the assistant may *explain* a result but never produces the number.
+- **Saved scores keep their categories.** Semester Setup reuses a category's ID
+  when its name uniquely matches an existing category. Categories with scores
+  survive an unmatched or ambiguous replacement and remain available for review
+  in Course Hub → Grades. Explicit IDs support category renames.
+- Application Sheets binds its tabs, Add Row, and editing controls within the
+  current College workspace. Task details can edit Homework notes and Reference
+  URL; these write through to the existing canonical Homework row (`notes` and
+  `sourceUrl`) and its compatibility mirrors rather than a separate task copy.
+- SAT/ACT cards format date-only values in local calendar time. Blank essay word
+  targets remain unspecified. College and major rankings exclude entries with
+  no positive score on a weighted criterion, including legacy all-zero defaults.
 
 ---
 
@@ -171,6 +201,9 @@ notification Settings panel says this plainly:
 
 - `npm run check:academic` — executes all four engines in Node (rotation math,
   grade math, syllabus extraction, studio progress).
+- `tests/unit/planning-engine.test.mjs` — covers the weekly due-date boundary,
+  day-five medium-priority work, source-typed Timeline links, completed/deleted
+  rows, and planner capacity.
 - `tests/e2e/academic-upgrade.spec.mjs` — registration + export round-trip,
   reload persistence, rotation/holiday/study-windows, the Grade Planner UI and
   scenario solver, the Semester Setup local-extract-and-approve path, Studio
@@ -180,3 +213,23 @@ notification Settings panel says this plainly:
   `SutraModalManager`'s `modalSelector`, so the academic modals inherit the
   focus trap, scroll lock, Escape handling, and focus restoration the
   modal-accessibility guard checks.
+
+## Official exam completion and results
+
+Exam cards distinguish **Upcoming**, **Taken · results pending**, and **Result
+recorded**. Mark taken when a sitting is finished; this removes that exam from
+automatic upcoming/diagnostic study recommendations. Use **Record official
+result** on the card to save its taken date and score or result text. Cancel
+leaves both untouched. Practice tests, current/readiness scores, and completed
+practice forms stay separate and never imply an official result.
+
+The existing one-date-per-exam model remains: this records one current official
+result per exam card, not a history of multiple sittings. Mark not taken reopens
+prep without deleting the saved result. A result is shown as current only while
+its date matches the taken-date marker; a later sitting stays result-pending.
+The prior result remains visible as a dated saved result, including in the AP
+overview. Recording another result replaces that card's saved result; multiple
+sittings need separate exam cards.
+Assistant status actions and Undo preserve the original taken date and do not
+change the result. Unknown result fields survive normalization, backup/import,
+and the existing atomic Testing Hub Sync record.

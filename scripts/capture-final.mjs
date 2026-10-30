@@ -1,7 +1,7 @@
 // Final landing-page screenshot capture for Sutra.
 // Boots the app, seeds a believable late-spring junior workspace, captures each
 // marketable surface in the premium light theme, downscales to a web-friendly
-// width via an in-page canvas, and writes optimized PNGs into assets/screenshots/.
+// width via an in-page canvas, and writes optimized PNGs into assets/marketing/screenshots/.
 //
 // Usage:
 //   node scripts/serve-static.mjs 5173   (in another shell)
@@ -11,7 +11,7 @@ import { writeFileSync } from 'node:fs';
 import { SEED_SRC } from './demo-seed.mjs';
 
 const BASE = process.env.SUTRA_BASE_URL || 'http://127.0.0.1:5173';
-const SS = 'assets/screenshots';
+const SS = 'assets/marketing/screenshots';
 const MAX_W = 1600;       // downscaled output width (source is 1440 @ DPR2 = 2880)
 const errors = [];
 const written = [];

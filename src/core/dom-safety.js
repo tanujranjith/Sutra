@@ -429,6 +429,32 @@
     return el;
   }
 
+  // Read only data already supplied by a user-initiated paste/input event.
+  // This never calls navigator.clipboard or requests clipboard permission.
+  function clipboardText(data) {
+    if (!data || typeof data.getData !== 'function') return '';
+    var text = data.getData('text/plain') || data.getData('Text') || data.getData('text/uri-list');
+    if (text) return text;
+    var html = data.getData('text/html');
+    if (!html || !hasDom) return '';
+    var template = document.createElement('template');
+    setUserHTML(template, html);
+    var output = '';
+    function visit(node) {
+      if (node.nodeType === 3) { output += node.nodeValue || ''; return; }
+      if (node.nodeType !== 1 && node.nodeType !== 11) return;
+      var name = String(node.nodeName || '').toLowerCase();
+      if (/^(script|style|noscript|template)$/.test(name)) return;
+      if (name === 'br') { output += '\n'; return; }
+      var block = /^(p|div|li|h[1-6]|blockquote|pre|tr|section|article)$/.test(name);
+      if (block && output && !output.endsWith('\n')) output += '\n';
+      Array.prototype.forEach.call(node.childNodes, visit);
+      if (block && (!output.endsWith('\n') || !node.childNodes.length)) output += '\n';
+    }
+    visit(template.content);
+    return output.replace(/\n$/, '');
+  }
+
   // ---- Sandboxed iframe rendering for fully-untrusted markup ----------------
   // For canvas / htmlEmbed-style blocks where the user may legitimately author
   // scripts/styles: render inside an isolated, sandboxed iframe instead of the
@@ -514,6 +540,7 @@
     setTrustedHTML: setTrustedHTML,
     setUserHTML: setUserHTML,
     sanitizeUserHTML: sanitizeUserHTML,
+    clipboardText: clipboardText,
     isSafeUrl: isSafeUrl,
     renderUserHTMLToFrame: renderUserHTMLToFrame,
     // Exposed for the embed/editor paths that want the frame document shell.

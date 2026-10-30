@@ -27,14 +27,56 @@ export function createSyncMockServer(options) {
  */
 export async function routeSyncServer(context, server, net = { down: false }) {
   const seenAuthHeaders = [];
+  net.syncRpcTrace = Array.isArray(net.syncRpcTrace) ? net.syncRpcTrace : [];
   net.logoutCalls = Number(net.logoutCalls) || 0;
   await context.route(`${SYNC_MOCK_ORIGIN}/**`, async (route) => {
-    if (net.down) {
-      return route.abort('internetdisconnected');
-    }
     const request = route.request();
     const url = new URL(request.url());
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    const rpcPrefix = '/rest/v1/rpc/';
+    const rpcName = url.pathname.startsWith(rpcPrefix) ? url.pathname.slice(rpcPrefix.length) : '';
+    const isSyncRpc = request.method() === 'POST' && rpcName.startsWith('sync_');
+    let body = {};
+    if (isSyncRpc) {
+      try { body = JSON.parse(request.postData() || '{}'); } catch (error) { body = {}; }
+    }
+    const recordSyncRpc = (result, responseStatus, outcome) => {
+      if (net.captureSyncRpcTrace !== true || !isSyncRpc) return;
+      const safeToken = (value, maxLength = 128) => {
+        if (typeof value !== 'string' || !/^[A-Za-z0-9_.:-]+$/.test(value) || value.length > maxLength) return null;
+        return value;
+      };
+      net.syncRpcTrace.push({
+        at: Date.now(),
+        rpc: /^sync_[A-Za-z0-9_]{1,64}$/.test(rpcName) ? rpcName : 'unknown',
+        deviceId: safeToken(body.deviceId),
+        targetDeviceId: safeToken(body.targetDeviceId),
+        httpStatus: responseStatus === null || responseStatus === undefined
+          ? null
+          : Number.isFinite(Number(responseStatus)) ? Number(responseStatus) : null,
+        ok: result && typeof result.ok === 'boolean' ? result.ok : null,
+        resultCode: result ? safeToken(result.code, 64) : null,
+        statusContractMatches: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.contract === 'sutra-device-status-v1')
+          : undefined,
+        statusDeviceMatches: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.deviceId === body.deviceId)
+          : undefined,
+        statusUserMatches: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.userId === server.state.userId)
+          : undefined,
+        statusWipeRequired: rpcName === 'sync_get_device_status'
+          ? Boolean(result && result.wipeRequired === true)
+          : undefined,
+        outcome
+      });
+      if (net.syncRpcTrace.length > 200) net.syncRpcTrace.splice(0, net.syncRpcTrace.length - 200);
+    };
+
+    if (net.down) {
+      recordSyncRpc({ ok: false, code: 'offline' }, null, 'network-abort');
+      return route.abort('internetdisconnected');
+    }
 
     // Minimal Supabase GoTrue mock so UI flows can sign in with email OTP
     // and the real createSupabaseTransport path (anon key + bearer headers)
@@ -70,14 +112,17 @@ export async function routeSyncServer(context, server, net = { down: false }) {
       apikey: request.headers().apikey || null,
       authorization: request.headers().authorization || null
     });
-    const rpcName = url.pathname.replace('/rest/v1/rpc/', '');
-    let body = {};
-    try { body = JSON.parse(request.postData() || '{}'); } catch (error) { body = {}; }
     if (typeof net.rpcOverride === 'function') {
       const overridden = net.rpcOverride({ rpcName, body });
-      if (overridden) return json(Number(overridden.status) || 200, overridden.body || overridden);
+      if (overridden) {
+        const responseBody = overridden.body || overridden;
+        const responseStatus = Number(overridden.status) || 200;
+        recordSyncRpc(responseBody, responseStatus, 'response');
+        return json(responseStatus, responseBody);
+      }
     }
     const { status, body: result } = server.handleRpc(rpcName, body);
+    recordSyncRpc(result, status, 'response');
     return json(status, result);
   });
   net.seenAuthHeaders = seenAuthHeaders;

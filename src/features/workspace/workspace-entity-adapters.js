@@ -75,7 +75,7 @@
   function dateFields(record) {
     var source = record && typeof record === 'object' ? record : {};
     return {
-      due: source.dueDate || source.due || source.deadline || source.date || '',
+      due: source.dueDate || source.due || source.deadline || source.examDate || source.date || '',
       start: source.startAt || source.start || '',
       end: source.endAt || source.end || '',
       created: source.createdAt || source.created || '',
@@ -90,6 +90,7 @@
       priority: text(source.priority || ''),
       difficulty: text(source.difficulty || ''),
       noteId: text(source.noteId || source.linkedNoteId || ''),
+      referenceUrl: text(source.referenceUrl || source.sourceUrl || ''),
       estimateMinutes: Number(source.estimateMinutes || source.effortMinutes || source.estimate || 0) || 0
     }, extra || {});
   }
@@ -207,7 +208,7 @@
   }
 
   function openTestingExam(entity) {
-    setView('apstudy');
+    setView('testing');
     if (typeof global.openExamDetail === 'function') global.openExamDetail(entity.metadata.examId || entity.id);
     return true;
   }
@@ -292,7 +293,7 @@
               status: task.completed ? 'completed' : (task.status || 'open'),
               dates: dateFields(task),
               deepLink: { view: 'today', params: { taskId: task.id } },
-              metadata: metadata(task)
+              metadata: metadata(task, { taskNotes: String(task.notes || '').slice(0, 1000), taskNotesLength: String(task.notes || '').length })
             };
           });
         },
@@ -342,16 +343,20 @@
           rows(workspace.courses).forEach(function (course) { if (course && course.id) coursesById[String(course.id)] = course; });
           return rows(workspace.tasks).filter(function (task) { return task && task.id; }).map(function (task) {
             var course = coursesById[String(task.courseId || '')] || {};
+            var status = String(task.status || '').trim();
+            // Preserve progress labels, but a retained legacy completion label
+            // cannot make an explicitly reopened Homework row complete.
+            if (task.done === false && /^(?:done|complete|completed)$/i.test(status)) status = '';
             return {
               id: task.id,
               title: task.title || task.text || 'Untitled task',
               text: recordText(task, [course.name]),
               keywords: ['to-do', task.kind === 'task' || task.kind === 'general' ? 'general task' : 'homework assignment', course.name, task.kind, task.type, task.priority, task.status],
               courseId: task.courseId || '',
-              status: task.done ? 'completed' : (task.status || 'open'),
+              status: task.done ? 'completed' : (status || 'open'),
               dates: dateFields(task),
               deepLink: { view: 'homework', params: { assignmentId: task.id } },
-              metadata: metadata(task, { courseName: course.name || '', source: 'homework' })
+              metadata: metadata(task, { courseName: course.name || '', source: 'homework', taskNotes: String(task.notes || '').slice(0, 1000), taskNotesLength: String(task.notes || '').length })
             };
           });
         },
@@ -441,7 +446,7 @@
               status: course.archived ? 'archived' : 'active',
               dates: dateFields(course),
               deepLink: { view: 'courses', params: { courseId: course.id } },
-              metadata: { color: course.color || '', teacher: course.teacher || '', term: course.term || '' }
+              metadata: { courseType: course.type || '', color: course.color || '', teacher: course.teacher || '', term: course.term || '' }
             };
           });
         },
@@ -609,12 +614,20 @@
         priority: 54,
         collect: function () {
           var workspace = sources().testingHub || {};
-          var exams = rows(workspace.customExams).concat(rows(workspace.exams));
+          // Standard exams are keyed profiles; custom profiles live in custom.
+          // Include saved profiles even when their cards/packs are not visible.
+          var standard = ['sat', 'act', 'mcat', 'gre', 'lsat', 'gmat', 'psat', 'toefl', 'ielts', 'clep', 'ib', 'state']
+            .filter(function (type) { return workspace[type] && typeof workspace[type] === 'object'; })
+            .map(function (type) { return Object.assign({}, workspace[type], { id: type, type: type }); });
+          var exams = standard.concat(rows(workspace.custom), rows(workspace.customExams), rows(workspace.exams));
+          var seen = new Set();
           return exams.filter(function (exam) { return exam && exam.id; }).map(function (exam) {
             var examId = exam.type ? String(exam.type) : ('custom:' + exam.id);
+            if (seen.has(examId)) return null;
+            seen.add(examId);
             return {
               id: examId,
-              title: exam.name || exam.title || exam.label || 'Exam',
+              title: exam.name || exam.title || exam.label || String(exam.type || 'Exam').toUpperCase(),
               text: recordText(exam),
               keywords: ['exam', 'test', exam.type, exam.status],
               status: exam.status || '',
@@ -622,7 +635,7 @@
               deepLink: { view: 'apstudy', params: { examId: examId } },
               metadata: { examId: examId, custom: !exam.type }
             };
-          });
+          }).filter(Boolean);
         },
         open: openTestingExam
       },
@@ -712,12 +725,8 @@
         collect: function () {
           var workspace = sources().lifeWorkspace || {};
           var out = collectNamedCollections(workspace, [
-            'goals', 'habits', 'skills', 'fitness', 'calories', 'books', 'spending',
-            'recurringExpenses', 'journals'
+            'goals', 'habits', 'skills', 'books', 'spending', 'recurringExpenses'
           ], 'life', 'life');
-          if (workspace.wellness) {
-            out = out.concat(collectNamedCollections(workspace.wellness, ['checkIns', 'journalEntries'], 'wellness', 'life'));
-          }
           return out;
         },
         open: function () { return setView('life'); }

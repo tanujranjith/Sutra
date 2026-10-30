@@ -282,10 +282,58 @@ async function seedWorkspace(page, marker) {
 }
 
 async function fillCloudPassword(page, pass = PASS, confirm = true) {
-  await expect(page.locator('#sutraCloudSyncPasswordModal')).toHaveClass(/active/, { timeout: 20_000 });
-  await page.fill('#sutraCloudSyncPassphraseInput', pass);
-  if (confirm) await page.fill('#sutraCloudSyncPassphraseConfirmInput', pass);
-  await page.locator('#sutraCloudSyncPasswordSubmitBtn').click();
+  await test.step(`${confirm ? 'Create' : 'Restore'} cloud password (length ${pass.length})`, async () => {
+    const modal = page.locator('#sutraCloudSyncPasswordModal');
+    const passInput = page.locator('#sutraCloudSyncPassphraseInput');
+    const confirmField = page.locator('#sutraCloudSyncConfirmField');
+    const confirmInput = page.locator('#sutraCloudSyncPassphraseConfirmInput');
+    const submit = page.locator('#sutraCloudSyncPasswordSubmitBtn');
+
+    await expect(modal).toHaveClass(/active/, { timeout: 20_000 });
+    // The app focuses this field on a short timer, while the dialog backdrop
+    // and content still have finite entrance animations. Wait for both
+    // readiness signals before filling so WebKit's delayed focus/autofill
+    // handling cannot race the second field's fill.
+    await expect.poll(() => page.evaluate(() => {
+      const modalEl = document.getElementById('sutraCloudSyncPasswordModal');
+      const passEl = document.getElementById('sutraCloudSyncPassphraseInput');
+      if (!modalEl || !passEl || !modalEl.classList.contains('active')) return false;
+      return document.activeElement === passEl
+        && modalEl.getAnimations({ subtree: true }).every(animation => animation.playState === 'finished');
+    }), { timeout: 5_000, message: 'cloud password dialog should finish opening and focus its password field' }).toBe(true);
+    if (!confirm) await expect(confirmField).toBeHidden();
+    await passInput.fill(pass);
+    if (confirm) await confirmInput.fill(pass);
+
+    // Compare in-page so a failed assertion reports only a boolean, never the
+    // password value itself.
+    const passValueMatches = await passInput.evaluate((input, expected) => input.value === expected, pass);
+    expect(passValueMatches, 'cloud password field retains the requested value').toBe(true);
+
+    try {
+      await expect(submit).toBeEnabled();
+    } catch (cause) {
+      const safeState = await page.evaluate(() => {
+        const modalEl = document.getElementById('sutraCloudSyncPasswordModal');
+        const passEl = document.getElementById('sutraCloudSyncPassphraseInput');
+        const confirmEl = document.getElementById('sutraCloudSyncPassphraseConfirmInput');
+        const confirmFieldEl = document.getElementById('sutraCloudSyncConfirmField');
+        return {
+          title: document.getElementById('sutraCloudSyncPasswordTitle')?.textContent || '',
+          passLength: passEl?.value.length || 0,
+          confirmLength: confirmEl?.value.length || 0,
+          confirmVisible: !!confirmFieldEl && !confirmFieldEl.hidden && confirmFieldEl.getClientRects().length > 0,
+          errorText: document.getElementById('sutraCloudSyncPasswordError')?.textContent || '',
+          modalActive: !!modalEl?.classList.contains('active')
+        };
+      });
+      const diagnostic = new Error(`Cloud password submit stayed disabled; safe dialog state: ${JSON.stringify(safeState)}`);
+      diagnostic.cause = cause;
+      throw diagnostic;
+    }
+
+    await submit.click();
+  });
 }
 
 function parseEnvelopeHeader(buffer) {
@@ -332,6 +380,45 @@ test('first Drive connect uploads only encrypted appDataFolder bytes and stores 
   expect(storageText).not.toContain(PASS);
   expect(storageText).not.toContain('mock-access-token');
   expect(await page.evaluate(() => window.__sutraRequestedScopes)).toEqual(['https://www.googleapis.com/auth/drive.appdata']);
+});
+
+test('locking Drive sync cancels a pending local-save debounce without prompting or uploading', async ({ page }) => {
+  const drive = await openApp(page);
+  await seedWorkspace(page, 'LOCK-DEBOUNCE-BASE');
+  const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));
+  await fillCloudPassword(page);
+  await connectPromise;
+  expect(drive.uploads).toHaveLength(1);
+
+  await page.clock.install({ time: new Date('2026-10-16T12:00:00Z') });
+  await seedWorkspace(page, 'LOCK-DEBOUNCE-LOCAL');
+  const dirtyStatus = await page.evaluate(() => window.SutraDriveSync.getStatus());
+  expect(dirtyStatus.state).toBe('ready-dirty');
+  expect(dirtyStatus.metadata.localDirty).toBe(true);
+
+  await page.evaluate(() => window.SutraDriveSync.lock());
+  await expect.poll(() => page.evaluate(() => window.SutraDriveSync.getStatus().state)).toBe('connected-locked');
+  // Observe across the known debounce deadline; the short real-time window
+  // lets a browser-issued request reach the mock without logging any secrets.
+  const unexpectedDriveList = page.waitForRequest(request => {
+    const url = new URL(request.url());
+    return request.method() === 'GET'
+      && url.origin === 'https://www.googleapis.com'
+      && url.pathname === '/drive/v3/files';
+  }).then(() => true, () => false);
+  await page.clock.runFor(20_500);
+  await page.clock.resume();
+  const backgroundSyncStarted = await Promise.race([
+    unexpectedDriveList,
+    page.waitForTimeout(2_000).then(() => false)
+  ]);
+  expect(backgroundSyncStarted, 'locking must cancel the scheduled Drive request').toBe(false);
+  await expect(page.locator('#sutraCloudSyncPasswordModal')).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => {
+    const status = window.SutraDriveSync.getStatus();
+    return { state: status.state, localDirty: status.metadata.localDirty };
+  })).toEqual({ state: 'connected-locked', localDirty: true });
+  expect(drive.uploads).toHaveLength(1);
 });
 
 test('Drive restore rejects wrong password without mutating, then restores with correct password', async ({ page }) => {

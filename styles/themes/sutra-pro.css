@@ -6410,6 +6410,10 @@ body.theme-retro .th2-resource-card {
     font-size: 13px;
 }
 
+.sutra-password-field[hidden] {
+    display: none !important;
+}
+
 .sutra-password-toggle {
     display: inline-flex;
     align-items: center;

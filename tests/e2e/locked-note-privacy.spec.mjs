@@ -162,7 +162,163 @@ test('Assistant context fails closed when the privacy boundary is unavailable', 
   expect(report.diagnosed).toBe(true);
 });
 
-test('Assistant locked-page access requires consent and PIN without unlocking the editor', async ({ page }) => {
+test('an editor-unlocked protected selection is excluded from unrelated Assistant requests', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(async ({ pin, secret }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    payload.pages.push({ id: 'selection-protected', title: 'Protected selection', content: `<p>${secret}</p>`, blocks: [], createdAt: now, updatedAt: now });
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin('selection-protected', pin);
+    window.flowAtelier.unlockedPageIds.add('selection-protected');
+    window.flowAtelier.setActiveView('notes');
+    window.loadPage('selection-protected');
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('notes', 'approved');
+  }, { pin: PIN, secret: SECRET });
+  await page.waitForFunction(secret => document.querySelector('#editorV2Host .ProseMirror')?.textContent.includes(secret), SECRET);
+
+  const report = await page.evaluate(({ secret }) => {
+    const editor = document.querySelector('#editorV2Host .ProseMirror');
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const depths = ['minimal', 'currentView'];
+    return depths.map(depth => {
+      const enrichment = window.flowAssistant.buildRequestEnrichment('Hello', 'openai', { depth });
+      return {
+        depth,
+        selectionPresent: selection.toString().includes(secret),
+        context: JSON.stringify(enrichment.context),
+        payload: JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages })
+      };
+    });
+  }, { secret: SECRET });
+  for (const result of report) {
+    expect(result.selectionPresent).toBe(true);
+    expect(result.context).not.toContain(SECRET);
+    expect(result.payload).not.toContain(SECRET);
+  }
+});
+
+test('Slides scoped and navigation context cannot borrow another protected deck', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async ({ pin, secret }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    const makeDeck = (text) => window.SutraSlides.normalizeDeck({ slides: [{ id: 'slide', title: text,
+      speakerNotes: text, elements: [{ id: 'text', type: 'text', text }] }] }, 'Deck');
+    payload.pages.push(
+      { id: 'slides-private', title: 'Private deck', content: '', blocks: [], slides: makeDeck(secret), createdAt: now, updatedAt: now },
+      { id: 'slides-public', title: 'Ordinary deck', content: '', blocks: [], slides: makeDeck('ORDINARY_SLIDES_TEXT'), createdAt: now, updatedAt: now }
+    );
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin('slides-private', pin);
+    window.flowAtelier.pages.find(page => page.id === 'slides-private').lockAutoLock = 'session';
+    window.flowAtelier.unlockedPageIds.add('slides-private');
+    window.flowAtelier.setActiveView('notes');
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('notes', 'approved');
+    window.loadPage('slides-private');
+    const scoped = window.flowAssistant.getFlowAssistantContext({ depth: 'currentView', scope: { type: 'note', noteId: 'slides-public' } });
+    let duringNavigation = null;
+    const observe = () => {
+      if (window.flowAtelier.currentPageId !== 'slides-public') return;
+      duringNavigation = { liveId: window.SutraSlides.getContext()?.id, stillUnlocked: window.flowAtelier.unlockedPageIds.has('slides-private'),
+        context: window.flowAssistant.getFlowAssistantContext({ depth: 'currentView' }) };
+    };
+    window.addEventListener('noteflow:view-changed', observe);
+    window.loadPage('slides-public');
+    window.removeEventListener('noteflow:view-changed', observe);
+    return { scoped, duringNavigation, settled: window.flowAssistant.getFlowAssistantContext({ depth: 'currentView' }) };
+  }, { pin: PIN, secret: SECRET });
+  expect(result.scoped.activeNote.excerpt).toContain('ORDINARY_SLIDES_TEXT');
+  expect(JSON.stringify(result.scoped)).not.toContain(SECRET);
+  expect(result.duringNavigation).not.toBeNull();
+  expect(result.duringNavigation.stillUnlocked).toBe(true);
+  expect(result.duringNavigation.liveId).toBe('slides-private');
+  expect(result.duringNavigation.context.activeNote.excerpt).toContain('ORDINARY_SLIDES_TEXT');
+  expect(JSON.stringify(result.duringNavigation.context)).not.toContain(SECRET);
+  expect(result.settled.slides.id).toBe('slides-public');
+  expect(JSON.stringify(result.settled)).toContain('ORDINARY_SLIDES_TEXT');
+});
+
+test('classic editor owner follows navigation and excludes stale protected selections', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async ({ pin, secret }) => {
+    const ordinaryText = 'Ordinary available passage';
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    payload.pages.push(
+      { id: 'classic-private', title: 'Classic private', content: `<p>${secret}</p>`, blocks: [], createdAt: now, updatedAt: now },
+      { id: 'classic-ordinary', title: 'Classic ordinary', content: `<p>${ordinaryText}</p>`, blocks: [], createdAt: now, updatedAt: now },
+      { id: 'classic-canvas', title: 'Classic canvas', type: 'canvas', content: '', blocks: [],
+        canvas: { version: 1, viewport: { x: 0, y: 0, zoom: 1 }, background: 'grid', objects: [], connections: [], groups: [] }, createdAt: now, updatedAt: now }
+    );
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin('classic-private', pin);
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.applyWorkspacePreferences({});
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('notes', 'approved');
+    const editor = document.getElementById('editor');
+    const selectEditor = () => {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return selection.toString();
+    };
+    const request = () => {
+      const enrichment = window.flowAssistant.buildRequestEnrichment('Hello', 'openai', { depth: 'minimal' });
+      return JSON.stringify({ systemPrompt: enrichment.systemPrompt, messages: enrichment.requestMessages });
+    };
+    window.loadPage('classic-ordinary');
+    const ordinaryOwner = editor.dataset.pageId;
+    const ordinarySelection = selectEditor();
+    const ordinaryRequest = request();
+
+    window.flowAtelier.unlockedPageIds.add('classic-private');
+    window.loadPage('classic-private');
+    const privateOwner = editor.dataset.pageId;
+    const privateSelection = selectEditor();
+    let duringNavigation = null;
+    const observe = () => {
+      if (window.flowAtelier.currentPageId !== 'classic-ordinary') return;
+      duringNavigation = { owner: editor.dataset.pageId || '', text: editor.textContent, request: request() };
+    };
+    window.addEventListener('noteflow:view-changed', observe);
+    window.loadPage('classic-ordinary');
+    window.removeEventListener('noteflow:view-changed', observe);
+
+    window.flowAtelier.unlockedPageIds.add('classic-private');
+    window.loadPage('classic-private');
+    selectEditor();
+    window.loadPage('classic-canvas');
+    const canvas = { owner: editor.dataset.pageId || '', hidden: editor.hidden, retainedText: editor.textContent, request: request() };
+    return { ordinaryText, ordinaryOwner, ordinarySelection, ordinaryRequest, privateOwner, privateSelection, duringNavigation, canvas };
+  }, { pin: PIN, secret: SECRET });
+
+  expect(result.ordinaryOwner).toBe('classic-ordinary');
+  expect(result.ordinarySelection).toContain(result.ordinaryText);
+  expect(result.ordinaryRequest).toContain(result.ordinaryText);
+  expect(result.privateOwner).toBe('classic-private');
+  expect(result.privateSelection).toContain(SECRET);
+  expect(result.duringNavigation).not.toBeNull();
+  expect(result.duringNavigation.text).toContain(SECRET);
+  expect(result.duringNavigation.owner).toBe('');
+  expect(result.duringNavigation.request).not.toContain(SECRET);
+  expect(result.canvas.hidden).toBe(true);
+  expect(result.canvas.owner).toBe('');
+  expect(result.canvas.retainedText).toContain(SECRET);
+  expect(result.canvas.request).not.toContain(SECRET);
+});
+
+for (const depth of ['currentView', 'minimal']) {
+test(`Assistant locked-page access requires consent and PIN without unlocking the editor (${depth})`, async ({ page }) => {
   await openApp(page);
   const targetId = await page.evaluate(async ({ pin, secret }) => {
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
@@ -176,14 +332,19 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
       createdAt: now,
       updatedAt: now
     });
+    payload.pages.push({
+      id: 'unrelated-assistant-note', title: 'Assistant private draft ordinary notes',
+      content: '<p>UNRELATED_ZOOM_RECORD must not enter this page-scoped request.</p>',
+      blocks: [], createdAt: now, updatedAt: now
+    });
     window.deserializeWorkspace(payload);
     await window.__sutraPublicBetaTestHooks.lockPageWithPin(targetId, pin);
-    window.loadPage(targetId);
+    window.loadPage('unrelated-assistant-note');
     return targetId;
   }, { pin: PIN, secret: SECRET });
 
   await page.evaluate(() => {
-    window.__assistantLockedAccessResult = window.flowAssistant.requestLockedPageAccessForPrompt('Read this current note and explain it.');
+    window.__assistantLockedAccessResult = window.flowAssistant.requestLockedPageAccessForPrompt('Read the locked note "Assistant private draft". What should I bring?');
   });
   await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
   await expect(page.locator('#customConfirmTitle')).toHaveText('Allow Assistant access once?');
@@ -193,13 +354,15 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
   await page.locator('#customPromptInput').fill(PIN);
   await page.locator('#customPromptConfirmBtn').click();
 
-  const report = await page.evaluate(async ({ targetId, secret }) => {
+  const report = await page.evaluate(async ({ targetId, secret, depth }) => {
     const result = await window.__assistantLockedAccessResult;
-    const enrichment = window.flowAssistant.buildRequestEnrichment('Read this current note and explain it.', 'openai', {
-      lockedPageAccessTicket: result.ticket
+    const question = 'Read the locked note "Assistant private draft". What should I bring?';
+    const local = window.flowAssistant.tryHandleCommand(question, { lockedPageAccessTicket: result.ticket });
+    const enrichment = window.flowAssistant.buildRequestEnrichment(question, 'openai', {
+      lockedPageAccessTicket: result.ticket, depth
     });
-    const reusedEnrichment = window.flowAssistant.buildRequestEnrichment('Read this current note and explain it.', 'openai', {
-      lockedPageAccessTicket: result.ticket
+    const reusedEnrichment = window.flowAssistant.buildRequestEnrichment(question, 'openai', {
+      lockedPageAccessTicket: result.ticket, depth
     });
     const contextAfter = window.getFlowAssistantContext({ depth: 'currentView' });
     const editorText = document.getElementById('editor')?.textContent || '';
@@ -208,6 +371,9 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
     window.flowAssistant.consumeLockedPageAccess(result.ticket);
     return {
       result,
+      locallyIntercepted: local.handled === true,
+      sources: enrichment.sources.map(source => ({ noteId: source.noteId, readOnce: source.readOnce })),
+      includesUnrelated: enrichment.systemPrompt.includes('UNRELATED_ZOOM_RECORD'),
       sentContextContainsSecret: JSON.stringify(enrichment.context).includes(secret),
       reusedGrantContainsSecret: JSON.stringify(reusedEnrichment?.context || {}).includes(secret),
       pageStillEditorLocked: !window.flowAtelier.unlockedPageIds.has(targetId),
@@ -215,9 +381,13 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
       afterGrantLeaks: JSON.stringify(contextAfter).includes(secret),
       persistedSettingUnchanged: settings?.allowLockedNotes === false
     };
-  }, { targetId, secret: SECRET });
+  }, { targetId, secret: SECRET, depth });
 
   expect(report.result.ok).toBe(true);
+  expect(report.locallyIntercepted).toBe(false);
+  expect(report.sources.length).toBeGreaterThan(0);
+  expect(report.sources.every(source => source.noteId === targetId && source.readOnce === true)).toBe(true);
+  expect(report.includesUnrelated).toBe(false);
   expect(report.sentContextContainsSecret).toBe(true);
   expect(report.reusedGrantContainsSecret).toBe(false);
   expect(report.pageStillEditorLocked).toBe(true);
@@ -225,6 +395,7 @@ test('Assistant locked-page access requires consent and PIN without unlocking th
   expect(report.afterGrantLeaks).toBe(false);
   expect(report.persistedSettingUnchanged).toBe(true);
 });
+}
 
 test('Assistant prompt enrichment rechecks memory permission at the final context boundary', async ({ page }) => {
   await openApp(page);
@@ -232,17 +403,22 @@ test('Assistant prompt enrichment rechecks memory permission at the final contex
     const secret = 'MEMORY_MUST_REQUIRE_AREA_APPROVAL';
     const priorPermissions = window.SutraAssistantPrivacy.getPermissions();
     const originalMemory = window.SutraAssistantMemory;
+    let memoryReads = 0;
+    const used = [];
     window.SutraAssistantMemory = {
-      buildPromptSnippets: () => [{ id: 'memory-private-1', text: secret }],
-      recordUsed: () => {}
+      buildPromptSnippets: () => { memoryReads++; return [{ id: 'memory-private-1', text: secret }]; },
+      recordUsed: ids => used.push(...ids)
     };
     window.SutraAssistantPrivacy.configure({
       getPermissions: () => ({ mode: 'ask_per_area', areas: { memory: 'ask', notes: 'denied' } })
     });
     try {
       const denied = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', {});
+      const deniedReads = memoryReads;
+      const deniedUsed = used.slice();
       const approved = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', { approvedAreas: ['memory'] });
       return {
+        deniedReads, deniedUsed,
         deniedPromptLeaks: denied.systemPrompt.includes(secret),
         deniedContextLeaks: JSON.stringify(denied.context).includes(secret),
         deniedMemoryIdLeaks: JSON.stringify(denied.context).includes('memory-private-1'),
@@ -255,13 +431,15 @@ test('Assistant prompt enrichment rechecks memory permission at the final contex
     }
   });
   expect(report.deniedPromptLeaks).toBe(false);
+  expect(report.deniedReads).toBe(0);
+  expect(report.deniedUsed).toEqual([]);
   expect(report.deniedContextLeaks).toBe(false);
   expect(report.deniedMemoryIdLeaks).toBe(false);
   expect(report.approvedPromptIncludes).toBe(true);
   expect(report.approvedMemoryIds).toEqual(['memory-private-1']);
 });
 
-test('Assistant bridge failure is reported and mutating actions fail closed', async ({ page }) => {
+test('Assistant bridge failure is reported; To-do stays usable while bridge writes fail closed', async ({ page }) => {
   await openApp(page);
   const report = await page.evaluate(() => {
     const originalBridge = window.flowAtelier;
@@ -272,13 +450,18 @@ test('Assistant bridge failure is reported and mutating actions fail closed', as
       errors.push({ message: String(error && error.message || error), context, severity });
     };
     try {
+      window.SutraAssistantPermissions.setMode('approved_actions');
       const context = window.getFlowAssistantContext({ depth: 'workspace' });
-      const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' });
+      const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' }, { reviewed: true });
+      const taskSaved = (window.SutraHomeworkStore.getSnapshot().tasks || []).some(row => row.title === 'Must not disappear');
       const block = window.sutraAssistant.applyAction({
         type: 'create_timeline_block', name: 'Must not disappear', date: '2026-08-25', start: '09:00', end: '10:00'
-      });
-      const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' });
-      return { context, task, block, note, errors };
+      }, { reviewed: true });
+      const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' }, { reviewed: true });
+      window.SutraAssistantPermissions.setMode('read_only');
+      const deniedTask = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must remain blocked' }, { reviewed: true });
+      const deniedTaskSaved = (window.SutraHomeworkStore.getSnapshot().tasks || []).some(row => row.title === 'Must remain blocked');
+      return { context, task, taskSaved, block, note, deniedTask, deniedTaskSaved, errors };
     } finally {
       window.flowAtelier = originalBridge;
       window.SutraReportError = originalReporter;
@@ -286,9 +469,12 @@ test('Assistant bridge failure is reported and mutating actions fail closed', as
   });
 
   expect(report.context.tasks).toEqual([]);
-  expect(report.task.ok).toBe(false);
+  expect(report.task.ok).toBe(true);
+  expect(report.taskSaved).toBe(true);
   expect(report.block.ok).toBe(false);
   expect(report.note.ok).toBe(false);
+  expect(report.deniedTask.ok).toBe(false);
+  expect(report.deniedTaskSaved).toBe(false);
   expect(report.errors).toEqual([
     expect.objectContaining({ message: 'Assistant workspace bridge is unavailable.', severity: 'error' })
   ]);

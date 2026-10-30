@@ -49,10 +49,18 @@
         return longIndex >= 0 ? longIndex : MONTH_ABBREVIATIONS[normalized];
     }
 
+    function calendarDate(year, month, day) {
+        var date = new Date(0);
+        date.setFullYear(year, month, day);
+        date.setHours(0, 0, 0, 0);
+        return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
+    }
+
     function inferredYear(base, month, day) {
         var today = startOfDay(base);
-        var candidate = new Date(today.getFullYear(), month, day);
-        if (candidate.getTime() < today.getTime() - 86400000) candidate.setFullYear(candidate.getFullYear() + 1);
+        var candidate = calendarDate(today.getFullYear(), month, day);
+        if (!candidate) return null;
+        if (candidate.getTime() < today.getTime() - 86400000) candidate = calendarDate(today.getFullYear() + 1, month, day);
         return candidate;
     }
 
@@ -66,6 +74,7 @@
     }
 
     function result(date, match, extra) {
+        if (!date) return null;
         var out = { date: localDateKey(date), match: match };
         if (extra && extra.timeHint) out.timeHint = extra.timeHint;
         if (extra && extra.kind) out.kind = extra.kind;
@@ -110,8 +119,7 @@
         }
 
         if ((match = lower.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/))) {
-            var iso = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-            if (iso.getMonth() === Number(match[2]) - 1 && iso.getDate() === Number(match[3])) return result(iso, match[0], { kind: 'iso' });
+            return result(calendarDate(Number(match[1]), Number(match[2]) - 1, Number(match[3])), match[0], { kind: 'iso' });
         }
         if ((match = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) {
             var month = Number(match[1]) - 1;
@@ -119,9 +127,10 @@
             if (month >= 0 && month < 12 && day >= 1 && day <= 31) {
                 var year = match[3] ? Number(match[3]) : null;
                 if (year !== null && year < 100) year += 2000;
-                var numeric = year === null ? inferredYear(base, month, day) : new Date(year, month, day);
-                if (numeric.getMonth() === month && numeric.getDate() === day) return result(numeric, match[0], { kind: 'numeric' });
+                var numeric = year === null ? inferredYear(base, month, day) : calendarDate(year, month, day);
+                return result(numeric, match[0], { kind: 'numeric' });
             }
+            return null;
         }
 
         var monthNames = MONTHS.concat(Object.keys(MONTH_ABBREVIATIONS)).join('|');
@@ -129,15 +138,15 @@
         if ((match = lower.match(monthFirst))) {
             var mfMonth = monthIndex(match[1]);
             var mfDay = Number(match[2]);
-            var mfDate = match[3] ? new Date(Number(match[3]), mfMonth, mfDay) : inferredYear(base, mfMonth, mfDay);
-            if (mfDate.getMonth() === mfMonth && mfDate.getDate() === mfDay) return result(mfDate, match[0], { kind: 'month-name' });
+            var mfDate = match[3] ? calendarDate(Number(match[3]), mfMonth, mfDay) : inferredYear(base, mfMonth, mfDay);
+            return result(mfDate, match[0], { kind: 'month-name' });
         }
         var dayFirst = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(' + monthNames + ')\\.?\\b');
         if ((match = lower.match(dayFirst))) {
             var dfMonth = monthIndex(match[2]);
             var dfDay = Number(match[1]);
             var dfDate = inferredYear(base, dfMonth, dfDay);
-            if (dfDate.getMonth() === dfMonth && dfDate.getDate() === dfDay) return result(dfDate, match[0], { kind: 'month-name' });
+            return result(dfDate, match[0], { kind: 'month-name' });
         }
 
         var weekdayNames = Object.keys(WEEKDAYS).join('|');
@@ -157,9 +166,12 @@
         if ((match = lower.match(/\b(?:the\s+|by\s+)?(\d{1,2})(?:st|nd|rd|th)\b/))) {
             var ordinal = Number(match[1]);
             if (ordinal >= 1 && ordinal <= 31) {
-                var ordinalDate = new Date(base.getFullYear(), base.getMonth(), ordinal);
-                if (ordinalDate.getTime() < startOfDay(base).getTime()) ordinalDate.setMonth(ordinalDate.getMonth() + 1);
-                if (ordinalDate.getDate() === ordinal) return result(ordinalDate, match[0], { kind: 'ordinal' });
+                var ordinalDate = calendarDate(base.getFullYear(), base.getMonth(), ordinal);
+                if (ordinalDate && ordinalDate.getTime() < startOfDay(base).getTime()) {
+                    var nextMonth = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+                    ordinalDate = calendarDate(nextMonth.getFullYear(), nextMonth.getMonth(), ordinal);
+                }
+                return result(ordinalDate, match[0], { kind: 'ordinal' });
             }
         }
         return null;
@@ -185,7 +197,7 @@
             return { time: String(Number(match[1])).padStart(2, '0') + ':' + match[2], match: match[0], kind: 'clock-24' };
         }
         if ((match = lower.match(/\b(after school|after class)\b/))) return { time: '15:30', match: match[0], kind: 'after-school' };
-        if ((match = lower.match(/\b(after dinner|after supper|tonight)\b/))) return { time: '19:00', match: match[0], kind: 'evening' };
+        if ((match = lower.match(/\b(after dinner|after supper|tonight|night|evening)\b/))) return { time: '19:00', match: match[0], kind: 'evening' };
         return null;
     }
 

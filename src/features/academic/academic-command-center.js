@@ -133,9 +133,14 @@
     return topics.filter(Boolean).slice(0, 3);
   }
 
+  function isOpenHomework(task) {
+    if (!task) return false;
+    return !(typeof task.done === 'boolean' ? task.done : task.completed === true || task.status === 'done');
+  }
+
   function buildCourseSummaries(input) {
     var now = input.now || new Date();
-    var tasks = arr(input.homeworkTasks).filter(function (task) { return task && !task.done && !task.completed; });
+    var tasks = arr(input.homeworkTasks).filter(isOpenHomework);
     var plannerCourses = input.gradePlanner && input.gradePlanner.courses ? input.gradePlanner.courses : {};
     return arr(input.courses).filter(function (course) { return course && !course.archived; }).map(function (course) {
       var courseTasks = tasks.filter(function (task) { return text(task.courseId) === text(course.id); });
@@ -197,7 +202,7 @@
   function rankActions(input, courseSummaries) {
     var byCourse = Object.create(null);
     arr(courseSummaries).forEach(function (course) { byCourse[course.id] = course; });
-    var actions = arr(input.homeworkTasks).filter(function (task) { return task && !task.done && !task.completed; })
+    var actions = arr(input.homeworkTasks).filter(isOpenHomework)
       .map(function (task) { return scoreTask(task, byCourse[text(task.courseId)], input.timeBlocks, input.now); });
 
     var review = input.reviewStats || {};

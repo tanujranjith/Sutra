@@ -29,8 +29,7 @@ Each snippet is:
 - **Ordered** (later snippets win — see [the cascade](#3-the-cascade-order)).
 - **Portable** — it lives in your workspace and rides along in backups.
 
-Overrides are intentionally CSS-only. They cannot run JavaScript, fetch anything,
-or read your data — that is what makes them safe to paste from a guide like this.
+Overrides are CSS-only and do not execute JavaScript. CSS can hide or rearrange controls and request assets permitted by the app CSP; use snippets you understand. Safe Mode skips custom CSS without deleting it.
 
 ### Where to find them
 
@@ -248,7 +247,7 @@ prefixing its selector with the view ID.
 | Notes view | `#view-notes` |
 | Editor container | `#notesEditorContainer` / `.editor-container` |
 | Primary note pane | `#notesPrimaryPane` / `.notes-pane.notes-pane-primary` |
-| Main editable surface | `#editor` / `#view-notes .editor` |
+| Main editable surface | Modern Editor: `#editorV2Host .tiptap`; classic fallback: `#editor` / `#view-notes .editor` |
 | Toolbar | `#view-notes .toolbar` |
 | Page title input | `.page-title-input` |
 
@@ -667,8 +666,8 @@ them for predictable results:
 | Breakpoint | Typical meaning |
 | --- | --- |
 | `max-width: 1024px` | Tablet / narrow desktop |
-| `max-width: 768px` | Primary mobile breakpoint (navigation collapses to the view menu) |
-| `max-width: 640px` | Small tablet / large phone |
+| `max-width: 768px` | Small-tablet layout adjustments; phone navigation begins at 640px |
+| `max-width: 640px` | Phone layout with bottom navigation and More sheet |
 | `max-width: 560px` | Assistant badge switches to its compact layout |
 | `max-width: 480px` | Phone |
 | `max-width: 360px` | Small phone |
@@ -688,8 +687,8 @@ Guidance for mobile snippets:
 - **Test at multiple widths.** Use your browser's device toolbar across 768 → 320px,
   and confirm nothing overflows horizontally (the editor and drawings are already
   width-capped to avoid horizontal overflow on phones).
-- **Sidebar width tokens don't apply on phones.** The sidebar becomes a menu under
-  768px, so `--sidebar-width` overrides only affect wider screens.
+- **Sidebar width tokens don't apply on phones.** The phone shell uses contextual drawers and More at
+  640px, so `--sidebar-width` overrides only affect wider screens.
 
 For the full per-area behavior on small screens, see
 [MOBILE_AND_RESPONSIVE_BEHAVIOR.md](MOBILE_AND_RESPONSIVE_BEHAVIOR.md). For the

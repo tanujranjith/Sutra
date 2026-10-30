@@ -15,8 +15,9 @@
  *  5. manifest.webmanifest parses and its icons + start_url resolve.
  *  6. Favicon and social-preview images resolve.
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, resolve } from 'node:path';
+import { getDeployPathProblem } from './lib/deploy-path-policy.mjs';
 
 const repoRoot = resolve(process.cwd());
 const outDir = join(repoRoot, '.deploy');
@@ -27,8 +28,29 @@ const fail = (msg) => {
   failures += 1;
 };
 
-if (!existsSync(outDir)) {
+const artifactRoot = lstatSync(outDir, { throwIfNoEntry: false });
+if (!artifactRoot) {
   console.error('check:deploy FAILED — .deploy/ does not exist. Run `npm run build:deploy` first.');
+  process.exit(1);
+}
+if (artifactRoot.isSymbolicLink() || !artifactRoot.isDirectory()) {
+  console.error('check:deploy FAILED — .deploy must be a plain directory.');
+  process.exit(1);
+}
+
+// Check every path before reading any artifact content. In particular, a
+// symlink masquerading as an entry HTML file must never be followed below.
+function checkArtifactPaths(dir, rel = '') {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const relPath = rel ? posix.join(rel, entry.name) : entry.name;
+    const problem = getDeployPathProblem(relPath, { isDirectory: entry.isDirectory(), isSymbolicLink: entry.isSymbolicLink() });
+    if (problem) fail(`non-runtime artifact entry: ${relPath} (${problem})`);
+    else if (entry.isDirectory()) checkArtifactPaths(join(dir, entry.name), relPath);
+  }
+}
+checkArtifactPaths(outDir);
+if (failures) {
+  console.error('Deploy-artifact check FAILED — unsafe paths rejected before inspecting content.');
   process.exit(1);
 }
 

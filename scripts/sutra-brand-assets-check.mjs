@@ -58,10 +58,15 @@ function requireNotContains(filePath, needle, label) {
 // ── Masters ──────────────────────────────────────────────────────────────────
 
 console.log('\n── Canonical master PNGs ───────────────────────────────────────');
+requireFile('assets/brand/sutra/sutra-mark-master.png', 'Transparent Sutra S master');
 requireFile('assets/brand/sutra/sutra-app-icon-master.png',       'Main Sutra master PNG');
 requireFile('assets/brand/sutra/sutra-assistant-icon-master.png', 'Sutra Assistant master PNG');
+requireFile('assets/brand/sutra/sutra-assistant-avatar-master.png', 'Transparent Assistant avatar master PNG');
 
 // ── Main Sutra derivatives ───────────────────────────────────────────────────
+
+requireFile('assets/brand/sutra/sutra-assistant-face-master.png', 'Assistant eyeless face master');
+requireFile('assets/brand/sutra/generated/sutra-assistant-face-128.png', 'Assistant animation face');
 
 console.log('\n── Main Sutra icon derivatives ─────────────────────────────────');
 const APP_SIZES = [16, 32, 48, 64, 96, 128, 180, 192, 256, 512, 1024];
@@ -95,9 +100,9 @@ for (const html of ['index.html', 'HomePage.html', 'Sutra.html']) {
 
 console.log('\n── HTML: new brand PNG favicon referenced ──────────────────────');
 for (const html of ['index.html', 'HomePage.html', 'Sutra.html']) {
-  requireContains(html, 'assets/brand/sutra/generated/sutra-icon-32.png',
+  requireContains(html, 'assets/brand/sutra/generated/sutra-favicon-32.png',
     `${html}: 32px PNG favicon linked`);
-  requireContains(html, 'assets/brand/sutra/generated/sutra-icon-16.png',
+  requireContains(html, 'assets/brand/sutra/generated/sutra-favicon-16.png',
     `${html}: 16px PNG favicon linked`);
   requireContains(html, 'assets/brand/sutra/generated/favicon.ico',
     `${html}: favicon.ico shortcut linked`);

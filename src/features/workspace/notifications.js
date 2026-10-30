@@ -475,17 +475,18 @@
             // includes historical events.
             if (!item || item.notificationEligible === false) return;
             var source = item.source || 'task';
-            if (!prefs.categories[source]) return;
+            var category = source === 'task' ? 'tasks' : source;
+            if (!prefs.categories[category]) return;
 
             var dueMs = item.due instanceof Date ? item.due.getTime() : new Date(item.due).getTime();
             if (isNaN(dueMs)) return;
 
             var hoursUntil = (dueMs - now) / 3600000;
-            var rule = _resolveReminderRule(item, source, prefs);
+            var rule = _resolveReminderRule(item, category, prefs);
             if (rule && rule.mute) return;
             var thresholds = (rule && rule.leadHours.length)
                 ? rule.leadHours
-                : (prefs.thresholds[source] || [168, 72, 24, 0]);
+                : (prefs.thresholds[category] || [168, 72, 24, 0]);
 
             // Show the most-specific notification that applies.
             // Only one notification per item at any given time.
@@ -553,6 +554,19 @@
         return document.getElementById('notifList');
     }
 
+    // Use the event/deadline date, not the time an overdue reminder is rebuilt.
+    // Calendar subtraction keeps the seven-day boundary local across DST.
+    function _partitionNotificationAges(items, now) {
+        var cutoff = new Date(now || Date.now());
+        cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - 7);
+        var recent = [], older = [];
+        (items || []).forEach(function (item) {
+            var date = item && item.due != null ? new Date(item.due) : null;
+            (date && Number.isFinite(date.getTime()) && date < cutoff ? older : recent).push(item);
+        });
+        return { recent: recent, older: older };
+    }
+
     function _renderPanel() {
         var list = _getList();
         if (!list) return;
@@ -569,6 +583,9 @@
                 + '<button class="notif-empty-action" type="button" onclick="if(typeof setActiveView===\'function\') setActiveView(\'today\')">Open Home →</button>'
                 + '</div>';
         } else {
+            var ages = _partitionNotificationAges(toShow);
+            var wasExpanded = !!list.querySelector('.notif-older[open]');
+            toShow = ages.recent;
             var missed = toShow.filter(function (n) { return n.missedWhileAway && !n.read; });
             var rest = toShow.filter(function (n) { return missed.indexOf(n) === -1; });
             var missedHtml = missed.length
@@ -576,7 +593,9 @@
                     + missed.map(_renderRow).join('')
                     + (rest.length ? '<div class="notif-group-head">Up next</div>' : '')
                 : '';
-            list.innerHTML = missedHtml + rest.map(_renderRow).join('');
+            global.SutraDOMSafety.setTrustedHTML(list, missedHtml + rest.map(_renderRow).join('')
+                + (!toShow.length ? '<div class="notif-empty-sub">No notifications from the past week.</div>' : '')
+                + (ages.older.length ? '<details class="notif-older"' + (wasExpanded ? ' open' : '') + '><summary>Older notifications (' + ages.older.length + ')</summary>' + ages.older.map(_renderRow).join('') + '</details>' : ''));
         }
 
         _updateBadge();
@@ -629,7 +648,7 @@
         if (!bell) return;
         var badge = bell.querySelector('.notif-bell-badge');
         if (!badge) return;
-        var unread = _notifications.filter(function (n) { return !n.read; }).length;
+        var unread = _partitionNotificationAges(_notifications).recent.filter(function (n) { return !n.read; }).length;
         badge.textContent = unread > 99 ? '99+' : String(unread || '');
         badge.setAttribute('data-count', String(unread));
         var label = unread > 0
@@ -648,7 +667,7 @@
     function _updatePanelCount() {
         var el = document.getElementById('notifPanelCount');
         if (!el) return;
-        var unread = _notifications.filter(function (n) { return !n.read; }).length;
+        var unread = _partitionNotificationAges(_notifications).recent.filter(function (n) { return !n.read; }).length;
         el.textContent = unread > 0 ? String(unread) : '';
         el.setAttribute('data-count', String(unread));
     }
@@ -811,6 +830,23 @@
                 }
                 return;
             }
+            var item = sourceId && typeof fa.collectWorkspaceDeadlines === 'function'
+                ? (fa.collectWorkspaceDeadlines({ includeBusiness: true }) || []).find(function (entry) {
+                    return entry.source === source && String(entry.sourceId) === String(sourceId);
+                }) : null;
+            if (item && source === 'task' && typeof fa.openTaskModal === 'function') {
+                fa.openTaskModal(sourceId);
+                return;
+            }
+            if (item && source === 'homework' && typeof global.openHomeworkTaskModal === 'function') {
+                global.openHomeworkTaskModal('v2', sourceId);
+                return;
+            }
+            if (item && source === 'milestone' && global.SutraAssignmentStudio && typeof global.SutraAssignmentStudio.open === 'function') {
+                global.SutraAssignmentStudio.open(sourceId);
+                return;
+            }
+            if (item && source !== 'milestone' && typeof fa.openDeadlineSource === 'function') { fa.openDeadlineSource(item); return; }
             var view = viewMap[source] || 'today';
             if (fa.setActiveView) fa.setActiveView(view);
         } catch (e) { /* non-critical */ }
@@ -888,12 +924,17 @@
         // Show toasts for newly-urgent items (after startup grace period)
         if (_startupGraceDone && !_inQuietHours()) {
             _showNewUrgentToasts(prev, _notifications);
+            // Existing urgent items may have appeared before startup grace or
+            // browser opt-in. OS dedupe is independent of the in-app toast list.
+            _notifications.forEach(function (n) {
+                if (!n.read && (n.priority === 'urgent' || n.priority === 'overdue')) _sendBrowserNotification(n);
+            });
         }
     }
 
     function _showNewUrgentToasts(prev, current) {
         var prevKeys = new Set(prev.map(function (n) { return n.key; }));
-        current.forEach(function (n) {
+        _partitionNotificationAges(current).recent.forEach(function (n) {
             if (!prevKeys.has(n.key) && (n.priority === 'urgent' || n.priority === 'overdue')) {
                 showToast({
                     title: n.title,
@@ -906,28 +947,29 @@
                         openPanel();
                     }
                 });
-                _sendBrowserNotification(n);
             }
         });
     }
 
     // ---- OS / browser notifications (only while Sutra is open) ----------------
     function _sendBrowserNotification(n) {
+        if (_partitionNotificationAges([n]).older.length) return false;
         try {
-            if (!_state.prefs.browserNotificationsEnabled) return;
-            if (!('Notification' in global) || Notification.permission !== 'granted') return;
-            if (_browserNotifiedKeys[n.key]) return;
-            _browserNotifiedKeys[n.key] = true;
+            if (!_state.prefs.enabled || !_state.prefs.browserNotificationsEnabled) return false;
+            if (!('Notification' in global) || Notification.permission !== 'granted') return false;
+            if (_browserNotifiedKeys[n.key]) return false;
             var notification = new Notification(n.title, {
                 body: (n.subtitle ? n.subtitle + ' · ' : '') + n.relativeTime,
                 tag: 'sutra-' + n.key
             });
+            _browserNotifiedKeys[n.key] = true;
             notification.onclick = function () {
                 try { global.focus(); } catch (e) { /* non-critical */ }
                 markRead(n.key);
                 _openSourceItem(n.source, n.sourceId);
             };
-        } catch (e) { /* notification constructor can throw on some platforms */ }
+            return true;
+        } catch (e) { return false; /* A failed constructor must remain retryable. */ }
     }
 
     // ---- Missed-reminder replay -------------------------------------------------
@@ -1283,21 +1325,37 @@
     // the .ics calendar handoff remains the cross-device "remind me when closed".
     function registerBackgroundReminders() {
         try {
-            if (!_state.prefs || !_state.prefs.browserNotificationsEnabled) return;
             if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
-            navigator.serviceWorker.ready.then(function (reg) {
+            var enabled = function () {
+                return !!(_state.prefs && _state.prefs.enabled && _state.prefs.browserNotificationsEnabled
+                    && ('Notification' in global) && Notification.permission === 'granted');
+            };
+            // The browser's registration is shared across requests. Serialize
+            // changes in this document so a slow unregister cannot finish
+            // after a newer opt-in has already registered the reminder.
+            _state.backgroundReminderQueue = (_state.backgroundReminderQueue || Promise.resolve()).catch(function () {}).then(function () {
+              return navigator.serviceWorker.ready.then(function (reg) {
                 if (!reg || !reg.periodicSync) return;
+                var cancel = function () {
+                    return reg.periodicSync.unregister('sutra-daily-reminder').catch(function () { /* unsupported */ });
+                };
+                if (!enabled()) return cancel();
                 var doRegister = function () {
-                    reg.periodicSync.register('sutra-daily-reminder', { minInterval: 22 * 60 * 60 * 1000 }).catch(function () { /* unsupported / not installed */ });
+                    if (!enabled()) return cancel();
+                    return reg.periodicSync.register('sutra-daily-reminder', { minInterval: 22 * 60 * 60 * 1000 })
+                        .then(function () { if (!enabled()) return cancel(); })
+                        .catch(function () { /* unsupported / not installed */ });
                 };
                 if (navigator.permissions && navigator.permissions.query) {
-                    navigator.permissions.query({ name: 'periodic-background-sync' })
-                        .then(function (status) { if (status.state === 'granted') doRegister(); })
+                    return navigator.permissions.query({ name: 'periodic-background-sync' })
+                        .then(function (status) { if (status.state === 'granted') return doRegister(); })
                         .catch(doRegister);
                 } else {
-                    doRegister();
+                    return doRegister();
                 }
-            }).catch(function () { /* no SW */ });
+              }).catch(function () { /* no SW */ });
+            });
+            return _state.backgroundReminderQueue;
         } catch (e) { /* unsupported */ }
     }
 
@@ -1316,10 +1374,16 @@
             if (callback) callback('denied');
             return;
         }
-        Notification.requestPermission().then(function (perm) {
-            if (perm === 'granted') registerBackgroundReminders();
-            if (callback) callback(perm);
-        });
+        if (typeof Notification.requestPermission !== 'function') {
+            if (callback) callback('unsupported');
+            return;
+        }
+        try {
+            Promise.resolve(Notification.requestPermission()).then(function (perm) {
+                if (perm === 'granted') registerBackgroundReminders();
+                if (callback) callback(perm);
+            }, function () { if (callback) callback('error'); });
+        } catch (e) { if (callback) callback('error'); }
     }
 
     // ---- Preferences -------------------------------------------------------
@@ -1340,7 +1404,7 @@
             _state.prefs.rules = _sanitizeRules(delta.rules);
         }
         _saveState();
-        if (delta.browserNotificationsEnabled) registerBackgroundReminders();
+        if ('browserNotificationsEnabled' in delta || 'enabled' in delta) registerBackgroundReminders();
         refresh();
         _renderNotificationSettingsUI();
     }
@@ -1352,21 +1416,21 @@
         var p = _state.prefs;
 
         root.innerHTML = '<div class="cc-row">'
-            + '<div class="cc-row-label"><span class="cc-row-title">In-app notifications</span>'
-            + '<span class="cc-row-sub">Show upcoming deadlines in the notification panel</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">In-app notifications</span>'
+            + '<span class="cc-row-help">Show upcoming deadlines in the notification panel</span></div>'
             + '<label class="cc-switch" aria-label="Enable in-app notifications">'
             + '<input type="checkbox" id="notifPrefEnabled"' + (p.enabled ? ' checked' : '') + '>'
             + '<div class="cc-switch-track"><div class="cc-switch-thumb"></div></div></label></div>'
 
             + '<div class="cc-row">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Quiet hours</span>'
-            + '<span class="cc-row-sub">Suppress toasts during these hours</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Quiet hours</span>'
+            + '<span class="cc-row-help">Suppress toasts during these hours</span></div>'
             + '<label class="cc-switch" aria-label="Enable quiet hours">'
             + '<input type="checkbox" id="notifPrefQuiet"' + (p.quietHoursEnabled ? ' checked' : '') + '>'
             + '<div class="cc-switch-track"><div class="cc-switch-thumb"></div></div></label></div>'
 
             + '<div class="cc-row cc-row--indent" id="notifQuietHoursRow" style="' + (p.quietHoursEnabled ? '' : 'display:none') + '">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Quiet from</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Quiet from</span></div>'
             + '<div style="display:flex;gap:8px;align-items:center">'
             + '<input type="time" class="modal-input" id="notifQuietStart" value="' + _esc(p.quietHoursStart || '22:00') + '" style="width:110px">'
             + '<span style="color:var(--text-muted);font-size:.8rem">to</span>'
@@ -1374,60 +1438,66 @@
             + '</div></div>'
 
             + '<div class="cc-row">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Browser notifications</span>'
-            + '<span class="cc-row-sub">Optional — only if you grant permission</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Browser notifications</span>'
+            + '<span class="cc-row-help">Optional — only if you grant permission</span></div>'
             + '<button type="button" class="cc-btn cc-btn-quiet" id="notifBrowserPermBtn" style="font-size:.78rem">'
             + (_getBrowserPermLabel()) + '</button></div>'
 
             + '<div class="cc-row">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Replay missed reminders</span>'
-            + '<span class="cc-row-sub">When Sutra reopens, show what fired while it was closed</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Replay missed reminders</span>'
+            + '<span class="cc-row-help">When Sutra reopens, show what fired while it was closed</span></div>'
             + '<label class="cc-switch" aria-label="Replay missed reminders">'
             + '<input type="checkbox" id="notifPrefReplay"' + (p.missedReplayEnabled !== false ? ' checked' : '') + '>'
             + '<div class="cc-switch-track"><div class="cc-switch-thumb"></div></div></label></div>'
 
             + '<div class="cc-row">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Daily digest</span>'
-            + '<span class="cc-row-sub">One morning summary of overdue + due-today items</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Daily digest</span>'
+            + '<span class="cc-row-help">One morning summary of overdue + due-today items</span></div>'
             + '<label class="cc-switch" aria-label="Daily digest">'
             + '<input type="checkbox" id="notifPrefDigest"' + (p.dailyDigestEnabled ? ' checked' : '') + '>'
             + '<div class="cc-switch-track"><div class="cc-switch-thumb"></div></div></label></div>'
 
             + '<div class="cc-row">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Send reminders to my calendar</span>'
-            + '<span class="cc-row-sub">Export upcoming reminders (.ics with alarms) for alerts that work when the browser is closed</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Send reminders to my calendar</span>'
+            + '<span class="cc-row-help">Export upcoming reminders (.ics with alarms) for alerts that work when the browser is closed</span></div>'
             + '<button type="button" class="cc-btn cc-btn-quiet" id="notifExportIcsBtn" style="font-size:.78rem">Export .ics</button></div>'
 
             + '<div class="cc-row" style="display:block">'
-            + '<div class="cc-row-label" style="max-width:none"><span class="cc-row-title">What Sutra can and can’t do</span>'
-            + '<span class="cc-row-sub">Sutra is local-first with no server, so reminders fire <strong>while Sutra is open</strong> (toasts, and OS notifications if permitted). '
+            + '<div class="cc-row-text" style="max-width:none"><span class="cc-row-name">What Sutra can and can’t do</span>'
+            + '<span class="cc-row-help">Sutra is local-first with no server, so reminders fire <strong>while Sutra is open</strong> (toasts, and OS notifications if permitted). '
             + 'Browsers do not let pages run in the background, and OS notifications are unavailable when Sutra runs directly from a file. '
             + 'Anything missed is replayed when you come back, and the calendar export above is the reliable path for closed-browser alerts.</span></div></div>'
 
             + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Categories</span>'
-            + '<span class="cc-row-sub">Choose which types of items trigger notifications</span></div></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Categories</span>'
+            + '<span class="cc-row-help">Choose which types of items trigger notifications</span></div></div>'
 
             + _renderCategoryToggles(p)
 
             + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Reminder timing</span>'
-            + '<span class="cc-row-sub">Lead times before due, comma-separated — d days, h hours, m minutes, 0 = on the day (e.g. “7d, 3d, 1d, 0”)</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Reminder timing</span>'
+            + '<span class="cc-row-help">Lead times before due, comma-separated — d days, h hours, m minutes, 0 = on the day (e.g. “7d, 3d, 1d, 0”)</span></div>'
             + '<button type="button" class="cc-btn cc-btn-quiet" id="notifThrResetBtn" style="font-size:.78rem">Reset to defaults</button></div>'
 
             + _renderThresholdRows(p)
 
             + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Course rules</span>'
-            + '<span class="cc-row-sub">Override the timing — or mute reminders — for one class. Rules apply to deadline reminders; category toggles above still win.</span></div></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Course rules</span>'
+            + '<span class="cc-row-help">Override the timing — or mute reminders — for one class. Rules apply to deadline reminders; category toggles above still win.</span></div></div>'
 
             + _renderReminderRuleRows(p)
             + _renderReminderRuleForm()
 
             + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
-            + '<div class="cc-row-label"><span class="cc-row-title">Test notification</span>'
-            + '<span class="cc-row-sub">Preview a notification toast</span></div>'
+            + '<div class="cc-row-text"><span class="cc-row-name">Test notification</span>'
+            + '<span class="cc-row-help">Test an in-app alert and, when enabled, a browser notification</span></div>'
             + '<button type="button" class="cc-btn cc-btn-quiet" id="notifTestBtn" style="font-size:.78rem">Send test</button></div>';
+
+        // Dynamic rows use the same semantic boundary as static Settings rows,
+        // so search names the setting instead of the section's generic heading.
+        root.querySelectorAll('.cc-row').forEach(function (row) {
+            if (row.querySelector('button, input, select, textarea')) row.setAttribute('data-setting-item', '');
+        });
 
         // Wire events
         var enabledEl = document.getElementById('notifPrefEnabled');
@@ -1453,11 +1523,9 @@
         });
 
         var permBtn = document.getElementById('notifBrowserPermBtn');
+        if (permBtn) permBtn.setAttribute('aria-pressed', String(!!p.browserNotificationsEnabled));
         if (permBtn) permBtn.addEventListener('click', function () {
-            requestBrowserPermission(function (perm) {
-                permBtn.textContent = _getBrowserPermLabel(perm);
-                if (perm === 'granted') updatePreferences({ browserNotificationsEnabled: true });
-            });
+            toggleBrowserNotifications(permBtn);
         });
 
         var replayEl = document.getElementById('notifPrefReplay');
@@ -1477,12 +1545,7 @@
 
         var testBtn = document.getElementById('notifTestBtn');
         if (testBtn) testBtn.addEventListener('click', function () {
-            showToast({
-                title: 'Test notification',
-                subtitle: 'Sutra notifications are working',
-                icon: 'fa-bell',
-                duration: 4000
-            });
+            sendTestNotification();
         });
 
         // Category toggles
@@ -1581,11 +1644,38 @@
     }
 
     function _getBrowserPermLabel(perm) {
+        if (_state.prefs && _state.prefs.browserNotificationsEnabled) return 'Turn off browser alerts';
         var p = perm || (('Notification' in global) ? Notification.permission : 'unsupported');
         if (p === 'unsupported') return 'Not supported';
-        if (p === 'granted') return 'Enabled';
+        if (p === 'granted') return 'Enable browser alerts';
         if (p === 'denied') return 'Blocked (check browser)';
+        if (p === 'error') return 'Could not enable — try again';
         return 'Enable browser alerts';
+    }
+
+    function toggleBrowserNotifications(button) {
+        if (_state.prefs.browserNotificationsEnabled) {
+            updatePreferences({ browserNotificationsEnabled: false });
+            return;
+        }
+        button.disabled = true;
+        requestBrowserPermission(function (perm) {
+            button.disabled = false;
+            if (perm === 'granted') updatePreferences({ browserNotificationsEnabled: true });
+            else button.textContent = _getBrowserPermLabel(perm);
+        });
+    }
+
+    function sendTestNotification() {
+        var sent = _sendBrowserNotification({
+            key: 'test-' + Date.now(), title: 'Test notification',
+            subtitle: 'Sutra browser alert test', relativeTime: 'Just now', source: 'task', sourceId: ''
+        });
+        showToast({
+            title: 'Test notification',
+            subtitle: sent ? 'Browser alert requested. Check your device notifications.' : 'In-app test only. Browser alerts are off, blocked, or unavailable.',
+            icon: 'fa-bell', duration: 4000
+        });
     }
 
     function _renderCategoryToggles(prefs) {
@@ -1593,7 +1683,7 @@
         return Object.keys(cats).map(function (key) {
             var checked = prefs.categories && prefs.categories[key] !== false;
             return '<div class="cc-row cc-row--indent">'
-                + '<div class="cc-row-label"><span class="cc-row-title">' + _esc(cats[key]) + '</span></div>'
+                + '<div class="cc-row-text"><span class="cc-row-name">' + _esc(cats[key]) + '</span></div>'
                 + '<label class="cc-switch" aria-label="' + _esc(cats[key]) + ' notifications">'
                 + '<input type="checkbox" id="notifCat-' + _esc(key) + '"' + (checked ? ' checked' : '') + '>'
                 + '<div class="cc-switch-track"><div class="cc-switch-thumb"></div></div></label></div>';
@@ -1604,7 +1694,7 @@
         return Object.keys(DEFAULT_PREFS.thresholds).map(function (key) {
             var hours = (prefs.thresholds && prefs.thresholds[key]) || DEFAULT_PREFS.thresholds[key];
             return '<div class="cc-row cc-row--indent">'
-                + '<div class="cc-row-label"><span class="cc-row-title">' + _esc(CATEGORY_LABELS[key] || key) + '</span></div>'
+                + '<div class="cc-row-text"><span class="cc-row-name">' + _esc(CATEGORY_LABELS[key] || key) + '</span></div>'
                 + '<input type="text" class="modal-input" id="notifThr-' + _esc(key) + '"'
                 + ' value="' + _esc(_formatLeadTimes(hours)) + '"'
                 + ' aria-label="' + _esc(CATEGORY_LABELS[key] || key) + ' reminder timing"'
@@ -1633,14 +1723,14 @@
         var rules = Array.isArray(prefs.rules) ? prefs.rules : [];
         if (!rules.length) {
             return '<div class="cc-row cc-row--indent">'
-                + '<div class="cc-row-label"><span class="cc-row-sub">No course rules yet.</span></div></div>';
+                + '<div class="cc-row-text"><span class="cc-row-help">No course rules yet.</span></div></div>';
         }
         return rules.map(function (r) {
             var what = r.source ? (CATEGORY_LABELS[r.source] || r.source) : 'All categories';
             var when = r.mute ? 'Muted' : _formatLeadTimes(r.leadHours).replace(/\b0\b/, 'on the day');
             return '<div class="cc-row cc-row--indent">'
-                + '<div class="cc-row-label"><span class="cc-row-title">' + _esc(_courseNameById(r.courseId)) + '</span>'
-                + '<span class="cc-row-sub">' + _esc(what) + ' — ' + _esc(when) + '</span></div>'
+                + '<div class="cc-row-text"><span class="cc-row-name">' + _esc(_courseNameById(r.courseId)) + '</span>'
+                + '<span class="cc-row-help">' + _esc(what) + ' — ' + _esc(when) + '</span></div>'
                 + '<button type="button" class="cc-btn cc-btn-quiet" data-rule-del="' + _esc(r.id) + '" style="font-size:.78rem">Remove</button></div>';
         }).join('');
     }
@@ -1649,7 +1739,7 @@
         var courses = _listCoursesSafe();
         if (!courses.length) {
             return '<div class="cc-row cc-row--indent">'
-                + '<div class="cc-row-label"><span class="cc-row-sub">Add classes in To-do to create course rules.</span></div></div>';
+                + '<div class="cc-row-text"><span class="cc-row-help">Add classes in To-do to create course rules.</span></div></div>';
         }
         var courseOpts = courses.map(function (c) {
             return '<option value="' + _esc(String(c.id)) + '">' + _esc(String(c.name)) + '</option>';
@@ -1673,6 +1763,7 @@
 
         _loadState();
         _pruneOldDismissed();
+        registerBackgroundReminders();
 
         // Replay reminders that fired while Sutra was closed (delayed so the
         // workspace bridges are hydrated before we derive deadlines).
@@ -1713,6 +1804,7 @@
         // so startup doesn't flood the user
         setTimeout(function () {
             _startupGraceDone = true;
+            refresh();
         }, 4000);
 
         // Listen for settings view navigation to render settings section
@@ -1754,6 +1846,7 @@
         if (Object.prototype.hasOwnProperty.call(raw, 'lastWeeklyReviewAt')) _state.lastWeeklyReviewAt = raw.lastWeeklyReviewAt;
         if (Object.prototype.hasOwnProperty.call(raw, 'lastWeeklyNudge')) _state.lastWeeklyNudge = raw.lastWeeklyNudge;
         _saveState();
+        registerBackgroundReminders();
         refresh();
     }
 

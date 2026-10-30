@@ -18,7 +18,7 @@ The Cloud hub has Sync and Backups sections under one account/setup surface.
 Its summary reports local saving, replication, and snapshots independently.
 After enable/unlock, Sync automatically debounces confirmed saves (2.5 seconds),
 retries after reconnect, checks when the app returns to the foreground, and
-polls periodically while an engine is active. You do not need to press Sync now
+polls every two minutes while an engine is active and the tab is visible. You do not need to press Sync now
 after editing. The vault must be unlocked again each session. Closing the app
 stops its timers; this is not an operating-system background service.
 
@@ -29,7 +29,9 @@ The app-hidden option is best effort, not a guarantee that an upload finishes
 after closing the browser. Web Locks serialize scheduled uploads across tabs;
 a durable receipt suppresses repeat uploads of the same confirmed workspace.
 Browsers without Web Locks leave automatic backups paused and still support
-manual backups. Sync's existing IndexedDB lease fallback is unchanged.
+manual backups. Change-triggered backups retry transient upload/lock contention
+once per minute while their schedule remains enabled; unchanged work and ordinary
+errors do not cause a retry loop. Sync's existing IndexedDB lease fallback is unchanged.
 
 Before the first merge, Sutra downloads an encrypted
 `sutra-before-sync-*.sutra` safety backup; setup stops if required attachment
@@ -41,6 +43,9 @@ bytes are missing. Normative technical spec:
 Sutra Sync remains a beta while browser, installed-PWA, mobile, account-change,
 offline, conflict, and revoke-and-wipe behavior continues to be validated on
 real devices. Keep a recent encrypted `.sutra` backup in a separate location.
+The abnormal-conflict safeguard retains detected alternate versions in the
+device-local review store before pausing. It does not apply a remote winner,
+push merged changes, or advance the cursor during that paused cycle.
 Revoked devices lose cloud access immediately, but an offline device can
 process a requested local wipe only after it reconnects. Sync is useful for
 replication, but it is not the only copy you should rely on for recovery.
@@ -143,9 +148,12 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
   and pauses sync while keeping the local workspace.
 - **Revoke & wipe another device** blocks that device's RPC, key, snapshot, and
   asset access immediately and marks a wipe pending. On its next verified
-  connection, every Sutra tab in that browser deletes local workspace,
+  connection, every Sutra tab in that browser locks and conceals its workspace
+  before waiting for pending local saves to settle. It then deletes local workspace,
   attachments, Assistant history/memory, compatibility mirrors, sync/auth state,
-  and other Sutra origin storage, then acknowledges completion. Unsynchronized
+  and other Sutra origin storage, then acknowledges completion. Concurrent tabs
+  preserve an already acknowledged wipe and finish their own session cleanup
+  before offering empty-workspace reuse. Unsynchronized
   work on that device is lost. A browser that stays offline or powered off cannot
   be remotely erased; downloaded backups/external files are not browser data.
 - Sync persists the Supabase **refresh token** in its own account-scoped
@@ -175,18 +183,7 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
 V1 syncs through the same Supabase project that powers Sutra Cloud backups
 (official or bring-your-own). Setup for the project owner:
 
-1. New project: run [`supabase/schema.sql`](../../supabase/schema.sql) (backups), then
-   [`supabase/sync-schema.sql`](../../supabase/sync-schema.sql) (sync tables,
-   RLS, RPCs). Both idempotent. Existing sync project: run only
-   [`supabase/migrations/20260716_device_revoke_wipe.sql`](../../supabase/migrations/20260716_device_revoke_wipe.sql)
-   to add revoke-and-wipe state/RPCs, then
-   [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql)
-   to tighten `sync-assets` Storage paths, then
-   [`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`](../../supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql)
-   to reproduce the final production policy syntax and remove browser execution
-   of `rls_auto_enable()`. All migrations preserve encrypted vault data and are
-   safe to rerun. The final policy permits only the exact authenticated
-   `<user-id>/<64-character-lowercase-hex-content-hash>` asset path.
+1. Follow the canonical [schema and ordered migration instructions](../../supabase/README.md#2-apply-the-schema) for a fresh or existing project. That maintained list includes later pruning and asset/reference repairs; do not rely on an older July-only chain.
 2. Configure `supabaseUrl` + `supabaseAnonKey` in
    `src/config/sutra-runtime-config.js` (already done if Sutra Cloud works).
 3. Users sign in with the existing email-OTP flow, then enable sync with a
@@ -209,14 +206,32 @@ Web Locks, with an expiring IndexedDB lease fallback; status travels over
 BroadcastChannel. A tab made stale by another tab's save pauses its syncing
 and the app shows its usual reload prompt. Keep one active tab per device.
 
+Pause stops further Sync steps from the current cycle. A request already sent
+may still finish; local edits are preserved and reconciled when Sync resumes.
+
 ## Troubleshooting
+
+The Sync card labels its success time **Synced to cloud (this session)**.
+**No successful cycle recorded this session** describes only this engine session,
+not the device's entire Sync history. Local saving and recoverable backups have
+separate status and timestamps.
+
+Verification failures include a bounded stage (snapshot, operation, or
+attachment) and, when available, an opaque diagnostic reference. Unverified
+remote record identifiers are not displayed as source names. **Retry
+verification** explicitly resumes one attempt with the existing key; another
+integrity failure pauses again without a retry storm. It does not replace a key
+or delete remote content. A skipped/paused cycle never produces a success toast.
+Recovery guidance disappears after leaving the verification-error state.
 
 - **"Locked"** — enter your sync passphrase (per session, by design).
 - **"Offline — changes queued"** — edits are safe in the local outbox; they
   upload on reconnect.
 - **"Update Sutra to keep syncing"** — another device runs a newer Sutra and
   pushed data this version cannot understand yet. Update this device; nothing
-  was changed locally.
+  was changed locally. An unsupported future protocol pauses before decryption;
+  when the protocol is supported but its workspace schema is newer, Sutra
+  authenticates the encrypted envelope before asking you to update.
 - **"Sign in again"** — the account session expired; this never deletes local
   data. Sign in again when ready.
 - **"Safely signed this browser out"** — the Supabase session was still bound
@@ -241,7 +256,14 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   before changing the cloud vault. Do not create a replacement key or delete
   the cloud vault just to make the warning disappear; deleting the vault is a
   permanent, all-device action that should only happen after a separate
-  confirmed recovery copy exists.
+  confirmed recovery copy exists. For an attachment failure, Sutra may already
+  have applied authenticated record metadata before it downloads and verifies
+  the referenced bytes. It does not roll that metadata apply back; it pauses
+  before committing the cycle's cursor/baseline/outbox acknowledgement,
+  acknowledging the device cursor, or compacting a snapshot. The local
+  workspace and queued operations remain available, and explicit Resume retries
+  the missing attachment. Ordinary network or local-storage download failures
+  remain pending and retry on a later cycle.
 - **Old conflict-copy pages** — use **Clean up old conflict copies**. Sutra first
   requires a fresh encrypted `.sutra` safety backup. It consolidates only
   verified exact semantic duplicates without children; unique or contained
@@ -280,13 +302,17 @@ states the required direct REST, RPC, Storage, payload-boundary, anonymous, and
 same-profile-account-switch checks without exposing browser credentials to the
 test runner.
 
-The latest repository-wide reconciliation, current parity matrix, unattended
-evidence, release blocker, migration order, and 30-step operator checklist are
-recorded in the [2026-07-22 cloud sync audit](../release/CLOUD_SYNC_AUDIT_2026-07-22.md).
+The July repository-wide reconciliation, parity matrix, unattended evidence,
+release blocker, migration order, and 30-step operator checklist are preserved
+in the historical [2026-07-22 cloud sync audit](../release/CLOUD_SYNC_AUDIT_2026-07-22.md).
 
 ### Verification boundary (2026-07-18)
 
-- The current local validation run completed the named migration, round-trip
+> The results below are dated July evidence. They do not certify the current
+> branch, browser matrix, or production backend. Current release readiness must
+> be established separately.
+
+- The local validation run recorded on 2026-07-18 completed the named migration, round-trip
   (53-field matrix), persistence, network, CSP, guardrail, and link checks;
   `npm run test:unit` passed 312 tests; and `npm run test:e2e:sync` passed
   14 serialized Chromium scenarios. The focused sync suite now drives the real

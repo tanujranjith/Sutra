@@ -148,6 +148,42 @@ async function seedRichWorkspace(page, marker) {
         courses: [{ id: `course-${marker}`, name: `Homework Course ${marker}`, type: 'class' }],
         tasks: [{ id: `hw-${marker}`, courseId: `course-${marker}`, title: `Homework ${marker}`, dueDate: '2026-06-07' }]
       },
+      lifeWorkspace: {
+        ...(base.lifeWorkspace || {}),
+        sleepTracker: {
+          ...(base.lifeWorkspace?.sleepTracker || {}),
+          targetSleepMinutes: 425,
+          entries: [{
+            id: `sleep-${marker}`, date: '2026-06-06', totalSleepMinutes: 390,
+            note: `Retired sleep entry ${marker}`,
+            futureEntryMetadata: { measuredMinutes: 0, verified: false }
+          }],
+          futureSleepValue: 0
+        },
+        wellness: {
+          ...(base.lifeWorkspace?.wellness || {}),
+          checkIns: [{
+            id: `wellness-check-in-${marker}`, createdAt: now,
+            mood: 'steady', stress: 2, sleep: 'synthetic', note: `Retired wellness check-in ${marker}`,
+            futureCheckInMetadata: { source: 'encrypted-backup-fixture', rating: 0, retained: false }
+          }],
+          journalEntries: [{
+            id: `wellness-journal-${marker}`, createdAt: now,
+            prompt: `Retired wellness prompt ${marker}`,
+            body: `Retired wellness journal ${marker}`
+          }],
+          breathing: {
+            ...(base.lifeWorkspace?.wellness?.breathing || {}),
+            preferredPattern: 'box',
+            preferredDuration: 300,
+            sessionsCompleted: 2,
+            lastCompletedAt: now,
+            futureBreathingValue: false,
+            futureBreathingMetadata: { completedSessions: 0, preserved: false }
+          },
+          futureWellnessMetadata: { nested: { count: 0, archived: false } }
+        }
+      },
       apStudyWorkspace: { subjects: [{ id: `ap-${marker}`, name: `AP Subject ${marker}`, units: [] }], sessions: [] },
       reviewWorkspace: {
         decks: [{ id: `deck-${marker}`, name: `Deck ${marker}`, cards: [{ id: `card-${marker}`, prompt: `Prompt ${marker}`, answer: `Answer ${marker}` }] }],
@@ -284,6 +320,9 @@ test('new .sutra export is an authenticated encrypted envelope with no plaintext
       leaksSetting: has('Settings Sentinel EXPORT'),
       leaksAsset: has('INLINE-ASSET-EXPORT') || has('DOC-BACKGROUND-EXPORT'),
       leaksAttachment: has('ATTACHMENT-BYTES-EXPORT') || has('Attachment Filename EXPORT'),
+      leaksRetiredSleep: has('Retired sleep entry EXPORT') || has('futureSleepValue'),
+      leaksRetiredWellness: has('Retired wellness check-in EXPORT')
+        || has('Retired wellness journal EXPORT') || has('futureWellnessMetadata'),
       leaksApiKey: has('sk-secret-EXPORT')
     };
   }, { pass: PASS });
@@ -303,6 +342,8 @@ test('new .sutra export is an authenticated encrypted envelope with no plaintext
   expect(result.leaksSetting).toBe(false);
   expect(result.leaksAsset).toBe(false);
   expect(result.leaksAttachment).toBe(false);
+  expect(result.leaksRetiredSleep).toBe(false);
+  expect(result.leaksRetiredWellness).toBe(false);
   expect(result.leaksApiKey).toBe(false);
 });
 
@@ -345,6 +386,7 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
       attachment: ws.courseWorkspace.files[0],
       homeworkCourse: ws.homeworkWorkspace.courses[0],
       homeworkTask: ws.homeworkWorkspace.tasks[0],
+      lifeWorkspace: ws.lifeWorkspace,
       pluginReviewRequired: plugin.reviewRequired === true,
       pluginDisabled: plugin.enabled === false,
       apiKeyExported: JSON.stringify(ws).includes('sk-secret-IMPORT')
@@ -354,6 +396,28 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
   expect(restored.attachment.missingBlob).toBe(false);
   expect(restored.homeworkCourse).toMatchObject({ id: 'course-IMPORT', name: 'Homework Course IMPORT' });
   expect(restored.homeworkTask).toMatchObject({ id: 'hw-IMPORT', courseId: 'course-IMPORT', title: 'Homework IMPORT', dueDate: '2026-06-07' });
+  expect(restored.lifeWorkspace.sleepTracker).toMatchObject({
+    targetSleepMinutes: 425,
+    entries: [{
+      id: 'sleep-IMPORT', date: '2026-06-06', totalSleepMinutes: 390, note: 'Retired sleep entry IMPORT',
+      futureEntryMetadata: { measuredMinutes: 0, verified: false }
+    }],
+    futureSleepValue: 0
+  });
+  expect(restored.lifeWorkspace.wellness).toMatchObject({
+    checkIns: [{
+      id: 'wellness-check-in-IMPORT', note: 'Retired wellness check-in IMPORT',
+      futureCheckInMetadata: { rating: 0, retained: false }
+    }],
+    journalEntries: [{ id: 'wellness-journal-IMPORT', body: 'Retired wellness journal IMPORT' }],
+    breathing: {
+      preferredPattern: 'box', preferredDuration: 300, sessionsCompleted: 2,
+      lastCompletedAt: expect.any(String),
+      futureBreathingValue: false,
+      futureBreathingMetadata: { completedSessions: 0, preserved: false }
+    },
+    futureWellnessMetadata: { nested: { count: 0, archived: false } }
+  });
   expect(restored.pluginReviewRequired).toBe(true);
   expect(restored.pluginDisabled).toBe(true);
   expect(restored.apiKeyExported).toBe(false);

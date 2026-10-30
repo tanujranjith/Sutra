@@ -28,7 +28,8 @@
     activeIndex: -1,
     debounceTimer: null,
     bound: false,
-    lastQuery: ''
+    lastQuery: '',
+    renderedQuery: ''
   };
 
   function el(id) { return document.getElementById(id); }
@@ -138,6 +139,7 @@
     state.results = data.results;
     state.total = data.total;
     state.activeIndex = data.results.length ? 0 : -1;
+    state.renderedQuery = query;
 
     if (count) {
       count.textContent = data.total === 1 ? '1 result' : data.total + ' results';
@@ -185,6 +187,7 @@
     if (!box) return;
     state.results = [];
     state.activeIndex = -1;
+    state.renderedQuery = '';
     if (count) count.hidden = true;
     var recents = safeRecents();
     var actions = Array.isArray(state.quickActions) ? state.quickActions.filter(function (a) { return a && a.label; }) : [];
@@ -280,6 +283,12 @@
     else state.debounceTimer = setTimeout(execute, DEBOUNCE_MS);
   }
 
+  function refreshKeyboardResults() {
+    var input = el('globalSearchInput');
+    var query = input ? String(input.value || '').trim() : '';
+    if (state.debounceTimer || query !== state.renderedQuery) runSearch(true);
+  }
+
   function refocusInput() {
     var input = el('globalSearchInput');
     if (input) { try { input.focus({ preventScroll: true }); } catch (err) { try { input.focus(); } catch (e) {} } }
@@ -373,6 +382,12 @@
       runSearch(false);
     });
     input.addEventListener('keydown', function (event) {
+      // A student can type and press Enter or an arrow before the debounce
+      // expires. Refresh first so keyboard navigation can never act on results
+      // from the previous query.
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End' || event.key === 'Enter') {
+        refreshKeyboardResults();
+      }
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         if (!state.results.length) return;

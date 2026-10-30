@@ -5,6 +5,8 @@
   var MODES = ['off', 'read_only', 'ask_per_area', 'approved_actions'];
   var adapter = null;
   var KEY_AREAS = {
+    workspacePlanning: 'planning', workspaceCourses: 'courses', workspaceLearning: 'learning',
+    workspaceCollege: 'college', workspaceLife: 'life', workspaceBusiness: 'business', workspaceOverview: 'workspace', workspaceRetrieval: 'workspace',
     activeNote: 'notes', selection: 'notes', canvas: 'notes', slides: 'notes', staleNotes: 'notes',
     tasks: 'planning', homework: 'planning', timelineUpcoming: 'planning', timelineToday: 'planning', timeline: 'planning', deadlines: 'planning', allDue: 'planning', derived: 'planning',
     review: 'learning', apStudy: 'learning', cram: 'learning', testingHub: 'learning',
@@ -25,7 +27,7 @@
   // rather than nested inside their owning area object. stripSensitive()
   // additionally removes nested occurrences inside area values.
   var PRIVATE_TOP_LEVEL_KEYS = ['privateDocuments'];
-  var WELLNESS_TOP_LEVEL_FIELDS = ['wellness', 'wellnessTrends', 'sleep', 'mood', 'stress'];
+  var WELLNESS_TOP_LEVEL_FIELDS = ['wellness', 'wellnessTrends', 'sleep', 'mood', 'stress', 'fitness', 'calories', 'journals', 'sleepTracker', 'checkIns', 'journalEntries', 'latestCheckIn'];
   var FINANCIAL_TOP_LEVEL_FIELDS = ['applicationCosts', 'costs', 'financialAid', 'financialAidDeadlines', 'scholarships', 'runway', 'spending', 'income', 'tuition'];
   var PRIVATE_KEYS = new Set(PRIVATE_TOP_LEVEL_KEYS.map(function (key) { return key.toLowerCase(); }));
   var WELLNESS_KEYS = new Set(WELLNESS_TOP_LEVEL_FIELDS.map(function (key) { return key.toLowerCase(); }));
@@ -55,12 +57,40 @@
       mode: mode,
       areas: areas,
       allowLockedNotes: source.allowLockedNotes === true,
-      allowWellness: source.allowWellness === true,
+      allowWellness: false, // Retired features remain in backups, never in Assistant context.
       allowFinancial: source.allowFinancial === true,
       allowPrivateDocuments: source.allowPrivateDocuments === true
     };
   }
   function configure(nextAdapter) { adapter = nextAdapter || null; return api; }
+  // Presets reuse existing portable fields. Choosing Everyday never clears an
+  // area's explicit Block or opts into protected content, plugins or networking.
+  function presetPlan(name, current) {
+    if (name !== 'private' && name !== 'everyday') throw new Error('Unknown Assistant preset.');
+    var permissions = Object.assign({}, clone(current || {}), normalize(current));
+    permissions.areas = Object.assign({}, current && current.areas || {}, permissions.areas);
+    permissions.mode = name === 'private' ? 'off' : 'approved_actions';
+    if (name === 'private') {
+      permissions.allowLockedNotes = false;
+      permissions.allowFinancial = false;
+      permissions.allowPrivateDocuments = false;
+    }
+    return { permissions: permissions, preferences: {
+      contextDepth: name === 'private' ? 'minimal' : 'workspace',
+      chatMemoryMode: name === 'private' ? 'stateless' : 'stateful',
+      chatMemoryDepth: 5, showActionPreviews: true, requireConfirmation: true,
+      requireApprovalForActions: true, confirmationMode: 'always'
+    } };
+  }
+  function identifyPreset(permissions, preferences) {
+    var prefs = preferences || {};
+    var mode = normalize(permissions).mode;
+    if (mode === 'off' && prefs.contextDepth === 'minimal' && prefs.chatMemoryMode === 'stateless') return 'private';
+    return mode === 'approved_actions' && prefs.contextDepth === 'workspace'
+      && prefs.chatMemoryMode === 'stateful' && Number(prefs.chatMemoryDepth) === 5
+      && prefs.showActionPreviews !== false && prefs.requireApprovalForActions !== false
+      && prefs.requireConfirmation !== false && prefs.confirmationMode === 'always' ? 'everyday' : 'advanced';
+  }
   function getPermissions() {
     try { return normalize(adapter && typeof adapter.getPermissions === 'function' ? adapter.getPermissions() : {}); }
     catch (_) { return normalize({}); }
@@ -101,6 +131,7 @@
       return value.map(function (entry) { return stripSensitive('', entry, permissions, options); })
         .filter(function (entry) { return entry !== undefined; });
     }
+    if (['water', 'eyebreak', 'gratitude'].indexOf(value.type) !== -1 && Object.prototype.hasOwnProperty.call(value, 'config')) return undefined;
     var locked = value.locked === true || value.isLocked === true;
     var allowedLockedFields = new Set(['id', 'noteId', 'title', 'locked', 'isLocked', 'type']);
     var scopedAccess = hasScopedLockedAccess(value, options);
@@ -131,6 +162,10 @@
       if (!canRead(area, options)) return;
       var value = stripSensitive(key, source[key], permissions, options);
       out[key] = value;
+      // Retrieval counts/status and empty envelopes contain no workspace body.
+      // Keep permission-filtered metadata without claiming that area was sent.
+      if (key === 'notesEvidenceStatus' || key === 'workspaceRetrieval' || value == null
+          || (typeof value === 'string' && !value.trim()) || (Array.isArray(value) && !value.length)) return;
       if (areasRead.indexOf(area) < 0) areasRead.push(area);
       recordIds(value).forEach(function (id) { recordsRead.push({ area: area, kind: key, id: id }); });
     });
@@ -147,7 +182,13 @@
     return out;
   }
   function getActionPermissions(options) {
-    var permissions = getPermissions(), opts = options || {}, granted = [];
+    var opts = options || {}, granted = [], raw;
+    try { raw = adapter && typeof adapter.getPermissions === 'function' && adapter.getPermissions(); } catch (_) { return granted; }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || MODES.indexOf(String(raw.mode)) < 0) return granted;
+    var permissions = normalize(raw);
+    // Reviewing a local memory change grants only memory management, never workspace access.
+    if (opts.approved === true) granted.push('assistant.memory.write');
+    if (opts.approved === true && opts.destructiveApproved === true) granted.push('assistant.memory.delete');
     if (permissions.mode !== 'off') granted.push('workspace.read');
     if (permissions.mode === 'approved_actions' && opts.approved === true) granted.push('workspace.write');
     if (permissions.mode === 'approved_actions' && opts.approved === true && opts.destructiveApproved === true) granted.push('workspace.delete');
@@ -160,7 +201,7 @@
     return { type: type, value: value, sources: Array.isArray(sources) ? sources.map(function (source) { return clone(source); }).slice(0, 20) : [] };
   }
 
-  var api = { VERSION: '1.0.0', MODES: MODES.slice(), configure: configure, normalize: normalize, getPermissions: getPermissions, canRead: canRead, filterContext: filterContext, getActionPermissions: getActionPermissions, describeClaim: describeClaim };
+  var api = { VERSION: '1.0.0', MODES: MODES.slice(), configure: configure, normalize: normalize, presetPlan: presetPlan, identifyPreset: identifyPreset, getPermissions: getPermissions, canRead: canRead, filterContext: filterContext, getActionPermissions: getActionPermissions, describeClaim: describeClaim };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraAssistantPrivacy = api;
 }(typeof window !== 'undefined' ? window : globalThis));

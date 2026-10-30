@@ -17,8 +17,8 @@ cluster around:
 | --- | --- |
 | ~1440–1025px | Full desktop layout: sidebar + main column + (where used) split view. |
 | ~1024px | Tablet adjustments begin; some multi-column areas relax. |
-| **768px** | **Primary mobile breakpoint** — navigation collapses into the mobile view menu; single-column layouts dominate. |
-| 640px | Large-phone tuning (tighter cards, stacked controls). |
+| **768px** | Many content layouts stack; Timeline Week uses its date-strip agenda. The adaptive top navigation remains available above 640px. |
+| **640px** | Phone bottom navigation and All sections sheet replace the top strip; tighter cards and stacked controls. |
 | 560px | The **Sutra Intelligence badge** switches to its compact layout (subtitle may wrap). |
 | 480px | Phone tuning. |
 | 360px / 320px | Small-phone tuning; everything must remain reachable with no horizontal overflow. |
@@ -28,10 +28,9 @@ There is also dedicated handling for **short landscape** phones (e.g. `max-width
 
 ## Global behaviors
 
-- **Navigation collapse.** The horizontal view tabs become a **mobile view menu** at
-  the primary breakpoint; the same destinations (Home, Timeline, Create, Homework,
-  AP Study, Testing Hub, Review, College, Life, Projects & Work, Settings) remain
-  reachable, including overflow items via the "More" menu.
+- **Navigation adapts.** Above 640px, the canonical top strip uses adaptive
+  overflow. At phone widths, the bottom bar and All sections sheet keep enabled
+  destinations reachable through the same route controls.
 - **Touch targets.** Primary controls target **≥44px**; controls in constrained rows
   target **≥40px**.
 - **Software keyboard.** Input-bearing surfaces (assistant composer, modals, note
@@ -52,10 +51,10 @@ There is also dedicated handling for **short landscape** phones (e.g. `max-width
 
 ### Mobile navigation
 
-The top view tabs collapse into a compact menu at ≤768px. The sidebar (notes tree and
-workspace controls) becomes an overlay/menu rather than a fixed column; opening it
-does not shift the main content under it on small screens. All primary destinations,
-including those behind the "More" overflow, stay reachable.
+At widths up to 640px, the bottom bar and All sections sheet replace the top
+view strip. The 641px tablet boundary retains adaptive top navigation. Create's
+page tree becomes a contextual drawer on narrow screens. See
+[Navigation](NAVIGATION.md) for canonical routing and keyboard behavior.
 
 At phone widths up to 640px, **More** also contains the canonical local save
 status and Save locally, Export, Import, Data & Backup, Focus timer, and Report
@@ -196,7 +195,7 @@ the view, not the page behind a modal.
 
 ### Customization
 
-The Customization screen (CSS Overrides, Plugins, Recovery & Developer Tools) stacks
+The Customization screen (CSS Overrides and Safe Mode & Recovery) stacks
 to a single column. The CSS snippet editor remains usable on mobile — the monospace
 field scrolls, and snippet cards (name, switch, actions, move ↑/↓) stack. The master
 switches stay at the top. See [CSS_MODS_GUIDE.md](CSS_MODS_GUIDE.md) for shipping
@@ -283,8 +282,9 @@ Run through the following at each width — **1440, 1280, 1024, 900, 768, 640, 4
 [TESTING_AND_RELEASE_CHECKLIST.md](../release/TESTING_AND_RELEASE_CHECKLIST.md).)
 
 - [ ] **No horizontal page scroll** at any width.
-- [ ] **Navigation** collapses to the mobile view menu ≤768px; every destination
-      (including "More" overflow) is reachable.
+- [ ] **Navigation** uses the bottom bar and All sections at ≤640px; the tablet
+      top strip remains reachable at 641px and above. Every enabled destination
+      remains reachable.
 - [ ] **Home** shows the mobile essentials shell with one Next Up action, a bounded
       agenda, Review, and save confidence; desktop dashboard chrome is not duplicated.
 - [ ] **Timeline** is single-column and legible; entries tappable.

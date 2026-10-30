@@ -80,7 +80,19 @@ test.describe('Accessibility: core surfaces', () => {
 test.describe('Accessibility: keyboard navigation', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(1500);
+        await waitForAppReady(page);
+        // Fresh contexts always have onboarding. Use its real dismissal so any
+        // deferred intro and focus handling finish before keyboard assertions.
+        const skipBtn = page.getByRole('button', { name: 'Skip setup', exact: true });
+        await expect(skipBtn).toBeVisible();
+        await skipBtn.click();
+        await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
+        // The modal manager releases background inertness on its next frame.
+        // Wait for the real Home action to become focusable instead of racing it.
+        await page.waitForFunction(() => {
+            const target = document.getElementById('topAddTaskBtn');
+            return !!target && target.isConnected && !target.closest('[inert]');
+        });
     });
 
     test('Tab key moves focus forward', async ({ page }) => {
@@ -99,14 +111,17 @@ test.describe('Accessibility: keyboard navigation', () => {
         expect(errors).toHaveLength(0);
     });
 
-    test('Enter activates buttons', async ({ page }) => {
-        const buttons = page.locator('button:not([disabled]):not([hidden])');
-        const count = await buttons.count();
-        if (count > 0) {
-            await buttons.first().focus();
-            const tagName = await page.evaluate(() => document.activeElement?.tagName);
-            expect(tagName).toBe('BUTTON');
-        }
+    test('Enter activates the Today add-task button', async ({ page }) => {
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'today');
+        const addTask = page.locator('#topAddTaskBtn');
+        await expect(addTask).toBeVisible();
+        await expect(addTask).toBeEnabled();
+        await addTask.focus();
+        await expect(addTask).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#quickCaptureModal')).toBeVisible();
+        await expect(page.locator('#quickCaptureTitle')).toHaveText('Add task');
+        await expect(page.locator('#quickCaptureType')).toHaveValue('task');
     });
 });
 

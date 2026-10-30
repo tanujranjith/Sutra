@@ -455,7 +455,7 @@
      * computeRadarLayout(radarData, { width, height, now }) → chips with stable
      * polar placement:
      *   { item|null, zone, statusKey, xPct, yPct, label, meta, overflowCount }
-     * Geometry: quarter-of-ellipse fan anchored at bottom-center. Each zone is
+     * Geometry: semicircular bands anchored at bottom-center (stage ratio 2:1). Each zone is
      * a band at a fixed radius; items spread evenly across the arc in due
      * order, so the same data always lands in the same spot.
      */
@@ -476,8 +476,8 @@
             for (var s = 0; s < slots; s++) {
                 var deg = slots === 1 ? 90 : startDeg + step * s;
                 var rad = deg * Math.PI / 180;
-                var x = 0.5 + (radius * 0.52) * Math.cos(rad) * -1; // mirror so earliest reads left→right
-                var y = 1 - radius * 0.88 * Math.sin(rad);
+                var x = 0.5 + (radius * 0.48) * Math.cos(rad) * -1; // mirror so earliest reads left→right
+                var y = 1 - radius * 0.96 * Math.sin(rad);
                 var isOverflow = s >= zone.items.length;
                 if (isOverflow) {
                     chips.push({
@@ -536,8 +536,8 @@
             { key: 'thisWeek', r: 0.72 }, { key: 'later', r: 0.92 }
         ];
         bands.forEach(function (band) {
-            var rx = band.r * 0.52 * width;
-            var ry = band.r * 0.88 * height;
+            var rx = band.r * 0.48 * width;
+            var ry = band.r * 0.96 * height;
             var path = svgEl('path', {
                 class: 'radar-arc radar-arc-' + band.key,
                 d: 'M ' + (cx - rx) + ' ' + cy + ' A ' + rx + ' ' + ry + ' 0 0 1 ' + (cx + rx) + ' ' + cy,
@@ -684,13 +684,134 @@
         var stage = el('div', 'radar-stage');
         stage.setAttribute('role', 'group');
         stage.setAttribute('aria-label', 'Upcoming radar: items grouped by time horizon');
-        var W = 700, H = 360;
+        var W = 700, H = 350;
         stage.appendChild(buildRadarBackdrop(W, H));
         computeRadarLayout(data, { now: now }).forEach(function (chip) {
             stage.appendChild(buildChipButton(chip, handlers));
         });
         mount.appendChild(stage);
         mount.appendChild(buildLegend());
+    }
+
+    // Legacy one-off tasks record completion in day state / isActive rather
+    // than completed. Respect that existing state in the panel only.
+    function getYourDayItems(items, tasks, completedIds) {
+        var byId = new Map(safeItems(tasks).map(function (task) { return [String(task.id), task]; }));
+        var completed = new Set((completedIds || []).map(String));
+        return safeItems(items).filter(function (item) {
+            if (item.source !== 'task') return true;
+            var task = byId.get(String(item.sourceId));
+            return !task || (!task.completed && !completed.has(String(task.id)) && !(task.scheduleType === 'once' && task.isActive === false));
+        });
+    }
+
+    // Presentation only: the caller supplies the existing ranked recommendation.
+    function getYourDayTasks(items, featured, now, limit) {
+        var seen = new Set();
+        var todayTasks = safeItems(items).filter(function (item) {
+            if (item.completed || item.status === 'done' || (item.source !== 'task' && item.source !== 'homework')) return false;
+            if (getUrgencyStatus(item, now).key !== 'today' || seen.has(String(item.id))) return false;
+            seen.add(String(item.id)); return true;
+        });
+        var remaining = todayTasks.filter(function (item) { return !featured || String(item.id) !== String(featured.id); });
+        var cap = Math.max(1, Number(limit) || 3);
+        return { count: todayTasks.length, remaining: remaining.slice(0, cap), hasMore: remaining.length > cap };
+    }
+
+    // Read-only projection. Source IDs, records and storage remain with their owners.
+    function collectWorkspaceTodos(snapshot, now) {
+        snapshot = snapshot || {}; now = now || new Date();
+        var result = new Map(), completed = new Set((snapshot.completedTaskIds || []).map(String));
+        var tasks = safeItems(snapshot.tasks), taskById = new Map(tasks.map(function (t) { return [String(t.id), t]; }));
+        var homework = safeItems(snapshot.homework), homeworkById = new Map(homework.map(function (row) { return [String(row.id), row]; }));
+        var terminal = function (row) { return !row || row.completed || row.done || ['done','complete','completed','archived','cancelled','canceled'].indexOf(String(row.status || '').toLowerCase()) >= 0; };
+        function homeworkTerminal(row) {
+            var status = String(row.status || '').toLowerCase();
+            var done = typeof row.done === 'boolean' ? row.done : row.completed === true || ['done','complete','completed'].indexOf(status) >= 0;
+            return done || ['archived','cancelled','canceled'].indexOf(status) >= 0;
+        }
+        function date(value, time) {
+            if (!value) return null;
+            var raw = String(value).trim();
+            var parsed = value instanceof Date ? new Date(value) : new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + 'T' + (time || '23:59') + ':00' : raw);
+            return Number.isFinite(parsed.getTime()) ? parsed : null;
+        }
+        function add(item) {
+            if (!item || !item.id || !item.sourceId || result.has(String(item.id))) return;
+            var due = date(item.due || item.dueDate, item.dueTime);
+            result.set(String(item.id), Object.assign({}, item, { due: due, status: 'open', overdue: !!due && due < now, workspaceTodo: true }));
+        }
+        safeItems(snapshot.deadlines).forEach(function (item) {
+            if (item.source === 'business' || item.source === 'life' || terminal(item)) return;
+            if (item.source === 'task') {
+                var task = taskById.get(String(item.sourceId));
+                if (task && (terminal(task) || completed.has(String(task.id)) || (task.scheduleType === 'once' && task.isActive === false))) return;
+            }
+            if (item.source === 'homework') {
+                var sourceHomework = homeworkById.get(String(item.sourceId));
+                if (sourceHomework && homeworkTerminal(sourceHomework)) return;
+            }
+            add(item);
+        });
+        tasks.forEach(function (row) {
+            if (terminal(row) || row.origin === 'homework' || row.isActive === false || completed.has(String(row.id))) return;
+            add({ id:'task:'+row.id, source:'task', sourceId:String(row.id), title:row.title || 'Task', dueDate:row.dueDate, dueTime:row.dueTime, priority:row.priority });
+        });
+        homework.forEach(function (row) {
+            // Homework's Boolean done field is canonical; retained legacy
+            // completion aliases cannot override an explicitly reopened row.
+            if (homeworkTerminal(row)) return;
+            add({ id:'hw:'+row.id, source:'homework', sourceId:String(row.id), sourceCourseId:row.courseId || '', title:row.title || row.text || 'Homework', dueDate:row.dueDate, dueTime:row.dueTime });
+            var studio = row.studio;
+            if (!studio || !studio.enabled) return;
+            ['milestones','subtasks'].forEach(function (collection) {
+                safeItems(studio[collection]).forEach(function (step) {
+                    if (terminal(step)) return;
+                    add({id:(collection === 'milestones' ? 'milestone:' : 'subtask:')+row.id+':'+step.id,source:'milestone',sourceId:String(row.id),milestoneId:String(step.id),todoOpenOnly:true,title:step.title || step.text || 'Assignment step',subtitle:row.title || 'Assignment',dueDate:step.dueDate,dueTime:step.dueTime});
+                });
+            });
+        });
+        var app = snapshot.collegeApp || {};
+        var appDone = new Set(snapshot.completedCollegeStatuses || ['submitted','completed','enrolled']);
+        [{key:'collegeTracker',prefix:'tracker',page:'tracker',label:'Application'}, {key:'essayOrganizer',prefix:'essay',page:'essays',label:'Essay'}, {key:'scholarships',prefix:'scholarship',page:'scholarships',label:'Scholarship'}, {key:'recommenders',prefix:'recommender',page:'recommenders',label:'Recommendation'}].forEach(function (spec) {
+            safeItems(app[spec.key]).forEach(function (row) {
+                if (terminal(row) || appDone.has(String(row.status || '').toLowerCase()) || ['submitted','won','not_awarded'].indexOf(String(row.status || '').toLowerCase()) >= 0 || row.draftStatus === 'final') return;
+                add({id:'collegeapp:'+spec.prefix+':'+row.id,source:'college',sourceId:String(row.id),sourceView:'collegeapp',sourceCollection:spec.key,sourceSubpage:spec.page,title:(row.school || row.name || row.prompt || spec.label)+' · '+spec.label,dueDate:row.deadline || row.dueDate || row.nextDate});
+            });
+        });
+        var tracker = snapshot.collegeTracker || {};
+        ['checklist','deadlines'].forEach(function (collection) {
+            safeItems(tracker[collection]).forEach(function (row) {
+                if (terminal(row) || row.appSubmitted || row.submitted) return;
+                if (Array.from(result.values()).some(function (item) { return item.sourceView === 'college' && item.sourceCollection === collection && String(item.sourceId) === String(row.id); })) return;
+                add({id:'college:'+collection+':'+row.id+':record',source:'college',sourceId:String(row.id),sourceView:'college',sourceCollection:collection,todoOpenOnly:true,title:(row.college || 'College')+' · '+(collection === 'checklist' ? 'Application checklist' : 'Application plan')});
+            });
+        });
+        safeItems(tracker.essays).forEach(function (row) {
+            if (row.finalDraft) return;
+            [['firstDraftBy','firstDraftDone','First draft'],['reviewBy','reviewSubmitted','Review'],['revisionBy','revisionSubmitted','Revision'],['finalBy','finalDraft','Final draft']].forEach(function (step) {
+                if (row[step[1]]) return;
+                add({id:'college:essays:'+row.id+':'+step[0],source:'college',sourceId:String(row.id),sourceView:'college',sourceCollection:'essays',title:(row.essay || 'Essay')+' · '+step[2],dueDate:row[step[0]]});
+            });
+        });
+        var business = snapshot.business || {};
+        ['tasks','projects','invoices','proposals','meetings','clients'].forEach(function (collection) {
+            safeItems(business[collection]).forEach(function (row) {
+                if (terminal(row) || row.paid || ['paid','void','accepted','rejected','expired'].indexOf(String(row.status || '').toLowerCase()) >= 0) return;
+                if (collection === 'clients' && !row.nextFollowUpDate) return;
+                var prefix = {projects:'proj',invoices:'inv'}[collection] || collection;
+                add({id:'biz:'+prefix+':'+row.id,source:'business',sourceId:String(row.id),todoOpenOnly:true,title:row.title || row.name || row.client || row.invoiceNumber || 'Business action',subtitle:collection,dueDate:row.dueDate || row.deadline || row.responseDate || row.date || row.nextFollowUpDate});
+                if (collection === 'projects') safeItems(row.milestones).forEach(function (step) {
+                    if (terminal(step)) return;
+                    add({id:'biz:milestone:'+row.id+':'+step.id,source:'business',sourceId:String(row.id),todoOpenOnly:true,title:step.title || 'Project milestone',subtitle:row.name || 'Project',dueDate:step.date});
+                });
+            });
+        });
+        safeItems((snapshot.life || {}).goals).forEach(function (row) {
+            if (terminal(row)) return;
+            add({id:'life:goal:'+row.id,source:'life',sourceId:String(row.id),todoOpenOnly:true,title:row.title || 'Life goal',dueDate:row.targetDate});
+        });
+        return Array.from(result.values()).sort(function (a,b) { return (a.due ? a.due.getTime() : Infinity) - (b.due ? b.due.getTime() : Infinity) || String(a.title).localeCompare(String(b.title)) || String(a.id).localeCompare(String(b.id)); });
     }
 
     window.SutraTodayCenter = {
@@ -705,6 +826,9 @@
         getTodayAgenda: getTodayAgenda,
         getUpcomingRadarItems: getUpcomingRadarItems,
         computeRadarLayout: computeRadarLayout,
+        collectWorkspaceTodos: collectWorkspaceTodos,
+        getYourDayItems: getYourDayItems,
+        getYourDayTasks: getYourDayTasks,
         renderRadar: renderRadar
     };
 })();

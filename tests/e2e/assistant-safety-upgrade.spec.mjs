@@ -1,3 +1,4 @@
+import { openResponseDetails } from './helpers/assistant-details.mjs';
 import { expect, test } from '@playwright/test';
 
 // Network stubs must own requests in every engine, including WebKit. Service
@@ -30,17 +31,14 @@ async function openApp(page, { openPanel = true } = {}) {
 }
 
 async function configureProvider(page, { provider = 'gemini', model = 'gemini-2.5-flash' } = {}) {
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
   await page.evaluate(({ provider, model }) => {
-    localStorage.setItem('chat_provider', provider);
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
-    sessionStorage.setItem(provider + '_api_key', 'mock-session-key-123456789');
-    const providerSelect = document.getElementById('chatProviderSelect');
-    if (providerSelect) providerSelect.value = provider;
-    const select = document.getElementById('chatModelSelect');
-    const custom = document.getElementById('chatCustomModelInput');
-    if (select) select.value = '';
-    if (custom) custom.value = model;
+    window.SutraProviderMeta.saveSessionKey(provider, 'mock-session-key-123456789');
+    window.SutraProviderMeta.selectModel(provider, model);
   }, { provider, model });
+  await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel()))
+    .toEqual({ provider, model });
 }
 
 async function send(page, text) {
@@ -119,7 +117,7 @@ test('provider response persists a complete receipt while secrets and raw reason
   const response = page.locator('#chatbotMessages .chatbot-msg.assistant:not(.chatbot-notice)').last();
   const disclosure = response.locator('.assistant-response-receipt');
   await expect(disclosure).toHaveCount(1);
-  await disclosure.locator('summary').click();
+  await openResponseDetails(response, 'Privacy');
   await expect(disclosure).toContainText('Gemini · gemini-2.5-flash');
   await expect(disclosure).toContainText('Data transmitted');
   const state = await page.evaluate(() => ({
@@ -259,7 +257,7 @@ test('a local OpenAI-compatible endpoint sends only to the configured device end
   expect(requests[0].body.stream).toBe(true);
 
   const receipt = page.locator('.chatbot-msg.assistant').last().locator('.assistant-response-receipt');
-  await receipt.locator('summary').click();
+  await openResponseDetails(page.locator('.chatbot-msg.assistant').last(), 'Privacy');
   await expect(receipt).toContainText('Local endpoint');
   await expect(receipt).toContainText('student-local-model');
   await expect(receipt).toContainText('Data transmitted');

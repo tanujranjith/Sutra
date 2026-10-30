@@ -37,6 +37,7 @@ test('custom quotes are manageable, portable, filtered, and responsive', async (
   await openApp(page);
   await page.evaluate(() => window.flowAtelier.setActiveView('settings'));
   await page.locator('[data-settings-nav="appearance"]').click();
+  await page.locator('#settingsInterfaceDetails > summary').click();
   const trigger = page.locator('#openQuoteManagerBtn');
   await expect(trigger).toBeVisible();
   await trigger.click();

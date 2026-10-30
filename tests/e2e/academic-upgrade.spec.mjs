@@ -208,14 +208,19 @@ test('Testing Hub custom exam content survives normalization and workspace resto
     const description = 'Description ' + 'D'.repeat(800);
     const hub = window.flowAtelier.testingHub;
     hub.custom = [{ id: 'custom-long-content', name, description, sections: [] }];
+    hub.takenExams = { sat: '2026-06-06', act: '2026-06-13' };
+    hub.officialResults = { sat: { examDate: '2026-06-06', totalScore: '1450', recordedAt: '2026-06-20T12:00:00.000Z', futureResultField: { sentinel: true } } };
     window.flowAtelier.persistAppData();
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     window.deserializeWorkspace(payload);
     const restored = window.flowAtelier.testingHub.custom.find((exam) => exam.id === 'custom-long-content');
-    return { name: restored && restored.name, description: restored && restored.description };
+    return { name: restored && restored.name, description: restored && restored.description, takenExams: window.flowAtelier.testingHub.takenExams, officialResults: window.flowAtelier.testingHub.officialResults };
   });
   expect(result.name).toBe('Custom exam ' + 'N'.repeat(160));
   expect(result.description).toBe('Description ' + 'D'.repeat(800));
+  expect(result.takenExams).toEqual({ sat: '2026-06-06', act: '2026-06-13' });
+  expect(result.officialResults.sat).toEqual({ examDate: '2026-06-06', totalScore: '1450', recordedAt: '2026-06-20T12:00:00.000Z', futureResultField: { sentinel: true } });
+  expect(result.officialResults.act).toBeUndefined();
 });
 
 test('Assignment Studio milestones persist and surface as deadlines', async ({ page }) => {

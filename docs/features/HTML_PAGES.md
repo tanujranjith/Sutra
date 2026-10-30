@@ -39,6 +39,11 @@ Preview rendering must always go through `SutraDOMSafety.renderUserHTMLToFrame` 
 
 HTML Pages use the canonical page authorization gate. Once a page is locked, the source textarea is cleared and the preview iframe is removed so neither remains exposed in the live DOM.
 
+After a correct page PIN, the HTML source and sandbox preview reopen immediately
+on the same page. Removing PIN protection also restores the HTML surface without
+a reload. A wrong PIN leaves both source and preview hidden. Locking and unlocking
+do not convert the page into a text note or change its stored HTML document.
+
 ## Integration seam
 
 `window.SutraHTMLPages` is the registered feature bridge. It creates and opens pages through `window.flowAtelier`, never through a second store or remote service.

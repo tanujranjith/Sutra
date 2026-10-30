@@ -1,6 +1,85 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
+
+## Unreleased — local reliability and cleanup work
+
+- Replace app and Assistant brand masters with the owner's new logos; regenerate
+  icon sizes, favicon, maskable icon, social preview, and compatibility artwork.
+
+- Group landing-page screenshots under `assets/marketing/screenshots`, update
+  capture/deployment consumers, and document asset ownership and legacy paths.
+
+- Animate explicit theme choices from left to right, with reduced/off-motion
+  and unsupported-browser fallbacks; preserve the canonical apply/save path.
+- Refine theme motion into a stationary workspace with an organic color front
+  spreading from the left, rather than translating the workspace snapshots.
+- Extend the approved straight theme reveal to custom-theme activation and
+  capture named preset choices before their existing application handlers.
+- Keep the theme wipe and timing while replacing its animated clip with a
+  cropped incoming surface and counter-transforms to reduce rendering work.
+- Consume Modern Notes writing slash queries immediately and preserve the
+  writing session through equivalent same-note refreshes. Real source changes
+  show an explicit paused-review warning while retaining Apply protection.
+
+These changes are on `codex/student-workflow-batch`, which has been uploaded for GitHub CI. They are not merged or released; later local follow-ups may remain unpushed. See the [current CI readiness record](../plans/CI_READINESS_20261016.md) for revision-specific results and pending checks.
+
+- Dock Assistant below navigation as a full-height sidebar; move floating
+  workspace controls alongside it and preview Modern Notes writing corrections
+  at changed words before guarded Apply. This local follow-up awaits user QA.
+- Fix cramped sidebar composers and the invisible writing Send label; animate
+  even punctuation corrections from the Assistant header to the original word.
+  Retain visible note context for indirect writing requests and expose existing
+  to-do creation proposals for natural classroom-test/reminder requests.
+- Correct sidebar grid sizing so the message textarea spans its full width;
+  hide the docked sidebar while the full Assistant tab is active.
+- Preserve action schemas through Stateful clarification replies using retained
+  user turns, and release sidebar width in the full Assistant view.
+- Resolve unique note source quotes locally before proposal review, and align
+  prompt version metadata with the patch engine; retain stale/ambiguous guards.
+- Default new Assistant workspaces to Everyday: bounded workspace retrieval,
+  recent conversation context, and reviewed changes with Apply and Undo.
+  Add Private and Advanced controls without upgrading existing restrictions;
+  missing older permission fields stay Off on load/import.
+- Offer Everyday setup alongside blocked proposals, without applying the
+  proposal when configuration is enabled or overwriting unsaved Settings drafts.
+- Keep recent Stateful turns ahead of incidental workspace matches, retain an
+  attached note's canonical target across follow-ups, and expose anchored edit
+  proposals for requests such as “revise it and put it back.”
+- Preload eligible current-note blocks for caret writing commands, preserving
+  paragraph structure and requiring review before applying a draft.
+- Pause Sync on unauthenticated or inconsistent records while preserving local
+  data, pending changes, and the existing vault key.
+- Add bounded automatic-backup retry delays and report incomplete attachment
+  recovery instead of claiming a complete restore.
+- Scrub additional credential aliases and encoded labels in diagnostics.
+- Plan the full requested week from canonical tasks and Homework, excluding
+  work already linked to scheduled blocks.
+- Retire wellness surfaces while preserving their legacy data for portability.
+- Consolidate dedicated Assistant scripts without changing their load order.
+- Refine desktop Settings and add phone category/detail navigation with Back,
+  keyboard focus, search recovery, and preserved pending preferences.
+- Update the local spreadsheet parser to SheetJS 0.20.3 and the CI Node line to
+  24; repair nested recovery-page paths and landing-page separators.
+- Distinguish taken exams awaiting results from explicitly recorded official
+  results, retain practice scores separately, and preserve exact Undo state.
+- Add explicit passage-only grammar, spelling, and rephrase commands with an
+  editable review, Cancel, and guarded Apply through the owning editor history.
+- Strengthen page PIN verifiers while retaining legacy verification and safe
+  upgrade on normal unlock; clarify that UI privacy locks do not encrypt notes.
+- Bundle an original Sutra daily-loop icon set for navigation and setup,
+  preserving existing labels, touch targets, and offline rendering.
+- Retire the inactive Homework quick-add parser and its uncalled UI helpers;
+  active capture continues through the canonical shared date/time parser.
+- Reject impossible calendar dates in active Capture and Homework import
+  fallbacks while retaining valid legacy portal formats.
+- Delay restore success until workspace and file writes finish; retain both
+  failure details and avoid reloading after incomplete snapshot recovery.
+- Retain conflict-review records before the abnormal-conflict Sync safeguard
+  pauses, preserving both versions without applying or pushing a merge.
+- Share recursive deployment path rules between staging and verification;
+  reject hidden/local files, development material, and symbolic links while
+  retaining required assets and vendor licenses.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

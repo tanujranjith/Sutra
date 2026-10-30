@@ -98,24 +98,35 @@ function makeRestoreFixture(scenario = {}) {
       return scenario.diskRoot || { canonicalHash: canonicalWorkspaceHash };
     }
     function hashCanonicalWorkspaceRecord(record) { return record && record.canonicalHash || null; }
-    function showToast() {}
-    function importWorkspacePayload() {
+    const window = {};
+    const courseWorkspace = { files: scenario.files || [] };
+    async function cwListStoredBlobKeys() {
+      if (scenario.readbackFailure) throw new Error('Attachment readback failed');
+      return scenario.storedKeys || [];
+    }
+    function showToast(message) { events.push('toast:' + message); }
+    function importWorkspacePayload(payload, options) {
       if (!lockActive) throw new Error('Workspace replacement escaped the writer lock.');
+      if (!options || options.deferSuccessToast !== true) events.push('toast:Workspace imported successfully!');
       imported = true;
       events.push('workspace-imported');
     }
     async function flushImportedAttachmentWrites() {
       if (lockActive) throw new Error('Attachment flush ran while the writer lock was held.');
       events.push('attachments-flushed');
-      return { ok: true, failed: [], total: 0 };
+      if (scenario.attachmentException) throw new Error('Attachment database unavailable');
+      return scenario.attachmentResult || { ok: true, failed: [], total: 0 };
     }
     async function flushAppSaveNow() {
       if (lockActive) throw new Error('Workspace save was awaited while the writer lock was held.');
       events.push('workspace-save-flushed');
+      if (scenario.saveFailure) throw new Error('Disk full');
     }
     function serializeWorkspace() { return { pages: [] }; }
     function isWorkspacePayload() { return true; }
+    function recordPersistenceFailure(error, context) { events.push('incomplete-restore:' + context.kind); }
 
+    async ${source('flushWorkspaceRestoreWrites')}
     async ${source('applyValidatedWorkspaceImport')}
     return {
       apply: applyValidatedWorkspaceImport,
@@ -123,6 +134,7 @@ function makeRestoreFixture(scenario = {}) {
       bumpSaveRevision,
       wasImported: () => imported,
       currentRevision: () => localWorkspaceSaveRequestRevision,
+      files: courseWorkspace.files,
       lockIsActive: () => lockActive
     };
   `)(scenario);
@@ -168,6 +180,7 @@ test('unchanged workspace applies under the writer lock and flushes only after r
   assert.ok(fixture.events.indexOf('lock-released') < fixture.events.indexOf('attachments-flushed'));
   assert.ok(fixture.events.indexOf('attachments-flushed') < fixture.events.indexOf('workspace-save-flushed'));
   assert.equal(fixture.lockIsActive(), false);
+  assert.ok(fixture.events.indexOf('toast:Workspace imported successfully!') > fixture.events.indexOf('workspace-save-flushed'));
 });
 
 test('a changed canonical disk head aborts before replacing the workspace', async () => {
@@ -183,3 +196,105 @@ test('a changed canonical disk head aborts before replacing the workspace', asyn
   assert.ok(fixture.events.includes('lock-released'));
   assert.equal(fixture.events.includes('attachments-flushed'), false);
 });
+
+for (const scenario of [
+  { attachmentResult: { ok: false, failed: ['file-one'], total: 2 } },
+  { attachmentException: true },
+  { saveFailure: true },
+  { attachmentResult: { ok: false, failed: ['file-one'], total: 2 }, saveFailure: true },
+  { files: [{ id: 'missing-file', storageType: 'indexeddb', blobKey: 'absent', missingBlob: true }] },
+  { files: [{ id: 'unverified-file', storageType: 'indexeddb', blobKey: 'cached-only' }], readbackFailure: true }
+]) {
+  test('attachment persistence failure rejects full-restore success without discarding recovered content: ' + JSON.stringify(scenario), async () => {
+    const fixture = makeRestoreFixture(scenario);
+    await assert.rejects(fixture.apply({ pages: [] }), error => {
+      assert.equal(error.code, 'restore-incomplete');
+      assert.match(error.message, /Recovered content is available/);
+      assert.match(error.message, /original backup/);
+      if (scenario.saveFailure) assert.match(error.message, /Local saving could not be confirmed/);
+      if (scenario.attachmentResult || scenario.attachmentException) assert.match(error.message, /attachments could not be saved/);
+      if (scenario.files) assert.match(error.message, /could not be verified in storage/);
+      return true;
+    });
+    assert.equal(fixture.wasImported(), true);
+    assert.ok(fixture.events.includes('workspace-save-flushed'));
+    if (scenario.attachmentResult || scenario.attachmentException || scenario.files) assert.ok(fixture.events.includes('incomplete-restore:attachment'));
+    if (scenario.saveFailure) assert.ok(fixture.events.includes('incomplete-restore:indexeddb'));
+    assert.equal(fixture.events.some(event => event.startsWith('toast:Workspace imported successfully!')), false);
+    assert.equal(fixture.lockIsActive(), false);
+  });
+}
+
+test('restore verifies existing file bytes before clearing a stale missing marker; links need no blob', async () => {
+  const fixture = makeRestoreFixture({
+    files: [
+      { id: 'existing-file', storageType: 'indexeddb', blobKey: 'persisted-file', missingBlob: true },
+      { id: 'link', storageType: 'link', url: 'https://example.com/reference' }
+    ],
+    storedKeys: ['persisted-file']
+  });
+  assert.equal(await fixture.apply({ pages: [] }), true);
+  assert.equal(fixture.files[0].missingBlob, false);
+  assert.equal(fixture.files[1].missingBlob, undefined);
+});
+
+test('one canonical HTML helper accepts nullish, numeric and literal markup values', () => {
+  assert.equal([...app.matchAll(/function escapeHtml\(/g)].length, 1);
+  const escape = new Function(source('escapeHtml') + '; return escapeHtml;')();
+  assert.equal(escape(null), '');
+  assert.equal(escape(undefined), '');
+  assert.equal(escape(42), '42');
+  assert.equal(escape('<a title="x">&\''), '&lt;a title=&quot;x&quot;&gt;&amp;&#39;');
+});
+
+function makeSnapshotFixture(scenario = {}) {
+  return new Function('scenario', `
+    const messages = [];
+    let reloadScheduled = false;
+    const window = {};
+    const courseWorkspace = { files: scenario.files || [] };
+    async function cwListStoredBlobKeys() { return scenario.storedKeys || []; }
+    const location = { reload() {} };
+    function getWorkspaceSnapshots() { return [{ id: 'qa-snapshot', payload: { pages: [] } }]; }
+    function confirm() { return true; }
+    function createWorkspaceSnapshot() { return { id: 'qa-before-restore' }; }
+    function importWorkspacePayload(payload, options) {
+      if (!options || !options.deferSuccessToast) messages.push('Workspace imported successfully!');
+      if (scenario.importFailure) throw new Error('Apply interrupted');
+    }
+    async function flushImportedAttachmentWrites() { return scenario.attachmentResult || { ok: true, failed: [], total: 0 }; }
+    async function flushAppSaveNow() { if (scenario.saveFailure) throw new Error('Disk full'); }
+    function recordPersistenceFailure() {}
+    function showToast(message) { messages.push(message); }
+    function setTimeout() { reloadScheduled = true; }
+    async ${source('flushWorkspaceRestoreWrites')}
+    async ${source('restoreWorkspaceSnapshot')}
+    return { restore: () => restoreWorkspaceSnapshot('qa-snapshot'), messages, reloadScheduled: () => reloadScheduled };
+  `)(scenario);
+}
+
+test('snapshot restore reloads only after both stores confirm successful writes', async () => {
+  const f = makeSnapshotFixture();
+  assert.equal(await f.restore(), true);
+  assert.deepEqual(f.messages, ['Workspace restored. Reloading…']);
+  assert.equal(f.reloadScheduled(), true);
+});
+
+for (const scenario of [
+  { attachmentResult: { ok: false, failed: ['qa-file'], total: 1 } },
+  { saveFailure: true },
+  { attachmentResult: { ok: false, failed: ['qa-file'], total: 1 }, saveFailure: true },
+  { files: [{ storageType: 'indexeddb', blobKey: 'absent', missingBlob: true }] },
+  { importFailure: true }
+]) {
+  test('snapshot restore keeps recovery visible and avoids success/reload on failure: ' + JSON.stringify(scenario), async () => {
+    const f = makeSnapshotFixture(scenario);
+    assert.equal(await f.restore(), false);
+    assert.equal(f.reloadScheduled(), false);
+    assert.equal(f.messages.some(message => /successfully|Workspace restored|workspace is unchanged/.test(message)), false);
+    assert.match(f.messages.at(-1), /Recovered content/);
+    if (scenario.saveFailure) assert.match(f.messages.at(-1), /Local saving could not be confirmed/);
+    if (scenario.attachmentResult) assert.match(f.messages.at(-1), /attachments could not be saved/);
+    if (scenario.files) assert.match(f.messages.at(-1), /could not be verified in storage/);
+  });
+}

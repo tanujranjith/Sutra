@@ -45,11 +45,196 @@ test('XLSX export creates a standards-shaped local Office package', async () => 
   assert.match(worksheet, /state="frozen"/);
   assert.match(worksheet, /mergeCell ref="A3:B3"/);
   assert.match(worksheet, /<f>B1\*2<\/f>/);
+  assert.match(worksheet, /<f>B1\*2<\/f><v>24<\/v>/);
   assert.match(worksheet, /r="B1" s="1"/);
   const styles = await zip.file('xl/styles.xml').async('text');
   assert.match(styles, /horizontal="center"/);
   assert.match(styles, /FFDBEAFE/);
   assert.match(styles, /numFmtId="164"/);
+});
+
+test('XLSX formula cells include typed cached results and preserve formulas', async () => {
+  const workbook = Sheets.createWorkbook('Cached formula results');
+  const sheet = workbook.sheets[0];
+  Sheets.setCell(sheet, 0, 0, { value: 2 });
+  Sheets.setCell(sheet, 1, 0, { value: 3 });
+  Sheets.setCell(sheet, 2, 0, { formula: '=SUM(A1:A2)' });
+  Sheets.setCell(sheet, 0, 1, { formula: '="Ready & set"' });
+  Sheets.setCell(sheet, 0, 2, { formula: '=A1>0' });
+  Sheets.setCell(sheet, 0, 3, { formula: '=1/0' });
+
+  const blob = await Office.exportXlsx(workbook);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const worksheet = await zip.file('xl/worksheets/sheet1.xml').async('text');
+
+  assert.match(worksheet, /<c r="A3" t="n"><f>SUM\(A1:A2\)<\/f><v>5<\/v><\/c>/);
+  assert.match(worksheet, /<c r="B1" t="str"><f>&quot;Ready &amp; set&quot;<\/f><v>Ready &amp; set<\/v><\/c>/);
+  assert.match(worksheet, /<c r="C1" t="b"><f>A1&gt;0<\/f><v>1<\/v><\/c>/);
+  assert.match(worksheet, /<c r="D1" t="e"><f>1\/0<\/f><v>#DIV\/0!<\/v><\/c>/);
+  assert.equal(Sheets.cellAt(sheet, 2, 0).formula, '=SUM(A1:A2)');
+});
+
+test('XLSX formula caches use the Sheets engine for cross-sheet and named-range references', async () => {
+  const workbook = Sheets.createWorkbook('Connected formula results');
+  const inputs = workbook.sheets[0];
+  inputs.name = 'Inputs';
+  const summary = Sheets.createSheet('Summary');
+  workbook.sheets.push(summary);
+  workbook.namedRanges.BaseValue = "'Inputs'!A1";
+  Sheets.setCell(inputs, 0, 0, { value: 6 });
+  Sheets.setCell(summary, 0, 0, { formula: '=Inputs!A1*2' });
+  Sheets.setCell(summary, 1, 0, { formula: '=BaseValue*3' });
+
+  const blob = await Office.exportXlsx(workbook);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const worksheet = await zip.file('xl/worksheets/sheet2.xml').async('text');
+  const workbookXml = await zip.file('xl/workbook.xml').async('text');
+
+  assert.match(worksheet, /<f>Inputs!A1\*2<\/f><v>12<\/v>/);
+  assert.match(worksheet, /<f>BaseValue\*3<\/f><v>18<\/v>/);
+  assert.match(workbookXml, /<definedName name="BaseValue">&apos;Inputs&apos;!A1<\/definedName>/);
+});
+
+test('SheetJS formula-cache repair fills missing sums and cross-sheet names without replacing supplied caches', () => {
+  const parsed = {
+    SheetNames: ['Inputs', 'Summary'],
+    Sheets: {
+      Inputs: {
+        A1: { t: 'n', v: 6 },
+        A2: { t: 'e', v: 7, w: '#DIV/0!' },
+        '!ref': 'A1:A2'
+      },
+      Summary: {
+        A1: { t: 'n', f: 'SUM(Inputs!A1:A1)' },
+        A2: { t: 'n', f: 'BaseValue*3' },
+        B1: { t: 'n', f: '1+1', v: 0, w: 'stale zero' },
+        B2: { t: 'b', f: 'TRUE', v: false, w: 'stale false' },
+        B3: { t: 'str', f: '"cached"', v: '', w: 'stale string' },
+        C1: { t: 'n', f: 'SUM(Inputs!A2:A2)' },
+        D1: { t: 'n', f: 'SUM(Inputs!A1:A1)+Inputs!B250' },
+        E1: { t: 'str', f: '"ready"' },
+        F1: { t: 'b', f: 'TRUE' },
+        '!ref': 'A1:C1'
+      }
+    },
+    Workbook: { Names: [{ Name: 'BaseValue', Ref: "'Inputs'!$A$1" }] }
+  };
+  const report = Office.fillMissingFormulaResults(parsed);
+
+  assert.deepEqual(report, { calculated: 6, unavailable: 0 });
+  assert.equal(parsed.Sheets.Summary.A1.v, 6);
+  assert.equal(parsed.Sheets.Summary.A1.t, 'n');
+  assert.equal(parsed.Sheets.Summary.A1.f, 'SUM(Inputs!A1:A1)');
+  assert.equal(parsed.Sheets.Summary.A2.v, 18);
+  assert.equal(parsed.Sheets.Summary.C1.v, '#DIV/0!');
+  assert.equal(parsed.Sheets.Summary.C1.t, 'e');
+  assert.equal(parsed.Sheets.Summary.D1.v, 6);
+  assert.equal(parsed.Sheets.Summary.E1.v, 'ready');
+  assert.equal(parsed.Sheets.Summary.E1.t, 'str');
+  assert.equal(parsed.Sheets.Summary.F1.v, true);
+  assert.equal(parsed.Sheets.Summary.F1.t, 'b');
+  assert.deepEqual(parsed.Sheets.Summary.B1, { t: 'n', f: '1+1', v: 0, w: 'stale zero' });
+  assert.deepEqual(parsed.Sheets.Summary.B2, { t: 'b', f: 'TRUE', v: false, w: 'stale false' });
+  assert.deepEqual(parsed.Sheets.Summary.B3, { t: 'str', f: '"cached"', v: '', w: 'stale string' });
+});
+
+test('SheetJS formula-cache repair leaves unsupported results as formula text and reports them', () => {
+  const parsed = {
+    SheetNames: ['Data'],
+    Sheets: { Data: { A1: { t: 'n', f: 'MYSTERY(1)' }, '!ref': 'A1' } }
+  };
+
+  const report = Office.fillMissingFormulaResults(parsed);
+
+  assert.deepEqual(report, { calculated: 0, unavailable: 1 });
+  assert.equal(parsed.Sheets.Data.A1.f, 'MYSTERY(1)');
+  assert.equal(parsed.Sheets.Data.A1.v, '=MYSTERY(1)');
+  assert.equal(parsed.Sheets.Data.A1.t, 's');
+  assert.equal(parsed.Sheets.Data.A1.w, '=MYSTERY(1)');
+});
+
+test('uncached unsupported formulas and their dependents remain visible without invented results', () => {
+  const parsed = {
+    SheetNames: ['Data'],
+    Sheets: { Data: {
+      A1: { t: 'n', v: 10 },
+      B1: { t: 'n', f: 'AVERAGE(A1:A2)', future: { keep: true } },
+      C1: { t: 'n', f: 'IFERROR(XIRR(A1:A2,A3:A4),0)' },
+      D1: { t: 'n', f: 'B1+1' },
+      E1: { t: 'n', f: 'SUM(C1:D1)' },
+      F1: { t: 'n', f: 'SUM(A1:A2)' },
+      G1: { t: 'n', f: 'XIRR(A1:A2,A3:A4)', v: 7, custom: 'retained' },
+      H1: { t: 'n', f: 'G1+1' },
+      I1: { t: 's', v: '5' },
+      J1: { t: 'n', f: 'SUM(I1:I2)' },
+      K1: { t: 'n', f: 'SUM(F1:F1)' },
+      '!ref': 'A1:K4'
+    } }
+  };
+  const report = Office.fillMissingFormulaResults(parsed);
+  assert.deepEqual(report, { calculated: 3, unavailable: 5 });
+  const sheet = parsed.Sheets.Data;
+  for (const address of ['B1', 'C1', 'D1', 'E1', 'J1']) {
+    assert.equal(sheet[address].v, '=' + sheet[address].f, address);
+    assert.equal(sheet[address].t, 's', address);
+  }
+  assert.deepEqual(sheet.B1.future, { keep: true });
+  assert.deepEqual(sheet.G1, { t: 'n', f: 'XIRR(A1:A2,A3:A4)', v: 7, custom: 'retained' });
+  assert.equal(sheet.F1.v, 10);
+  assert.equal(sheet.H1.v, 8);
+  assert.equal(sheet.K1.v, 10);
+});
+
+test('formula repair leaves cycles and nonnumeric formula dependencies unavailable', () => {
+  const parsed = { SheetNames: ['Data'], Sheets: { Data: {
+    A1: { f: 'B1+1' }, B1: { f: 'A1+1' }, C1: { f: 'A1+1' },
+    D1: { f: '"5"' }, E1: { f: 'SUM(D1:D1)' }, '!ref': 'A1:E1'
+  } } };
+  assert.deepEqual(Office.fillMissingFormulaResults(parsed), { calculated: 1, unavailable: 4 });
+  assert.equal(parsed.Sheets.Data.D1.v, '5');
+  for (const address of ['A1', 'B1', 'C1', 'E1']) assert.equal(parsed.Sheets.Data[address].v, '=' + parsed.Sheets.Data[address].f);
+});
+
+test('long forward-reference chains calculate in dependency order without stack overflow', () => {
+  const cells = { '!ref': 'A1:A3000', A3000: { t: 'n', v: 1 } };
+  for (let row = 1; row < 3000; row += 1) cells['A' + row] = { f: 'A' + (row + 1) + '+1' };
+  const parsed = { SheetNames: ['Data'], Sheets: { Data: cells } };
+  assert.deepEqual(Office.fillMissingFormulaResults(parsed), { calculated: 2999, unavailable: 0 });
+  assert.equal(cells.A1.v, 3000);
+  assert.equal(cells.A1500.v, 1501);
+  assert.equal(cells.A2999.v, 2);
+});
+
+test('formula repair declines unverified power and unary-reference semantics', () => {
+  const parsed = { SheetNames: ['Data'], Sheets: { Data: {
+    A1: { t: 'e', v: 7, w: '#DIV/0!' },
+    B1: { f: '-A1' }, C1: { f: '2^3^2' }, D1: { f: '-2+3' }, '!ref': 'A1:D1'
+  } } };
+  assert.deepEqual(Office.fillMissingFormulaResults(parsed), { calculated: 1, unavailable: 2 });
+  assert.equal(parsed.Sheets.Data.B1.v, '=-A1');
+  assert.equal(parsed.Sheets.Data.C1.v, '=2^3^2');
+  assert.equal(parsed.Sheets.Data.D1.v, 1);
+});
+
+test('SheetJS formula-cache repair declines unsafe ranges and oversized sheet sets', () => {
+  const hugeRange = {
+    SheetNames: ['Data'],
+    Sheets: { Data: { A1: { t: 'n', f: 'SUM(B1:B2)' }, '!ref': 'A1:XFD1048576' } }
+  };
+  const hugeReport = Office.fillMissingFormulaResults(hugeRange);
+  assert.deepEqual(hugeReport, { calculated: 0, unavailable: 1 });
+  assert.equal(hugeRange.Sheets.Data.A1.v, '=SUM(B1:B2)');
+
+  const manySheets = { SheetNames: [], Sheets: {} };
+  for (let index = 0; index < 33; index += 1) {
+    const name = `Sheet${index + 1}`;
+    manySheets.SheetNames.push(name);
+    manySheets.Sheets[name] = { A1: index === 0 || index === 32 ? { t: 'n', f: '1+1' } : { t: 'n', v: index }, '!ref': 'A1' };
+  }
+  const sheetsReport = Office.fillMissingFormulaResults(manySheets);
+  assert.deepEqual(sheetsReport, { calculated: 0, unavailable: 2 });
+  assert.equal(manySheets.Sheets.Sheet1.A1.v, '=1+1');
+  assert.equal(manySheets.Sheets.Sheet33.A1.v, '=1+1');
 });
 
 test('PPTX export creates a standards-shaped PowerPoint package and losslessly reimports Sutra decks', async () => {

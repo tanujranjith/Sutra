@@ -7,37 +7,19 @@ const life = require('../../src/domain/student-life.js');
 
 const NOW = '2026-08-01T12:00:00.000Z';
 
-test('wellness trends are bounded, actionable, and never medical advice', () => {
-  const trends = life.getWellnessTrends({
-    lifeWorkspace: {
-      wellness: {
-        checkIns: [
-          { createdAt: '2026-07-30T09:00:00.000Z', stress: 8 },
-          { createdAt: '2026-07-31T09:00:00.000Z', stress: 7 },
-          { createdAt: '2026-08-01T09:00:00.000Z', stress: 9 }
-        ]
-      },
-      sleepTracker: {
-        entries: [
-          { date: '2026-07-31T00:00:00.000Z', totalSleepMinutes: 360 },
-          { date: '2026-08-01T00:00:00.000Z', totalSleepMinutes: 330 }
-        ]
-      }
-    }
-  }, { now: NOW });
-
-  assert.equal(trends.averages.stress, 8, 'stress averages across the window');
-  assert.equal(Object.prototype.hasOwnProperty.call(trends.averages, 'energy'), false, 'removed Energy data is not surfaced');
-  assert.ok(trends.signals.some(s => s.includes('Stress has been high recently. Consider reducing today to essential commitments.')), 'high stress produces an actionable signal');
-  assert.ok(trends.signals.some(s => s.includes('Average sleep is below seven hours.')), 'short sleep produces an actionable signal');
-  assert.equal(trends.disclaimer, 'These are gentle personal trends, not medical or mental-health advice.');
+test('retired wellness trend API reports unavailable without legacy records', () => {
+  const trends = life.getWellnessTrends({}, { now: NOW });
+  assert.deepEqual(trends, { available: false, reason: 'retired', signals: [] });
 });
 
-test('wellness trends stay non-medical and quiet when there is no data', () => {
-  const trends = life.getWellnessTrends({}, { now: NOW });
-  assert.deepEqual(trends.signals, [], 'no data means no health claims');
-  assert.equal(trends.averages.stress, null);
-  assert.equal(trends.disclaimer, 'These are gentle personal trends, not medical or mental-health advice.');
+test('retired wellness trend API ignores saved check-ins and sleep entries', () => {
+  const trends = life.getWellnessTrends({
+    lifeWorkspace: {
+      wellness: { checkIns: [{ createdAt: '2026-08-01T09:00:00.000Z', mood: 'low', stress: 9 }] },
+      sleepTracker: { entries: [{ date: '2026-08-01', totalSleepMinutes: 300 }] }
+    }
+  }, { now: NOW });
+  assert.deepEqual(trends, { available: false, reason: 'retired', signals: [] });
 });
 
 test('the overwhelmed week plan keeps essentials bounded and never deletes work', () => {

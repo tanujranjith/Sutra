@@ -28,17 +28,18 @@ This document is the canonical reference for all Sutra brand assets: what they a
 
 Two approved master PNGs are the canonical source of truth. **Never** regenerate them as SVG, redraw them, or alter their geometry, colors, or transparency.
 
-2026 update: the approved source lockups remain preserved in `assets/logos/`:
+October 24 update: the owner's new `Sutra logo.png` and
+`Sutra Assistant logo.png` replace the canonical masters. Their approved
+off-white background, geometry, colors, and built-in Assistant eyes are preserved.
+Compatibility copies remain in `assets/logos/`:
 
 - `assets/logos/sutra.png` - source main Sutra lockup.
 - `assets/logos/sutra-assistant.png` - source Sutra Assistant lockup.
 
-Production derivatives now include transparent emblem masters:
+Production derivatives use these approved masters:
 
 - `assets/brand/sutra/sutra-app-icon-master.png` - main Sutra transparent mark for app icons, favicon, Apple touch icon, PWA icons, startup, app shell, and product branding.
-- `assets/brand/sutra/sutra-full-lockup.png` - full main Sutra lockup for documentation and marketing surfaces.
 - `assets/brand/sutra/sutra-assistant-icon-master.png` - Sutra Assistant transparent mark for assistant-only surfaces.
-- `assets/brand/sutra-assistant/` - assistant-specific master, lockup, and generated aliases.
 
 The manifest uses `assets/brand/sutra/generated/sutra-icon-maskable-512.png` for the maskable PWA icon and keeps the assistant logo out of product app-icon declarations.
 
@@ -49,15 +50,13 @@ The manifest uses `assets/brand/sutra/generated/sutra-icon-maskable-512.png` for
 
 ### Main Sutra logo
 
-- Dark navy background with rounded corners
-- White-to-blue S-curve with endpoint nodes and a central crossover node
-- White upper half, blue lower half, four-pointed star accent
+- Sculpted cyan/blue/purple S ribbon on the supplied off-white background
 - Used for: favicon, app icon, landing page, app shell, sidebar, startup loader, onboarding, Settings About, Help & Docs, Safe Mode, empty states, PWA icons
 
 ### Sutra Assistant logo
 
-- Same rounded-corner dark background
-- Clean S-curve with a speech-bubble / three-dots element in the lower loop
+- Cyan/blue/purple ribbon surrounding a light face with two built-in blue eyes
+- Do not add the previous separate eye overlay on top of this artwork
 - Used for: assistant launcher button, assistant panel header, mobile assistant launcher, assistant empty state, assistant settings, assistant documentation
 
 **Do not use the assistant logo as the main product logo and do not use the main logo on assistant-specific surfaces.**
@@ -67,6 +66,9 @@ The manifest uses `assets/brand/sutra/generated/sutra-icon-maskable-512.png` for
 ## Generated derivatives
 
 All derivatives live in `assets/brand/sutra/generated/`. They are produced by `scripts/generate-sutra-brand-assets.py` from the two masters.
+The same generator owns the maskable icon, social preview, and compatibility
+filename `sutra-mark-transparent.png`; that retained name does not imply the new
+approved RGB artwork has transparency.
 
 ### Main Sutra icon sizes
 
@@ -249,7 +251,9 @@ The button uses a `28%` border-radius to echo the icon's own corner geometry wit
 | Assistant launcher | `sutra-assistant-icon-44.png` at 48 px CSS | 48 × 48 px CSS |
 | Assistant panel header | `sutra-assistant-icon-64.png` at 30 px CSS (mobile) | 30 × 30 px CSS |
 
-Never scale below the source resolution. The 44 px assistant icon is the minimum touch-target size.
+Prefer a source image at least as large as its displayed pixel dimensions.
+The launcher button, independently of its image size, must retain a minimum
+44-pixel touch target.
 
 ---
 
@@ -278,7 +282,7 @@ The startup loader CSS (`styles/features/startup-intro.css`) must include:
 }
 ```
 
-The scroll-linked landing page animations (problem-section, reveal-section, guided tour) also respect `prefers-reduced-motion` — see `docs/SCROLLYTELLING_AND_LANDING_PAGE.md`.
+The scroll-linked landing page animations (problem-section, reveal-section, guided tour) also respect `prefers-reduced-motion` — see [Landing page](SCROLLYTELLING_AND_LANDING_PAGE.md).
 
 ---
 
@@ -351,7 +355,7 @@ If the master PNGs are ever updated with approved replacements:
 3. Run: `node scripts/sutra-brand-assets-check.mjs`
 4. Run: `node scripts/smoke-check.mjs`
 5. Run: `node scripts/sutra-rebrand-check.mjs`
-6. Verify visually at the breakpoints documented in `docs/MOBILE_AND_RESPONSIVE_BEHAVIOR.md`.
+6. Verify visually at the breakpoints documented in [Mobile and responsive behavior](MOBILE_AND_RESPONSIVE_BEHAVIOR.md).
 7. Commit the new masters and all regenerated derivatives together.
 
 ---
@@ -390,4 +394,4 @@ The following identifiers are **intentionally retained** for backwards compatibi
 | `.atelier` import | File extension | All old backups must still import |
 | `NoteFlow Classic` | Product name | Separate legacy app — not affected by rebrand |
 
-These are described in full in `docs/REBRAND_AND_COMPATIBILITY.md`.
+These are described in full in [Rebrand and Compatibility](REBRAND_AND_COMPATIBILITY.md).

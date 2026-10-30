@@ -30,7 +30,7 @@ There are **two backends**:
 | Backend | Sutra's configured Supabase project | **Your own** Supabase project |
 | Setup | None (just sign in) | You create + configure a project |
 | Who's responsible | The Sutra app owner | **You** (billing, uptime, RLS, security) |
-| Hosted build | Works | May require a **self-hosted build** (see CSP note) |
+| Hosted build | Works after deployment configuration | Hosted `*.supabase.co` projects are approved; other origins need a self-hosted CSP change |
 
 Both backends use the **same** encryption, passphrase, retention (last 10), and
 restore-overwrite behavior. The choice is only *whose* Supabase project stores the
@@ -63,6 +63,7 @@ as the person deploying Sutra.
   Direct sync-table grants are revoked; each RPC/asset request binds
   `auth.uid()` and the current auth `session_id` to a non-revoked device. (Also
   idempotent.) User guide: [`docs/features/CLOUD_SYNC.md`](../docs/features/CLOUD_SYNC.md).
+- **Existing backup projects:** [the backup-index permission reconciliation](./migrations/20260731_backup_index_authenticated_permissions.sql) restores authenticated SELECT/INSERT/DELETE while denying PUBLIC and anon access. It changes privileges only; it does not remove backup rows or objects. This is separate from the Sync migration chain below.
 - **Existing Sutra Sync project (including the configured production project):**
   do not recreate tables or erase vault rows. Paste
   [`migrations/20260716_device_revoke_wipe.sql`](./migrations/20260716_device_revoke_wipe.sql)

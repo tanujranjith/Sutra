@@ -48,3 +48,13 @@ It still respects quiet hours and shows at most once per day.
   spread (distinct days) and `expandExamPrep` (session chunks, all before the exam).
 - `tests/e2e/planning-assistant-upgrades.spec.mjs` verifies the engine + keyless
   planner entry points in the browser.
+
+## October 22 connected-workflow correction
+
+The direct **Schedule** action keeps local calendar dates and moves a same-day
+or overdue default to the next future quarter-hour. If a one-hour block cannot
+fit before midnight, the default moves to the following day at 18:00 and the
+toast states the adjusted date/time. An explicit future time that would wrap
+midnight is rejected instead of creating an end time earlier than its start.
+Task/homework source linkage is retained. This shortcut does not claim to find
+an optimal conflict-free slot; use the planning preview for that workflow.

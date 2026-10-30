@@ -22,9 +22,9 @@ function loadPresets() {
 test('Today offers a calm preset that hides secondary signals by default', () => {
   const presets = loadPresets();
   assert.equal(presets.calm.label, 'Calm');
-  assert.equal(presets.calm.description, 'Next up, Radar, priorities, quick task capture, and save confidence without duplicate cards.');
+  assert.equal(presets.calm.description, 'Your day, Radar, quick task capture, and save confidence without duplicate cards.');
   assert.deepEqual(presets.calm.hidden, ['today-plan', 'assignments', 'calendar', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum']);
-  assert.deepEqual(presets.calm.sizes, { 'next-up': 'standard', 'upcoming-radar': 'standard', 'priorities': 'wide' });
+  assert.deepEqual(presets.calm.sizes, { 'next-up': 'standard', 'upcoming-radar': 'standard' });
 });
 
 test('the calm preset only hides widgets that actually exist', () => {
@@ -37,7 +37,7 @@ test('the calm preset only hides widgets that actually exist', () => {
   }
 });
 
-test('the calm layout keeps the daily-loop hero, Radar, priorities, and backup confidence visible', () => {
+test('the calm layout keeps daily-loop essentials and retires the redundant priorities panel', () => {
   const widgetsStart = source.indexOf('var WIDGETS = [');
   const widgetsEnd = source.indexOf('];', widgetsStart);
   const widgetsRegion = source.slice(widgetsStart, widgetsEnd);
@@ -48,7 +48,8 @@ test('the calm layout keeps the daily-loop hero, Radar, priorities, and backup c
   const presets = loadPresets();
   assert.ok(!presets.calm.hidden.includes('next-up'), 'Next up is never hidden in calm mode');
   assert.ok(!presets.calm.hidden.includes('upcoming-radar'), 'Radar is never hidden in calm mode');
-  assert.ok(!presets.calm.hidden.includes('priorities'), 'Priorities are never hidden in calm mode');
+  assert.ok(!widgetIds().includes('priorities'), 'The removed Priorities panel cannot be re-enabled as a widget');
+  assert.doesNotMatch(appShell, /id="today-priority-list"/);
   assert.ok(!presets.calm.hidden.includes('backup'), 'backup confidence is never hidden in calm mode');
 });
 

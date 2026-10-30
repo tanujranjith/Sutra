@@ -3,9 +3,37 @@
    the full canvas. This late layer intentionally refines existing components
    without introducing a second router or data model. */
 
+#commandPaletteLauncher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--sutra-radius-pill, 999px);
+  background: transparent;
+  color: var(--sutra-color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+#commandPaletteLauncher:hover {
+  border-color: var(--sutra-color-border);
+  background: var(--sutra-color-surface);
+  color: var(--sutra-color-text);
+}
+
+#commandPaletteLauncher:focus-visible {
+  outline: 2px solid var(--sutra-color-accent);
+  outline-offset: 2px;
+}
+
 :root {
   --sutra-global-nav-height: 72px;
-  --sutra-nav-side-reserve: clamp(210px, 16vw, 286px);
   --sutra-workspace-gutter: clamp(18px, 2.4vw, 38px);
   --sutra-content-max: 1760px;
   --sutra-shell-shadow: 0 10px 34px color-mix(in srgb, #101827 8%, transparent);
@@ -33,6 +61,10 @@ body {
 }
 
 .top-nav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap !important;
+  align-items: center;
   position: fixed !important;
   top: 0 !important;
   right: 0 !important;
@@ -69,10 +101,11 @@ body[data-context-sidebar="none"] #sidebarToggle {
   display: none !important;
 }
 
+/* The page tree belongs only to Create, including during shell transitions. */
+body[data-view]:not([data-view="notes"]) #pagesList { display: none !important; }
+
 .global-app-brand {
-  position: absolute;
-  top: 50%;
-  left: clamp(18px, 2vw, 32px);
+  position: static;
   z-index: 2;
   min-width: 126px;
   min-height: var(--sutra-target-min);
@@ -82,7 +115,7 @@ body[data-context-sidebar="none"] #sidebarToggle {
   color: var(--sutra-color-text);
   cursor: pointer;
   flex: 0 0 auto;
-  transform: translateY(-50%);
+  transform: none;
 }
 
 .global-app-brand .app-title-mark {
@@ -106,25 +139,37 @@ body[data-context-sidebar="none"] #sidebarToggle {
 }
 
 .top-nav .nav-left {
+  position: static;
   display: flex;
+  flex-direction: row;
   align-items: center;
-  flex: 1 1 100%;
-  width: 100%;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  width: auto;
   height: 100%;
 }
 
 .top-nav .tabs-shell {
+  position: static;
+  display: flex;
+  align-items: center;
   width: 100%;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
 }
 
 .top-nav .view-tabs {
-  position: relative;
+  position: static;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  max-width: none !important;
-  padding: 0 var(--sutra-nav-side-reserve);
+  flex: 1 1 0%;
+  width: auto;
+  max-width: 100% !important;
+  margin: 0;
+  padding: 0;
   gap: 3px;
   overflow: visible !important;
   border: 0;
@@ -136,16 +181,16 @@ body[data-context-sidebar="none"] #sidebarToggle {
 }
 
 .top-nav .nav-utility-group {
-  position: absolute;
-  top: 50%;
-  right: clamp(18px, 2vw, 32px);
+  position: static;
   z-index: 2;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  max-width: calc(var(--sutra-nav-side-reserve) - clamp(18px, 2vw, 32px));
-  transform: translateY(-50%);
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  transform: none;
 }
 
 .top-nav .view-tab {
@@ -552,7 +597,14 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   white-space: nowrap;
 }
 
-.notes-toolbar-overflow { position: relative; flex: 0 0 auto; }
+.notes-toolbar-overflow {
+  position: sticky;
+  right: 40px;
+  z-index: 2;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: var(--sutra-color-canvas);
+}
 .notes-toolbar-overflow > summary { list-style: none; }
 .notes-toolbar-overflow > summary::-webkit-details-marker { display: none; }
 .notes-toolbar-overflow[open] > summary {
@@ -572,6 +624,79 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   box-shadow: 0 18px 48px color-mix(in srgb, #09111f 22%, transparent);
 }
 .notes-toolbar-overflow-menu[hidden] { display: none !important; }
+.notes-toolbar-overflow-menu {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: calc(100dvh - 110px);
+}
+.notes-tools-section {
+  padding: 9px 10px 5px;
+  color: var(--sutra-color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sidebar .notes-sidebar-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: 3px 0;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--sutra-color-accent) 45%, var(--sutra-color-border));
+  border-radius: 10px;
+}
+.notes-sidebar-pair-cell {
+  display: flex;
+  min-width: 0;
+  border-radius: 7px;
+  background: var(--sutra-color-surface);
+}
+#sidebar .notes-sidebar-pair button {
+  min-height: 44px;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--sutra-color-text) !important;
+  cursor: pointer;
+}
+#sidebar .notes-sidebar-pair-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 4px 8px 7px !important;
+  text-align: left;
+  font-size: 0.82rem;
+}
+.notes-sidebar-pair-row .page-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notes-sidebar-pair-row .page-icon { flex: 0 0 auto; }
+#sidebar .notes-sidebar-pair-cell.active {
+  background: color-mix(in srgb, var(--sutra-color-accent) 9%, transparent) !important;
+  box-shadow: inset 0 -2px var(--sutra-color-accent);
+}
+#sidebar .notes-sidebar-pair button:hover {
+  background: color-mix(in srgb, var(--sutra-color-accent) 6%, transparent) !important;
+}
+#sidebar .notes-sidebar-unpair {
+  flex: 0 0 28px;
+  min-width: 28px;
+  padding: 4px !important;
+  font-size: 1.15rem;
+  color: var(--sutra-color-text-muted) !important;
+}
+#sidebar .page-item[hidden] { display: none !important; }
+.notes-sidebar-pair button:focus-visible {
+  outline: 2px solid var(--sutra-color-accent);
+  outline-offset: -3px;
+}
 .notes-overflow-item {
   width: 100% !important;
   min-height: 40px !important;
@@ -861,17 +986,21 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   }
 }
 
+/* Equal outer tracks center desktop tabs on the viewport, independently of
+   the different widths of the brand and utility controls. Keep the wrappers
+   measurable for the existing overflow logic and retain compact navigation. */
+@media (min-width: 1441px) {
+  .top-nav { display: grid; grid-template-columns: 1fr; }
+  .top-nav > .global-app-brand { grid-area: 1 / 1; justify-self: start; }
+  .top-nav > .nav-left { grid-area: 1 / 1; width: 100%; }
+  /* Reserve the utility dock's full width so it cannot intrude into centered tabs. */
+  .top-nav .tabs-shell { display: grid; grid-template-columns: minmax(126px, 1fr) minmax(0, auto) minmax(max-content, 1fr); }
+  .top-nav .view-tabs { grid-column: 2; justify-self: center; }
+  .top-nav .nav-utility-group { grid-column: 3; justify-self: end; }
+}
+
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 1440px) and (min-width: 981px) {
-  :root { --sutra-nav-side-reserve: 182px; }
-  .top-nav .view-tabs {
-    position: static;
-    flex: 0 1 calc(100% - var(--sutra-nav-side-reserve) - var(--sutra-nav-side-reserve));
-    width: calc(100% - var(--sutra-nav-side-reserve) - var(--sutra-nav-side-reserve));
-    max-width: calc(100% - var(--sutra-nav-side-reserve) - var(--sutra-nav-side-reserve)) !important;
-    margin-inline: auto;
-    padding-inline: 0;
-  }
   .top-nav .view-more,
   .top-nav .view-more-toggle { width: auto; }
   .top-nav .view-more-toggle { justify-content: center; }
@@ -879,7 +1008,6 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 }
 
 @media (max-width: 1220px) {
-  :root { --sutra-nav-side-reserve: 240px; }
   .top-nav { gap: 12px; padding-inline: 16px !important; }
   .global-app-brand { min-width: 42px; }
   .global-app-brand .app-title-wordmark { display: none; }
@@ -893,7 +1021,6 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 @media (max-width: 980px) {
   :root {
     --sutra-global-nav-height: 66px;
-    --sutra-nav-side-reserve: 72px;
   }
   .top-nav .tabs-shell .tab-clock-embed { display: none !important; }
   .top-nav .view-tab { min-height: 36px; padding-inline: 9px; font-size: 0.74rem; }
@@ -926,7 +1053,6 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   .top-nav .view-tabs { gap: 1px; }
   .top-nav .view-tab { padding-inline: 7px; font-size: 0.7rem; }
   .top-nav .view-more-toggle { padding-inline: 7px; }
-  .top-nav .nav-utility-group { right: 0; }
 }
 
 /* Every overlay drawer, including tablet widths, must clear its scrim. */
@@ -1381,3 +1507,19 @@ body[data-view="notes"].notes-split-active #splitNotesToggleBtn {
     outline-color: Highlight;
   }
 }
+.page-space-move-form {
+  display: grid;
+  gap: 10px;
+  color: var(--text-primary);
+}
+.page-space-move-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.page-space-move-form p { margin: 0; line-height: 1.5; }
+.page-space-move-form [role="status"] { color: var(--text-secondary); }

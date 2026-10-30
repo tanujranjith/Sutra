@@ -28,6 +28,8 @@ destinations, or changing workspace data.
 - **Quick Capture** keeps the existing type, date, optional details, course, and
   confirmation controls in one scrollable card. The footer remains part of
   that scroll surface when the keyboard or a short viewport reduces space.
+  Each new capture starts with fresh optional details after Cancel or Save;
+  parser-provided dates and explicitly requested class/type still apply.
 - **Protected Notes** retains the PIN, unlock, duress, removal, and warning
   content. The lock screen and PIN-management sheet can scroll as a whole and
   keep the primary actions reachable.

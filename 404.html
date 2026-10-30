@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'">
+  <script>
+    (() => {
+      const basePath = location.pathname === '/Sutra' || location.pathname.startsWith('/Sutra/')
+        ? '/Sutra/'
+        : '/';
+      const base = document.createElement('base');
+      base.href = basePath;
+      document.head.prepend(base);
+    })();
+  </script>
   <title>Page not found · Sutra</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">

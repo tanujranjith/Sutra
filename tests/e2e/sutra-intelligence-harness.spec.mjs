@@ -6,6 +6,7 @@
 // generated content, cancellation, persistence + export round-trips, and the
 // GUI-audit editor/theme regressions fixed in the same pass.
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Network stubs must own requests in every engine, including WebKit. Service
 // worker behavior is covered separately by the offline/chaos suites.
@@ -33,12 +34,20 @@ const STRUCTURED_OK = {
   }
 };
 
+const FLASHCARD_OUTPUT = {
+  flashcards: [
+    { id: 'fc_1', front: 'Where do light reactions occur?', back: 'In the thylakoid membrane.', sourcePages: [2] },
+    { id: 'fc_2', front: 'What does chlorophyll absorb?', back: 'Light energy, especially red and blue wavelengths.', sourcePages: [1] }
+  ]
+};
+
 async function openApp(page) {
   await page.addInitScript(() => {
     sessionStorage.setItem('sutra_intro_played', '1');
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');
@@ -56,21 +65,15 @@ async function openApp(page) {
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('intelligence-harness-ready'));
 }
 
-// Configure a provider + model and skip the (already-covered) consent modal.
-// The provider-change handler repopulates the model fields asynchronously, so
-// the custom model must be set AFTER that settles (and verified).
+// Configure a provider + model through the same provider-scoped API the request
+// path reads, then verify the active selection before exercising the harness.
 async function armProvider(page, provider, model) {
-  await page.evaluate((p) => {
-    sessionStorage.setItem(`${p}_api_key`, 'mock-key-for-tests');
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
+  await page.evaluate(({ provider: p, model: m }) => {
     localStorage.setItem('sutra_ai_send_ack_v1', '1');
-    const sel = document.getElementById('chatProviderSelect');
-    if (sel) { sel.value = p; sel.dispatchEvent(new Event('change', { bubbles: true })); }
-  }, provider);
-  await page.waitForTimeout(300);
-  await page.evaluate((m) => {
-    const custom = document.getElementById('chatCustomModelInput');
-    if (custom) { custom.value = m; custom.dispatchEvent(new Event('input', { bubbles: true })); }
-  }, model);
+    window.SutraProviderMeta.saveSessionKey(p, 'mock-key-for-tests');
+    window.SutraProviderMeta.selectModel(p, m);
+  }, { provider, model });
   await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel().model)).toBe(model);
 }
 
@@ -184,6 +187,9 @@ test('attachments never upload before send, stay visible when incompatible, and 
 });
 
 test('study-material generation creates an editable guide Note and an interactive Testing Hub test with intact relationships', async ({ page }) => {
+  // Generation, reviewed edits, a practice attempt, reload and round-trip all
+  // share this budget, including canonical startup on slower browser runners.
+  test.setTimeout(120_000);
   await openApp(page);
   await mockAnthropic(page, JSON.stringify(STRUCTURED_OK));
   await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
@@ -334,6 +340,55 @@ test('study-material generation creates an editable guide Note and an interactiv
   expect(persisted.roundTripTests).toBe(1);
   expect(persisted.roundTripGuide).toBe(true);
   expect(persisted.secretsLeak).toBe(false);
+});
+
+test('generated flashcards stay a proposal until an approved review-card Apply', async ({ page }) => {
+  await openApp(page);
+  await mockAnthropic(page, JSON.stringify(FLASHCARD_OUTPUT));
+  await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
+
+  const before = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  await page.evaluate((source) => {
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraStudyMaterials.openGenerator({ source });
+  }, PDF_SOURCE);
+  await expect(page.locator('#genmatGenerateBtn')).toBeVisible();
+  await page.locator('#genmatGuide').uncheck();
+  await page.locator('#genmatTest').uncheck();
+  await page.locator('#genmatCards').check();
+  await expect.poll(() => page.locator('#genmatGenerateBtn').isDisabled()).toBe(false);
+  await page.locator('#genmatGenerateBtn').click();
+
+  const card = page.locator('.sutra-genmat-flashcard-review .flow-action-card[data-action-type="create_review_deck"]');
+  await expect(card).toBeVisible();
+  await expect(page.locator('#genmatStatus')).toContainText('Ready — review flashcards below.');
+  await expect(card.locator('.flow-action-label')).toContainText('photosynthesis.pdf — Flashcards');
+  const proposed = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  expect(proposed).toEqual(before);
+
+  await card.locator('.flow-action-apply').click();
+  await expect(card.locator('.flow-action-error')).toContainText('not allowed');
+  const denied = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  expect(denied).toEqual(before);
+
+  await page.evaluate(() => window.SutraAssistantPermissions.setMode('approved_actions'));
+  await card.locator('.flow-action-apply').click();
+  await expect(card.locator('.flow-action-receipt')).toBeVisible();
+  const applied = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  expect(applied.decks).toBe(before.decks + 1);
+  expect(applied.cards).toBe(before.cards + FLASHCARD_OUTPUT.flashcards.length);
 });
 
 test('malformed and schema-invalid model output fails safely without persisting anything', async ({ page }) => {

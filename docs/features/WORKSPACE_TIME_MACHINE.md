@@ -1,8 +1,9 @@
 # Workspace Time Machine
 
 Sutra keeps local safety nets so you can recover earlier work without restoring a
-whole backup. Today this is built on **per-page version history**; this doc also
-records the planned additions (see `docs/FEATURE_WAVE_PROGRESS.md`).
+whole backup. Available safety nets include **per-page version history**, local
+whole-workspace snapshots, and Trash. Planned additions are listed separately
+below (see `docs/FEATURE_WAVE_PROGRESS.md`).
 
 ## Page version history (available today)
 
@@ -38,6 +39,19 @@ records the planned additions (see `docs/FEATURE_WAVE_PROGRESS.md`).
   assignments restore from the Trash modal (30-day age purge on top of the
   50-item cap).
 
+## Snapshot browser API and coverage
+
+The registered workspace bridge exposes `createWorkspaceSnapshot`,
+`getWorkspaceSnapshots`, `diffWorkspaceSnapshot`, `restoreWorkspaceSnapshot`,
+and `deleteWorkspaceSnapshot`. `openSnapshotBrowserModal` opens the browser.
+Restore requires a successfully saved “Before restore” safety snapshot, awaits
+the canonical restore writes, and reports an incomplete restore instead of
+announcing success or reloading when persistence fails.
+
+`tests/e2e/snapshot-browser-wave-d.spec.mjs` contains create/summary, collection
+count diff, browser-modal, and three-snapshot-cap coverage. This documents test
+scope; it is not a claim that the suite ran during this documentation audit.
+
 ## Planned additions (tracked, not yet shipped)
 
 - **Compare view** — a textual diff between two versions of one note (the
@@ -47,6 +61,10 @@ records the planned additions (see `docs/FEATURE_WAVE_PROGRESS.md`).
 
 ## Privacy
 
-Nothing here leaves the device. Snapshots are local and, like the rest of the
-workspace, only ever exported inside an **encrypted** `.sutra` backup — never to a
-network endpoint on their own.
+The snapshot browser stores its restore points device-locally under
+`sutra:workspaceSnapshots:v1`. That collection is excluded from workspace
+backups and Sync; it is not a portable or encrypted backup. Export a
+password-encrypted `.sutra` file separately for portable recovery. Page version
+history and Trash are workspace data and follow the workspace backup/restore
+path. Optional Sync has its own projection and must not be confused with
+keeping independent recovery copies.

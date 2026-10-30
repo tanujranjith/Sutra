@@ -168,7 +168,13 @@ Rules:
 - `appData` is the primary in-memory workspace object.
 - Canonical workspace persistence uses IndexedDB.
 - Course-file binaries use a separate attachment database.
-- Homework retains its established localStorage source and mirrors into `appData` for connected-workspace behavior.
+- Current Homework UI writes through `SutraHomeworkStore` into
+  `appData.homeworkWorkspace` and canonical IndexedDB persistence. Raw v2
+  localStorage values are retained migration inputs, not live mirrors. The legacy
+  migration adapter is read-only; retained v1 connected-view paths elsewhere still
+  read and mutate v1 arrays. Preserve those compatibility boundaries until a
+  dedicated migration replaces them. Do not replay stale arrays or add independent
+  writers. See the [Homework migration and recovery contract](docs/architecture/HOMEWORK_STORAGE_MIGRATION.md).
 - Non-canonical storage must use `SutraSafeStorage` rather than direct browser-storage writes.
 - Storage identifiers such as `noteflow_atelier_db`, `noteflow_attachments_db`, `hwCourses:v2`, and `hwTasks:v2` are frozen compatibility identifiers. Their old names are intentional.
 - Migrations must be versioned, idempotent, and preserve unknown fields.
@@ -626,7 +632,10 @@ A task is complete only when:
 4. **Paths are checked.** Renaming files can break app-shell, guardrail, manifest, academic-engine, smoke, link, and deployment checks.
 5. **Legacy names protect user data.** Old database, localStorage, alias, and backup-format names are not unfinished rebranding.
 6. **Workspace schema changes are cross-cutting.** Defaults, normalizers, migrations, persistence, export, import, snapshots, cloud, wipe, tests, and inventory may all require updates.
-7. **Homework has historical storage behavior.** Do not create another assignment store or remove mirroring without a dedicated migration plan.
+7. **Homework has historical storage behavior.** Preserve the legacy reader and
+   import formats under the [migration and recovery contract](docs/architecture/HOMEWORK_STORAGE_MIGRATION.md).
+   Any future storage-authority change requires a dedicated, versioned migration
+   plan; do not add independent localStorage writers or silently replay old keys.
 8. **CSP limits optional providers.** A transport being implemented does not mean every hosted build can reach an arbitrary origin.
 9. **The service worker and generated asset manifest must match shipped files.** Use the existing generators and checks.
 10. **Compatibility paths protect stored content.** The Modern Editor's classic toggle and preview cloud providers must not silently break stable data or recovery paths.

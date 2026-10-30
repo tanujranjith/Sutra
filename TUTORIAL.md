@@ -19,7 +19,7 @@ A practical, step-by-step guide to using Sutra from your first launch through yo
 9. [Set up Homework](#9-set-up-homework)
 10. [Set up AP Study and the AP Battle Plan](#10-set-up-ap-study-and-the-ap-battle-plan)
 11. [Set up the College Workspace](#11-set-up-the-college-workspace)
-12. [Use the Life trackers](#12-use-the-life-trackers)
+12. [Use Life for goals, habits, and planning](#12-use-life-for-goals-habits-and-planning)
 13. [Use the Business / Freelance workspace](#13-use-the-business--freelance-workspace)
 14. [Master the Command Palette, Quick Capture, and Global Search](#14-master-the-command-palette-quick-capture-and-global-search)
 14a. [Use the Review tab (spaced repetition)](#14a-use-the-review-tab-spaced-repetition)
@@ -51,7 +51,7 @@ Sutra is a single static web app - no installer, no account, no build step.
   # then visit http://localhost:5173/Sutra.html
   ```
 
-The first launch creates a *Welcome to Sutra* page and a built-in *Help & Docs* page in your sidebar.
+The workspace includes a built-in *Help & Docs* page. Setup guides your first launch; it does not automatically create a welcome note.
 
 ---
 
@@ -82,10 +82,10 @@ Open `Settings -> Data & Backups` and pick a mode:
 | **AP Crunch** | Days/weeks before an AP exam - Today, AP Study, Homework, Timeline, Notes only. |
 | **College Apps** | Senior fall - College, Notes, Today, Timeline, Homework. |
 | **Writing** | Notes-first; Today + Timeline as planning aids. |
-| **Life** | Habits, sleep, journal, spending, goals. |
+| **Life** | Goals, habits, skills, spending, books, and calculator. |
 | **Business / Freelancer** | Full operations dashboard. |
 
-Click **Save & Apply** at the top of Settings to commit the change.
+Click **Save Changes** at the top of Settings to commit the change.
 
 ---
 
@@ -102,7 +102,7 @@ A first-launch wizard offers to:
 
 You can skip steps, finish later, or rerun the wizard anytime: `Settings -> Advanced -> Tutorial & Onboarding -> Rerun Student Setup`.
 
-> Setup is local by default. Nothing leaves your browser unless you export it, send it to an AI provider, or explicitly enable encrypted Google Drive sync. The completed setup is included in your `.sutra` backups.
+> Setup is local by default. Nothing leaves your browser unless you export it, send it to an AI provider, or explicitly enable an encrypted backup provider or Sync. The completed setup is included in your `.sutra` backups.
 
 ---
 
@@ -110,7 +110,7 @@ You can skip steps, finish later, or rerun the wizard anytime: `Settings -> Adva
 
 1. Click `+ New Page` in the sidebar.
 2. Give it a title. Use `::` to nest, e.g. `Projects::Website::Launch`.
-3. Pick a **template** (Blank, Meeting Notes, 1:1 Check-In, Project Plan, To-Do List, Daily Journal, Weekly Review, Study Notes, Research Brief, Sprint Planner, Roadmap Plan, Client Brief, Content Brief, or Decision Log). Templates can optionally seed starter tasks - toggle this in the preview panel.
+3. Pick an available **template** (Blank, Meeting Notes, 1:1 Check-In, Project Plan, To-Do List, Weekly Review, Study Notes, Research Brief, Sprint Planner, Roadmap Plan, Client Brief, Content Brief, or Decision Log). Templates can optionally seed starter tasks - toggle this in the preview panel.
 4. Click **Create**.
 
 Now write. The editor supports:
@@ -121,6 +121,7 @@ Now write. The editor supports:
 - `Tab` and `Shift+Tab` to indent and outdent list items.
 - `Ctrl/Cmd+Shift+M` to toggle the markdown shortcut on the current selection.
 - A live **word count** in the page header.
+- **Passage writing commands:** select ordinary text within one paragraph and press `/`, then choose `/grammar`, `/spelling`, or `/rephrase`. At a caret, enter the passage in the review explicitly. Generate sends only the shown passage and instruction; review the editable draft and choose Apply or Cancel. Note changes support Undo. The same commands in Assistant chat return reviewed text to the composer without sending a second message.
 - **Autosave** every 1 s by default (configurable in `Settings -> Editor`).
 
 Try assigning the page an emoji icon (page row icon menu), tagging it (tags input near the title), or marking it favorite for quick access.
@@ -181,7 +182,7 @@ Use the **Capture** button to fire **Quick Capture**: type *"Chem essay due Frid
 
 Open the **Timeline** tab.
 
-1. Pick a view from the mode switcher: **Month**, **Planner**, **Week**, **Day**, or **Year**.
+1. Pick a view from the mode switcher: **Month**, **Planner**, **Week**, or **Day**.
    *(Older "3-Day" data folds into Day.)*
 2. Click an empty slot or press **+ Block** to open the block modal.
 4. Fill in name, start/end, category, color, recurrence (none / daily / weekdays / weekly / monthly), one-time date, and optional reference URL.
@@ -264,17 +265,17 @@ College deadlines and essay milestones with dates also appear in the Deadline Ra
 
 ---
 
-## 12. Use the Life trackers
+## 12. Use Life for goals, habits, and planning
 
-Open the **Life** tab. The dashboard shows the primary trackers up front:
+Open the **Life** tab to work with goals, habits, skills, spending, books, and a calculator. Focus sessions and ordinary notes stay in their own workspaces.
 
 - **SMART Goals** - write goals in SMART format, set status, due dates, and schedule.
 - **Habits** - same data as Today's habit tracker.
-- **Sleep** - log nightly. Eight analytics cards: last night, 7-day average, 30-day average, goal progress %, trend, consistency / streak, sleep quality, bedtime / wake-time average.
-- **Spending** - ledger with monthly total, transaction count, average per transaction, and top category.
-- **Journal** - dated entries.
+- **Spending** - a ledger with monthly total, transaction count, average per transaction, and top category.
+- **Skills and Books** - keep track of skills you are learning and books you are reading.
+- **Calculator** - use the calculator from the Life workspace.
 
-Secondary trackers under **More Life Tools**: Skills, Fitness, Calories, Calculator, Books.
+Goals can include due dates and scheduled work. Habits use the same data as Today’s habit tracker.
 
 ---
 
@@ -341,7 +342,7 @@ Opens a centered command list. Type to filter. Use it to:
 
 ## 14a. Use the Review tab (spaced repetition)
 
-**Review** is Atelier's spaced-repetition + active-recall center. Notes capture, AP organizes, Today prioritizes, Focus protects time - Review is what keeps the knowledge from leaking out.
+**Review** is Sutra's spaced-repetition + active-recall center. Notes capture, AP organizes, Today prioritizes, Focus protects time - Review is what keeps the knowledge from leaking out.
 
 ### Open Review
 
@@ -445,7 +446,7 @@ In **Notes**, click the split toggle to open a second pane.
 
 ### Pane context (deeper than tab choice)
 
-Split View remembers more than just left/right *tab* choice - it remembers **what is selected inside each pane**. The top-level `splitPaneContexts` object stores:
+Split View retains device-local session context beyond left/right *tab* choice - it remembers **what is selected inside each pane**. The top-level `splitPaneContexts` object stores:
 
 - `leftView` / `rightView` (e.g. `notes`, `review`, `apstudy`)
 - `leftContext` / `rightContext`, each with `selectedNoteId`, `selectedReviewDeckId`, `selectedReviewItemId`, `selectedApClassId`, `selectedAssignmentId`, `selectedProjectId`, `selectedCalendarDate`, `selectedFocusPreset`, `scrollPosition`, and `filters`.
@@ -465,13 +466,13 @@ Default split-view behavior is configurable in `Settings -> Editor -> Split view
 
 ## 16. Connect the Sutra Assistant (AI)
 
-The Sutra Assistant is **opt-in** and uses your own API key. It is **contextual** - it sees the active view, the open note, your focused tasks, etc. - and it can **propose local app changes** (tasks, blocks, notes, review cards) that you approve one card at a time.
+The Sutra Assistant is **opt-in** and uses your own API key. It is **contextual** within the workspace access and area permissions you allow - and it can **propose local app changes** (tasks, blocks, notes, review cards) that you approve one card at a time.
 
 ### Connect a provider
 
 1. Open the **mascot button** (bottom-right) to reveal the panel.
 2. Expand the **Provider & Model** shell at the bottom.
-3. Pick a provider: **Groq**, **OpenAI**, **Anthropic Claude**, **Google Gemini**, or **OpenRouter**.
+3. Pick a supported provider or the validated local endpoint. See the current [Assistant provider guide](docs/features/SUTRA_ASSISTANT.md#7-providers-model-and-keys) for setup and permissions.
 4. Enter the **exact** model ID for that provider (typos fail at the provider's API, not in Sutra).
 5. Open `Settings -> Assistant -> API keys`, paste your key, and press **Save Keys**.
 6. Send a message.
@@ -494,7 +495,7 @@ Supported actions: `insert_text`, `replace_selection`, `create_task`, `create_ho
 - **Panel default** - open or closed at app launch.
 - **Insert button in replies** - toggle the Insert / Save-as-note / Create-task row under assistant replies.
 - **Auto suggestions** - show the adaptive quick-actions row.
-- **Context depth** - minimal / current view *(default)* / workspace-aware. Bigger context = richer answers + more tokens.
+- **Context depth** - minimal / current view *(default)* / workspace-aware. This adjusts request scope within your independent access and area permissions; it does not grant access. See the [Assistant contract](docs/features/SUTRA_ASSISTANT.md#3-workspace-access-and-context-depth).
 - **Show action previews** - expand the JSON details inside action cards.
 - **Require confirmation** - keep this on (recommended). Action cards always need Apply.
 
@@ -541,7 +542,7 @@ The same panel lets you pick font family (Inter, Manrope, Sora, Source Sans 3, S
 
 ## 18. Tune Settings
 
-Open **Settings**. The view is split into 13 categories. Most controls **stage** as drafts until you press **Save & Apply**; integrations and assistant-provider controls apply immediately.
+Open **Settings**. The view is split into 16 categories. Most controls **stage** as drafts until you press **Save Changes**; integrations and assistant-provider controls apply immediately.
 
 Quick wins for new users:
 
@@ -593,13 +594,13 @@ From the editor, export the active note as DOCX, DOC (legacy), PDF, HTML, Markdo
 Behavior:
 
 - Encrypted `.sutra` backups ask for the password, decrypt in the browser, then run the existing internal package validation and checksums.
-- Older unencrypted `.sutra`, legacy `.atelier`, and workspace `.json` payloads **replace** workspace state - but Sutra writes a **pre-import safety snapshot** first.
+- Older unencrypted `.sutra`, legacy `.atelier`, and workspace `.json` payloads **replace** workspace state - but Sutra offers a separate optional encrypted `.sutra` safety export before replacement; this is not a guaranteed browser-file write. Keep a known-good encrypted backup.
 - Document and image imports become new Notes in the active Space, titled from the filename without its extension.
 - `.doc` (legacy Word) is best-effort in-browser; convert to `.docx` or `.pdf` if it looks off.
 
 ### Recover from a bad import
 
-`Settings -> Data -> Storage Health -> Download local safety snapshot` exports the snapshot Sutra saved just before your last import. Re-import that to roll back.
+Use an encrypted safety export you accepted before restoring, or the local recovery journal through Storage Health. A browser-download request alone does not prove that a safety file reached disk. See [Data and Backups](docs/privacy-security/DATA_AND_BACKUPS.md#6-pre-import-safety-snapshot).
 
 > API keys, backup passwords, cloud sync passwords, OAuth tokens, and derived keys are never exported. Legacy `.atelier` backups still import.
 ---
@@ -624,7 +625,7 @@ Sutra supports standard `.ics` files for bringing events from other calendars in
 Sutra ships responsive styles for 1024 / 768 / 640 px breakpoints.
 
 - The sidebar collapses behind a button and a tap-overlay.
-- The top tab strip becomes a single **current view** dropdown that expands the full tab list.
+- Phone navigation uses Home, To-do, Capture, Create, and More; More exposes the other enabled sections through canonical navigation.
 - Overflowing tabs slide into a `More` menu.
 - Modals stack to a single column under 640 px.
 - Turn on `Settings -> Accessibility -> Larger touch targets` to enlarge tap zones.
@@ -690,7 +691,7 @@ Pair this with a Workspace Mode change if your priorities shift week to week (fo
 **Most-used surfaces:**
 
 - **Today** - Daily Thread, Shape My Day, Habits, Schedule snapshot, Review-due card, Tracker summary.
-- **Timeline** - Day / Week / Month / Year / Planner views.
+- **Timeline** - Day / Week / Month / Planner views.
 - **Notes** - slash menu, split-screen presets, Focus Mode, templates.
 - **Homework** - paste import, due-state chips, class dashboard.
 - **AP Study** - units, sessions, practice, AP Battle Plan.
@@ -698,7 +699,7 @@ Pair this with a Workspace Mode change if your priorities shift week to week (fo
 - **Focus Timer** - presets + focus templates strip (Deep Work, AP Review, Homework Sprint, Reading Block, Project Build, Review Focus).
 - **Settings -> Data** - Sutra Modes + `.sutra` backup (older `.atelier` files still import).
 
-**Connected-productivity additions persist through every backup path:** `reviewWorkspace`, `focusTemplates`, `splitPaneContexts`, `settings.mobileTodayMode`, `settings.recentSearches`. Round-trip checks now verify 19 workspace fields end-to-end.
+**Portable connected-productivity fields include** `reviewWorkspace` and `focusTemplates`. Device-local view/session fields follow the [persistence inventory](docs/architecture/persistence-inventory.json), including `splitPaneContexts`, `settings.mobileTodayMode`, `settings.recentSearches`. The inventory and round-trip checks define current field coverage; a historical field count is not a portability guarantee.
 
 **Daily 3-minute loop:**
 

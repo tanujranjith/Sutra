@@ -2,7 +2,7 @@
 """
 generate-sutra-brand-assets.py
 ──────────────────────────────
-Reads the two canonical Sutra master PNGs and produces all required
+Reads the canonical Sutra logo and extracted avatar PNGs and produces all required
 derivative icons + favicon.ico for the Sutra app.
 
 Usage:
@@ -12,8 +12,8 @@ Prerequisites:
     pip install Pillow
 
 Master inputs (must exist before running):
-    assets/brand/sutra/sutra-app-icon-master.png
-    assets/brand/sutra/sutra-assistant-icon-master.png
+    assets/brand/sutra/sutra-mark-master.png
+    assets/brand/sutra/sutra-assistant-avatar-master.png
 
 All derivatives are written to:
     assets/brand/sutra/generated/
@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     sys.exit("ERROR: Pillow is not installed.  Run: pip install Pillow")
 
@@ -35,8 +35,8 @@ except ImportError:
 ROOT        = Path(__file__).resolve().parent.parent
 BRAND_DIR   = ROOT / "assets" / "brand" / "sutra"
 GEN_DIR     = BRAND_DIR / "generated"
-MASTER_APP  = BRAND_DIR / "sutra-app-icon-master.png"
-MASTER_ASST = BRAND_DIR / "sutra-assistant-icon-master.png"
+MASTER_APP  = BRAND_DIR / "sutra-mark-master.png"
+MASTER_ASST = BRAND_DIR / "sutra-assistant-avatar-master.png"
 
 # ── Derivative specs ─────────────────────────────────────────────────────────
 
@@ -62,12 +62,10 @@ def write_png(img: Image.Image, path: Path) -> None:
 
 
 def write_ico(master: Image.Image, path: Path, sizes: list[int]) -> None:
-    frames = [high_quality_resize(master, s) for s in sizes]
-    frames[0].save(
+    master.save(
         path,
         format="ICO",
         sizes=[(s, s) for s in sizes],
-        append_images=frames[1:],
     )
     print(f"  wrote  {path.relative_to(ROOT)}  [{', '.join(str(s) for s in sizes)}]")
 
@@ -93,9 +91,35 @@ def main() -> None:
     for size in APP_SIZES:
         resized = high_quality_resize(app_master, size)
         write_png(resized, GEN_DIR / f"sutra-icon-{size}.png")
+    # Compatibility filenames and PWA/social consumers belong to this generator
+    # too; otherwise they silently retain an older approved logo.
+    # Installed app masks need an opaque background and safe-area padding.
+    maskable = Image.new("RGBA", (512, 512), (7, 17, 31, 255))
+    maskable.alpha_composite(high_quality_resize(app_master, 360), (76, 76))
+    write_png(maskable, GEN_DIR / "sutra-icon-maskable-512.png")
+    write_png(high_quality_resize(app_master, 1024), GEN_DIR / "sutra-mark-transparent.png")
+    social = Image.new("RGB", (1200, 630), (253, 253, 249))
+    social_mark = high_quality_resize(app_master, 480)
+    social.paste(social_mark, (48, 75), social_mark)
+    draw = ImageDraw.Draw(social)
+    def brand_font(size):
+        try:
+            return ImageFont.truetype("C:/Windows/Fonts/georgiab.ttf", size)
+        except OSError:
+            return ImageFont.load_default(size=size)
+    draw.text((570, 190), "Sutra", font=brand_font(84), fill=(20, 29, 52))
+    draw.text((570, 315), "Your academic life,", font=brand_font(26), fill=(55, 65, 86))
+    draw.text((570, 355), "woven into one private workspace.", font=brand_font(26), fill=(55, 65, 86))
+    write_png(social, GEN_DIR / "social-preview.png")
 
-    # favicon.ico  (multi-resolution: 16, 32, 48, 64)
-    write_ico(app_master, GEN_DIR / "favicon.ico", ICO_SIZES)
+    write_png(app_master, ROOT / "assets" / "logos" / "sutra.png")
+
+    # Browser favicons alone retain a white backing; UI/PWA PNGs stay separate.
+    favicon_master = Image.new("RGBA", app_master.size, (255, 255, 255, 255))
+    favicon_master.alpha_composite(app_master)
+    for size in (16, 32):
+        write_png(high_quality_resize(favicon_master, size), GEN_DIR / f"sutra-favicon-{size}.png")
+    write_ico(favicon_master, GEN_DIR / "favicon.ico", ICO_SIZES)
 
     # ── Sutra Assistant icon derivatives ─────────────────────────────────────
     print(f"\nLoading master:  {MASTER_ASST.relative_to(ROOT)}")
@@ -107,6 +131,11 @@ def main() -> None:
     for size in ASST_SIZES:
         resized = high_quality_resize(asst_master, size)
         write_png(resized, GEN_DIR / f"sutra-assistant-icon-{size}.png")
+
+    write_png(asst_master, ROOT / "assets" / "logos" / "sutra-assistant.png")
+
+    face_master = Image.open(BRAND_DIR / "sutra-assistant-face-master.png").convert("RGBA")
+    write_png(high_quality_resize(face_master, 128), GEN_DIR / "sutra-assistant-face-128.png")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     all_files = sorted(GEN_DIR.glob("*"))

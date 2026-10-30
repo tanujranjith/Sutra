@@ -53,12 +53,22 @@ whether to make an encrypted safety export; only Yes opens its password screen.
   account, provider setup, or network request from Sutra.
 
 ### Google Drive
+- Until the deployment has a public OAuth client ID and a supported origin,
+  Settings → Data shows Drive as unavailable and disables connection. Actions
+  requiring a connected/unlocked session stay hidden or disabled. Manual local
+  encrypted backups remain independently available.
 - **Today:** use Sutra's encrypted **Drive sync** (Settings → Data → Google
   Drive). It uploads encrypted snapshots to Drive's `appdata` folder using only
   the `drive.appdata` scope.
 - Snapshot pulls are conflict-safe: cycles are serialized, and a local save that
   lands while a remote snapshot is being downloaded/decrypted changes the pull
   into an explicit conflict instead of being overwritten.
+- Locking Drive cancels pending save timers without discarding unsynced edits.
+  A queued save does not reopen the password prompt after you lock the session.
+- Restoring uses one password field; the confirmation field is only shown when
+  creating a password. Theme layout rules must preserve hidden password fields.
+- Password prompts preserve focus already chosen inside the dialog. A closed
+  prompt cannot reclaim focus through a delayed opening callback.
 - The Sutra Cloud card points you there; deeper backup-list integration is a
   follow-up.
 

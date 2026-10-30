@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 /*
  * full-app-audit.spec.mjs — comprehensive end-to-end fluidity + micro-interaction
@@ -50,6 +51,7 @@ function isCriticalConsole(text) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch (e) {}
     const overlay = document.getElementById('studentOnboardingOverlay');
@@ -385,12 +387,18 @@ test('desktop: toast appears and auto-dismisses (notification micro-interaction)
 
   const shown = await page.evaluate(() => {
     const fn = (window.flowAtelier && window.flowAtelier.showToast) ? window.flowAtelier.showToast : window.showToast;
-    if (typeof fn !== 'function') return 'no-toast-fn';
-    fn('Audit toast check', { durationMs: 900 });
+    if (typeof fn !== 'function') return { visible: false, message: 'no-toast-fn' };
+    // The flowAtelier bridge supports the message-only form and uses the app's
+    // default three-second auto-dismiss timer.
+    fn('Audit toast check');
     const toast = document.getElementById('toast');
-    return toast ? toast.classList.contains('show') : 'missing';
+    return {
+      visible: !!(toast && toast.classList.contains('show')),
+      message: document.getElementById('toastMessage')?.textContent || ''
+    };
   });
-  expect(shown).toBe(true);
+  expect(shown.visible).toBe(true);
+  expect(shown.message).toBe('Audit toast check');
   // A transition must be defined so the toast slides/fades rather than snapping.
   const transition = await page.evaluate(() => {
     const toast = document.getElementById('toast');
@@ -400,7 +408,7 @@ test('desktop: toast appears and auto-dismisses (notification micro-interaction)
   await expect.poll(() => page.evaluate(() => {
     const t = document.getElementById('toast');
     return t ? t.classList.contains('show') : false;
-  }), { timeout: 4000 }).toBe(false);
+  }), { timeout: 6000 }).toBe(false);
   console.log('AUDIT::' + JSON.stringify({ section: 'TOAST', transition }));
   expect(transition && transition !== 'all 0s ease 0s').toBeTruthy();
 });
@@ -475,6 +483,13 @@ test('mobile Sync dialog fits the dynamic viewport and keeps actions touchable',
   // on the actual dialog shell rather than the inner Sync section.
   const dialog = page.locator('#sutraCloudModal .sutra-cloud-modal');
   await expect(dialog).toBeVisible();
+  await dialog.evaluate(async node => {
+    const openingAnimations = node.getAnimations().filter(animation => {
+      const finite = Number.isFinite(animation.effect?.getComputedTiming?.().endTime);
+      return finite && (animation.playState === 'running' || animation.playState === 'pending');
+    });
+    await Promise.all(openingAnimations.map(animation => animation.finished.catch(() => {})));
+  });
   const layout = await dialog.evaluate((node) => {
     const rect = node.getBoundingClientRect();
     const input = node.querySelector('.sutra-sync-input');
@@ -496,7 +511,8 @@ test('mobile Sync dialog fits the dynamic viewport and keeps actions touchable',
   expect(layout.top).toBeGreaterThanOrEqual(0);
   expect(layout.bottom).toBeLessThanOrEqual(layout.viewportHeight + 1);
   expect(layout.inputFontSize).toBeGreaterThanOrEqual(16);
-  expect(layout.shortestAction).toBeGreaterThanOrEqual(44);
+  // Ignore sub-hundredth-pixel layout rounding, not undersized touch targets.
+  expect(Math.round(layout.shortestAction * 100) / 100).toBeGreaterThanOrEqual(44);
   expect(layout.documentOverflow).toBeLessThanOrEqual(2);
 });
 

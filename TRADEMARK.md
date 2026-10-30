@@ -1,39 +1,78 @@
-# Brand Usage Guidelines
+# Sutra Brand Usage Guidelines
 
-## Code License vs. Brand Identity
+## Software license and project identity
 
-NoteFlow Atelier is open-source software licensed under the **Apache License 2.0**.
-The code license grants broad rights to use, modify, and redistribute the source code.
-It does not grant permission to use the project's name or visual identity in ways that
-could mislead users about the origin or endorsement of a derivative work.
+Sutra, formerly **NoteFlow Atelier**, is maintained by Tanuj Ranjith. Its code
+is licensed under the **Apache License 2.0**. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE) for the license and attribution notices.
 
-## What You Can Do
+Apache 2.0 permits use, modification, and redistribution, including commercial
+use, subject to its terms. It does not require downstream modifications to be
+published. These brand guidelines do not change those permissions or add a
+noncommercial or share-alike condition.
 
-- Use, modify, and redistribute the code under the terms of Apache 2.0.
-- State that your project is **"based on NoteFlow Atelier by Tanuj Ranjith"** — this is
-  the recommended attribution phrase and is always permitted.
-- Reference "NoteFlow Atelier" accurately when describing what your project is derived from.
+The Sutra name, official project logos, and distinctive branding identify the
+official project. Apache 2.0 section 6 does not grant trademark rights, except
+for reasonable and customary descriptions of the work's origin and reproduction
+of NOTICE content. Copyright permissions for files, including images, remain
+governed by their applicable licenses; this policy concerns use as a brand.
 
-## What You Should Avoid
+## References and attribution
 
-- Using the name "NoteFlow Atelier" or "Atelier" as the primary name of a fork or
-  derivative in a way that implies it is the official project.
-- Using any official NoteFlow Atelier logos, mascots, or branding in derivative projects
-  without permission.
-- Implying that your version is endorsed by or affiliated with the original project unless
-  it actually is.
+You may accurately name Sutra in reviews, tutorials, comparisons, compatibility
+descriptions, links, and descriptions of projects derived from it. Preserve the
+applicable notices required by Apache 2.0 section 4.
 
-## Forking and Naming
+Suggested credit:
 
-If you fork NoteFlow Atelier, please give your project a distinct name. You may include
-"based on NoteFlow Atelier by Tanuj Ranjith" in your documentation, README, or About
-page to give credit.
+> Based on Sutra by Tanuj Ranjith.
 
-## Contact
+That exact sentence is optional, not an additional license condition. The older
+phrase "Based on NoteFlow Atelier by Tanuj Ranjith" remains accurate for older
+forks. Preserve historical names in notices and compatibility identifiers where
+needed; these guidelines do not ask you to rename storage keys or backup formats.
 
-For questions about brand usage or attribution, open an issue in the repository.
+Screenshots and references that identify or discuss the real Sutra project are
+welcome when they do not suggest an endorsement or official relationship that
+does not exist. This policy does not limit uses otherwise permitted by law.
 
----
+## Forks and independently distributed products
 
-*These guidelines exist to protect the project's identity. They do not restrict your
-rights under the Apache License 2.0 in any way.*
+For a separately marketed app, hosted service, or product derived from Sutra,
+use a distinct primary product name and your own logo. Make its unofficial
+status clear where users choose, install, or open it. Optional wording:
+
+> An unofficial fork based on Sutra. Not affiliated with or endorsed by the
+> original Sutra project.
+
+Do not present a derivative as the official Sutra release, copy the official
+identity to imply common ownership, or claim endorsement or affiliation without
+permission. A small disclaimer does not make a misleading product identity clear.
+Truthful secondary references such as "based on Sutra" or "works with Sutra"
+are permitted when accurate.
+
+Ordinary source-hosting forks and private working copies used for development
+or contributions may retain the upstream repository name and notices. Publishing
+a separately branded product is different from keeping an upstream development
+checkout. Commercial reuse is permitted by the software license; the same
+non-misleading branding guidance applies to paid and free products.
+
+Unmodified copies of an official release may be described as Sutra when their
+distribution source is clear. Do not imply that an independently operated
+download site or hosted service is the project's official service.
+
+## Permission and scope
+
+For proposed use as your product's primary name or logo, or an official-looking
+co-branding arrangement, ask Tanuj Ranjith for written permission through an
+issue in this repository before presenting that relationship. Ordinary truthful
+references and attribution described above do not need individual approval.
+
+This policy does not claim that Sutra is a registered trademark or that the
+name has been cleared for every market. It does not assert rights over unrelated
+uses of the word "Sutra" or the standalone word "Atelier". Third-party branding
+is outside this policy; its applicable permissions remain separate.
+
+Nothing in this document changes [LICENSE](LICENSE), removes permissions already
+granted under applicable licenses, or makes the suggested attribution wording
+mandatory.

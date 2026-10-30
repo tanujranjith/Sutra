@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const engine = require('../../src/features/workspace/surface-assistant-actions.js');
+const engine = require('../../src/features/assistant/surface-assistant-actions.js');
 
 function ids() {
   let value = 0;

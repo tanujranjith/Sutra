@@ -11,6 +11,7 @@
 // gitignored fixtures (the same categories also exist as static files under
 // security-artifacts/tampered/ for manual inspection).
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 const PASS = 'correct horse battery staple';
 
@@ -36,6 +37,7 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
 }

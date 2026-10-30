@@ -395,7 +395,7 @@
             summary: 'Beyond academics, Sutra includes a College workspace (applications, essays, deadlines), a Life workspace, and a Business workspace.',
             body: [
                 '- **College** — track applications, essays, scholarships, and college deadlines and tasks.',
-                '- **Life** — a personal workspace for life tracking and journaling.',
+                '- **Life** — a personal workspace for goals, habits, spending, books, and practical tools.',
                 '- **Business** — a professional/business workspace for work projects.',
                 'All three persist in your workspace and travel inside a `.sutra` export like everything else.'
             ],
@@ -476,6 +476,8 @@
             summary: 'Change the provider and model from the Assistant panel\'s model picker, or in Settings ▸ Integrations / Assistant.',
             body: [
                 'Open the **Sutra Assistant** panel and use the **model picker** (the provider/model chip in the chat) to switch provider or model.',
+                'The full Assistant picker refreshes available models when opened and when you change providers. Choosing a list model replaces an earlier custom ID. Providers without discovery show a built-in catalog.',
+                'For a supported model, **Thinking effort** is inside the message box beside Send and also available in the model picker. Its menu opens above the composer. Assistant searches permitted workspace areas locally and sends relevant excerpts rather than your entire workspace.',
                 'You can also manage providers, keys, and the active model in **Settings ▸ Integrations** (keys) and **Settings ▸ Assistant** (behavior).'
             ],
             keywords: ['change model', 'switch model', 'model', 'pick model', 'select model', 'which model', 'change provider', 'model picker'],
@@ -488,15 +490,18 @@
             title: 'Assistant settings & behavior',
             category: 'assistant',
             availability: 'available',
-            summary: 'Settings ▸ Assistant controls panel behavior, context depth (Workspace Access), confirmation mode, conversation memory depth, action previews, and long-term Assistant Memory.',
+            summary: 'Settings ▸ Assistant controls workspace access permission, context depth, panel behavior, confirmation mode, conversation memory depth, action previews, and long-term Assistant Memory.',
             body: [
                 'In **Settings ▸ Assistant** you control how the assistant works:',
-                '- **Workspace Access / context depth** — how much of your workspace it can read.',
+                '- **Assistant preset** — new workspaces use Everyday: relevant workspace retrieval, recent conversation context, and reviewed changes with Apply and Undo. Private excludes workspace content and treats messages independently. Advanced keeps your configuration for individual controls. Presets apply immediately after unsaved Settings changes are saved or reverted; wait for local save confirmation before reloading. A failed save retains the selected permissions and offers Retry save. Existing workspaces are not silently upgraded and area Blocks remain.',
+                '- **Workspace access** — whether it may read workspace areas. Choose Read workspace for ordinary read access; explicit area blocks remain respected.',
+                '- **Context depth** — where to search for relevant context. Workspace-aware does not grant access when Workspace access is off.',
                 '- **Confirmation & action previews** — whether proposed actions need explicit approval.',
-                '- **Conversation memory** — how many recent messages it remembers within a session.',
-                '- **Assistant Memory** — manage the long-term facts it remembers across sessions.'
+                '- **Conversation memory** — recent messages and brief older excerpts from the current chat, all within the request budget. Everyday uses five recent messages; Stateless sends neither history nor excerpts.',
+                '- **Assistant Memory** — manage the long-term facts it remembers across sessions.',
+                '- **Get to know me with Assistant** — answer optional study-routine questions locally, one at a time, with minute-accurate times and ordinary answers. Skip or cancel anytime, then review the draft in Settings and choose Save Changes. No API key is needed.'
             ],
-            keywords: ['assistant settings', 'assistant behavior', 'confirmation', 'context depth', 'workspace access', 'conversation memory', 'action previews'],
+            keywords: ['assistant settings', 'assistant behavior', 'assistant preset', 'everyday assistant', 'private assistant', 'confirmation', 'context depth', 'workspace access', 'conversation memory', 'action previews'],
             nav: { view: 'settings', section: 'assistant' },
             relatedActions: ['navigate', 'change_context_depth'],
             related: ['workspace-access', 'assistant-memory', 'activity-undo']
@@ -508,7 +513,7 @@
             availability: 'available',
             summary: 'Each Assistant answer has a keyboard-accessible disclosure showing local/provider handling, workspace scope, sources, memory influence, attachments, actions, and transmission categories.',
             body: [
-                'Open **How this was answered** under an Assistant response to inspect its provenance.',
+                'Open **Details** under an Assistant response. The compact panel has **Sources**, **Privacy**, and **Usage** tabs. Use arrow keys to switch tabs and Escape to close. Usage measurements are available only for replies generated in the current session.',
                 'Local answers say **Answered locally** and **No provider contacted**. Provider answers name the provider/model, Workspace Access, selected text or conversation use, live-validated sources, attachment processing paths, deterministic engines, proposed actions, and information categories transmitted.',
                 'Deleted sources become **Source no longer available** with no deep link. Receipts never reveal API keys, tokens, locked-note bodies, sensitive memory text, raw prompts/context, or provider reasoning.'
             ],
@@ -535,18 +540,21 @@
         },
         {
             id: 'workspace-access',
-            title: 'Workspace Access (context depth)',
+            title: 'Workspace access and context depth',
             category: 'assistant',
             availability: 'available',
-            summary: 'Workspace Access controls how much context the assistant can read: minimal, current view only, or full workspace. Locked notes are excluded by default and require a separate one-time consent and page-PIN check when explicitly requested.',
+            summary: 'Workspace access is the permission to read; context depth chooses search scope. Workspace-aware does not override No workspace access or blocked areas. Locked notes require separate consent and a page PIN.',
             body: [
-                '**Workspace Access** (context depth) decides what the assistant can see when you send an AI request:',
+                'In Settings ▸ Assistant, **Workspace access** controls permission. Choose **Read workspace** to permit ordinary workspace reads, or **Read allowed areas** and explicitly Allow selected areas. Under **Access by area**, Block always excludes an area. To-do questions need Tasks & schedule access.',
+                '**Context depth** chooses search scope separately:',
                 '- **Minimal** — almost nothing beyond your message.',
                 '- **Current view** — only what is on the active screen / current area.',
-                '- **Full workspace** — broad context across your workspace.',
+                '- **Workspace-aware** — relevant permitted records from across your workspace; it does not send everything or grant access.',
+                'With a connected provider, try **investigate my Orchid assignment notes** or **compare my Orchid and Cedar assignment records**. Sutra can search local canonical records on demand, show similar matches for you to choose, then send only selected bounded evidence. Sources used shows what was actually sent. Stop cancels both the request and a pending source choice.',
+                'An investigation can make up to **three provider calls**, which may increase provider charges. Each lookup returns at most four records and each text request stays within 6,000 estimated tokens including a 1,536-token answer reserve. Partial-result notices explain limits. Access denials and exclusions still apply; this loop never reads locked notes or reuses a one-time PIN grant.',
                 'Locked-note contents are excluded by default at every depth. An explicit request about an identified locked page starts a separate one-time permission and page-PIN check; that grant applies only to the current request. API keys are never included. Change context depth in Settings ▸ Assistant or by asking the assistant.'
             ],
-            keywords: ['workspace access', 'context depth', 'minimal', 'current view', 'full workspace', 'how much context', 'what can it see'],
+            keywords: ['workspace access', 'context depth', 'minimal', 'current view', 'full workspace', 'how much context', 'what can it see', 'investigate', 'compare records', 'workspace lookup', 'lookup cost'],
             nav: { view: 'settings', section: 'assistant' },
             relatedActions: ['change_context_depth', 'navigate'],
             related: ['assistant-settings', 'privacy-local-first']
@@ -591,8 +599,8 @@
             body: [
                 '**Assistant Memory** is long-term, on-device memory the assistant uses to personalize help across sessions. It is separate from short-term conversation memory.',
                 'It remembers **only stable, useful facts you ask it to keep** — for example preferred study hours, planning style, recurring commitments, course preferences, goals, upcoming exams, or how you like explanations.',
-                'It is consent-first: the assistant saves a memory only when you ask, or suggests one with **Save / Edit / Decline**. It never silently stores passwords, API keys, financial or medical data, precise location, locked-note content, or full chat transcripts.',
-                'You stay in control: **view, edit, enable/disable, delete, or forget** any memory from the Memory manager. "Forget X" and "delete that memory" take effect immediately, and allowed memories travel inside encrypted `.sutra` exports.'
+                'It is consent-first: the assistant proposes a memory when you ask and waits for **Save to memory**. This reviewed local action works without workspace access and grants no workspace access or provider reads. It never silently stores passwords, API keys, financial or medical data, precise location, locked-note content, or full chat transcripts.',
+                'You stay in control: **view, edit, enable/disable, delete, or forget** any memory from the Memory manager. Forgetting through chat requires its review and destructive confirmation; allowed memories travel inside encrypted `.sutra` exports.'
             ],
             keywords: ['memory', 'assistant memory', 'remember', 'forget', 'what do you remember', 'long-term memory', 'remember me', 'manage memory', 'preferences memory'],
             nav: { view: 'settings', section: 'assistant' },

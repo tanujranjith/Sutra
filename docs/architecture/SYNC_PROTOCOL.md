@@ -316,6 +316,9 @@ Field-aware resolution:
 - Eight novel conflict ids within sixty seconds trips the `conflict-storm`
   circuit breaker before remote apply or push. Local saving and the durable
   outbox continue, but cloud sync pauses for review instead of creating a loop.
+  Detected conflicts must be durably stored and made available for review before
+  the breaker pauses the cycle. A review-store failure still aborts without
+  applying, pushing, or advancing the cursor.
 - Each unresolved alternate branch is written to the device-local conflict
   store before the selected merged value is applied or pushed. A rejected
   conflict-store transaction aborts the cycle; it is never treated as an
@@ -429,6 +432,14 @@ States: `disabled → locked → idle → syncing → idle`, plus `offline`
 `auth-expired`, `quota-exceeded`, `schema-mismatch`, `update-required`,
 `revoked`, and `encryption-error`.
 
+Pausing, locking, or stopping invalidates an in-progress cycle, including one
+waiting for the cycle lock. It cannot start another pull, push, asset request,
+remote apply, snapshot, or cursor acknowledgement after cancellation. Work
+already issued to the browser or server cannot be retracted. If a push may have
+landed before cancellation, the old baseline and durable outbox remain for
+idempotent reconciliation on a new cycle; a local transaction or apply already
+started may finish. Resume schedules a new cycle and never revives the old one.
+
 Multi-tab model: all tabs of one browser profile share one deviceId, one sync
 database, and one workspace IndexedDB. Cycles are single-flight across tabs
 via the `sutra-sync-cycle-v1` Web Lock (`ifAvailable`: a busy lock skips the
@@ -464,7 +475,7 @@ Cycle:
    pruning watermark.
 
 Triggers: confirmed local save (debounced), regained connectivity, tab becoming
-visible, manual "Sync now", periodic foreground interval. Sync errors surface in
+visible, manual "Sync now", periodic foreground interval (every two minutes). Sync errors surface in
 sync's own status UI — **never** through the local persistence-failure banner.
 
 ## 10. Snapshots & new-device bootstrap
@@ -494,8 +505,9 @@ sync's own status UI — **never** through the local persistence-failure banner.
 Sync reuses the existing Sutra Cloud email-OTP sign-in. Deliberate deviation
 from the backup convention: sync persists the Supabase **refresh token** in
 `sutra_sync_db.meta` (IndexedDB, this-device-only, never in workspace data or
-exports) so sync survives browser restarts; backups keep their
-sessionStorage-only sessions. Every sync RPC binds the authenticated Supabase
+exports) so sync survives browser restarts. Backup-only sign-in is session-only
+by default; an explicit Remember me choice stores its refresh token encrypted
+in the separate device-local credential vault. Every sync RPC binds the authenticated Supabase
 `session_id` claim to one registered device row. Revoking that row blocks RPC
 and `sync-assets` Storage access on the next request; direct table grants are
 revoked so a device cannot bypass the check with PostgREST.
@@ -526,8 +538,15 @@ failure, offline/DNS/timeout/CSP errors, malformed JSON, other origins, and
 generic `revoked` errors remain locked/non-destructive.
 
 After verification, all tabs block writes, cancel pending saves, clear vault
-material, close IndexedDB handles, and coordinate over
-`sutra-sync-events-v1`. The canonical wipe deletes this origin's local/session
+material, and conceal rendered workspace content before waiting for in-flight
+persistence work. Handles close only after the corresponding pending work settles;
+tabs coordinate over `sutra-sync-events-v1`. Where Web Locks are available,
+the same origin-wide lock serializes guard transitions, deletion, acknowledgement,
+and each follower's session finalization. A queued, independently verified tab
+that finds `complete` or `complete-unverified` finalizes its own session without
+restarting deletion or acknowledgement, and preserves the verification status.
+Each tab remains locked until its own finalization succeeds.
+The canonical wipe deletes this origin's local/session
 storage plus `noteflow_atelier_db`, `noteflow_attachments_db`, `sutra_sync_db`,
 `sutra-drive-sync-keys`, `sutra-fs-config`, and `sutra_share_target_db`, verifies
 deletion, then calls `sync_acknowledge_device_wipe` and clears the remaining auth

@@ -45,7 +45,7 @@ Sutra is one app for everything a student carries:
 - **AP exam prep** — units, sessions, practice logs, weak-area tracking, exam countdowns, an automated AP Battle Plan, and a Testing Hub.
 - **Review** — spaced repetition and active recall with five study modes.
 - **College applications** — trackers, essays, scholarships, scores, and decision matrices.
-- **Life** — habits, sleep, journal, spending, goals, books, fitness, calories, and more.
+- **Life** — goals, habits, skills, spending, books, and a calculator.
 - **Projects & Work** — a local operations dashboard for projects, clients, invoices, and deadlines.
 - **Focus** — a Pomodoro-style Focus Timer with reusable templates, plus a writing-only Focus Mode.
 - **Sutra Assistant** — an optional, bring-your-own-key AI panel that reads your workspace and proposes changes you approve one card at a time.
@@ -70,7 +70,7 @@ We use the thread metaphor sparingly. Inside the app, labels stay literal — *T
 - **Local-first.** Your workspace lives in browser storage on the device. No login. No telemetry. No required server.
 - **One surface, many modes.** Sutra Modes promote the views you need now without deleting the others.
 - **Calm by default.** Glass / neumorphic styling, configurable density, and a per-page theme system. Motion and contrast are tunable.
-- **AI stays optional.** The local Assistant works without a key. Remote model features use a provider key you supply; session-only storage is the default, with optional user-secret encrypted storage on this device. Credentials are never exported.
+- **AI stays optional.** The local Assistant works without a key. Remote model features use a provider key you supply; session-only storage is the default, with optional encrypted device-local storage. Credentials are never exported.
 - **Portable.** A single password-encrypted `.sutra` file is a complete backup of your workspace.
 
 ## Quick Start
@@ -172,7 +172,10 @@ Sutra's writing surface.
 - **Document Backgrounds** — a per-page background image set from the editor toolbar's *Document Background* button. Upload a `.png`, `.jpg`, `.jpeg`, or `.webp` (max 6 MB; large images auto-downscale), then tune a **Background Blur** slider (0–32 px) and a **Dim Background** slider (0–80%, default 25%). The dim overlay tints toward the editor surface so text stays readable in light, dark, and custom themes, and blur applies only to the image, never the text. Backgrounds work in the standard editor, Page Mode, split view, on mobile and tablet, and under custom CSS; they survive refresh, page duplication, and `.sutra` export/restore. **Locked pages never show their background behind the PIN screen.** See [Document Backgrounds](docs/features/DOCUMENT_BACKGROUNDS.md) and [CHANGELOG](docs/release/CHANGELOG.md).
 - **Handwriting** — insert a handwriting block to write, sketch, or annotate with mouse, trackpad, touch, or stylus (pen, highlighter, eraser; blank / lined / grid / dotted paper). Strokes are stored as vectors and round-trip through backups. Full guide: [`docs/features/HANDWRITING_AND_DRAWING.md`](docs/features/HANDWRITING_AND_DRAWING.md).
 - **Split view** — a second pane beside the current note, with split presets (Note + Assignment, Note + AP Unit, Essay + Research, Today Plan + Notes, Calendar + Note) and swap/close controls.
-- **Locked pages** — PIN-protect any page (4–8 digits, stored as a salted SHA-256 hash, never as the raw PIN), with auto-lock options.
+- **Locked pages** — PIN-protect a page (4–8 digits) with auto-lock options.
+  New verifiers use salted PBKDF2-HMAC-SHA-256 with 210,000 iterations; legacy
+  salted SHA-256 verifiers remain readable. The raw PIN is never stored. This
+  is an in-app privacy gate and does not encrypt local note content.
 - **Canvas & Slides** — first-class local visual Notes surfaces. Canvas adds pan/zoom, a minimap, drawing, shapes, connectors, groups, tables, layout tools, locking, and local export. Slides adds themes, layouts, speaker notes, presentation/printing, local images, and experimental PPTX packaging. Both use the owning page's save/backup/Sync path.
 
 ### Homework
@@ -223,7 +226,7 @@ A dashboard with summary metrics (Application Completion %, Upcoming Deadlines, 
 
 ### Life
 
-A dashboard of primary trackers — Goals, Habits, Sleep, Spending, Journal — with a *More Life Tools* group for Skills, Fitness, Calories, Calculator, and Books.
+A dashboard for Goals, Habits, Skills, Spending, Books, and a Calculator. Goals can be scheduled, and habits share data with Today’s habit tracker. Focus and ordinary notes stay in their own workspaces.
 
 ### Projects & Work
 
@@ -276,7 +279,9 @@ AI requests go **directly from your browser to the provider you choose** — Sut
 - Perplexity (Sonar)
 - Custom OpenAI-Compatible Endpoint (a "Local endpoint")
 
-You bring your own API key and the exact **Model ID**. Keys use **sessionStorage only** and clear with the browser session. They are never exported or included in sync snapshots; when you send a request, the key goes only to the selected provider.
+You bring your own API key and choose a supported **Model ID**. Keys are
+**session-only by default**; the explicit Remember API keys option uses encrypted
+device-local storage. They are never exported or included in sync snapshots; when you send a request, the key goes only to the selected provider.
 
 DeepSeek, xAI, and Perplexity use Sutra's implemented OpenAI-compatible request
 path. They are text-first: native image input is enabled only when the local
@@ -392,7 +397,9 @@ For compatibility, Sutra intentionally **retains** its legacy internal identifie
 Sutra is responsive from **1440 px down to 320 px**. Breakpoints in `styles/responsive/mobile.css` cover large tablet (1024 px), small tablet (768 px), and phone (640 px).
 
 - The sidebar collapses behind a toggle and a tap-overlay; the pages list scrolls inside the drawer.
-- The top tab strip becomes a single **current view** dropdown that expands the full list; overflowing tabs move into a *More* menu.
+- Phones use the bottom navigation and **All sections** sheet. Tablets retain
+  the adaptive top strip; desktop overflow uses **More**. Both route through
+  the canonical workspace controls.
 - Modals scroll internally and keep their primary actions visible above mobile browser chrome; under 640 px they stack to a single column.
 - `Settings → Accessibility → Larger touch targets` enlarges interactive elements for thumb use.
 
@@ -432,8 +439,10 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
 - Storage is **local-first** on this device: IndexedDB holds the workspace; localStorage holds settings, health state, and a few caches.
 - There is **no Sutra-operated server**. Fresh startup, manual encrypted `.sutra` backup, and JSON backup are designed to make **zero third-party requests**.
-- Optional outbound calls happen only when you trigger them: Sutra Cloud/Google Drive OAuth and backup, opt-in Sutra Sync, Sutra Assistant provider requests, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, configurable localhost/127.0.0.1 AI endpoints, and secondary document import/export libraries when a browser-native fallback is not enough.
-- **API keys are session-only.** They are never persisted, exported, or synced.
+- Optional connections require explicit setup or action. Once enabled, Sync and automatic backup can run while the app is open without a new click. Network paths include: Sutra Cloud/Google Drive OAuth and backup, opt-in Sutra Sync, Sutra Assistant provider requests, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, configurable localhost/127.0.0.1 AI endpoints, and explicit optional local helpers. Document import/export runtime libraries
+  are vendored and load from the same origin.
+- **API keys are session-only by default.** Explicitly remembered keys are
+  encrypted on this device; credentials are never exported or synced.
 - New `.sutra` exports are password-encrypted. JSON exports and document exports are not encrypted. Locked-page PINs protect a page within the browser UI (hashed credentials travel in backups), which is not full-disk encryption.
 - Clearing browser storage without a backup will lose your local data.
 
@@ -442,7 +451,9 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 - **App won't open from `index.html`** — it redirects to `HomePage.html`. If your browser blocks the redirect, open `HomePage.html` or `Sutra.html` directly.
 - **A custom CSS snippet or plugin broke the UI** — load Safe Mode (`?sutraSafeMode=1`, hold **Shift** at load, or the in-app Recovery button) and disable the offending snippet/plugin. Nothing is deleted.
 - **Sutra Assistant returns 401 / model errors** — re-check the API key for the active provider and the exact Model ID. A wrong Model ID fails at the provider, not in Sutra.
-- **An imported backup looks wrong** - a pre-import safety snapshot is written before every workspace import; restore it from `Settings -> Data -> Storage Health`.
+- **An imported backup looks wrong** — use the encrypted safety export if you
+  accepted it, or the local recovery journal. See
+  [restore recovery](docs/privacy-security/DATA_AND_BACKUPS.md#6-pre-import-safety-snapshot).
 - **Tabs are missing** — check `Settings → Packs & advanced → Feature packs` and the active Sutra Mode. Hiding a pack never deletes its data; re-enable it any time.
 - **Fonts look different offline** - external web fonts are not requested on startup. Sutra uses local/system fallbacks unless you explicitly host or allow additional font assets.
 
@@ -450,7 +461,8 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
 - **Cloud services are optional and foreground-only.** Sutra Cloud/Google Drive backup and Sutra Sync run only after explicit setup while Sutra is open, online, unlocked, and authorized. They do not run after the browser is fully closed, and direct `file://` launch may not support OAuth.
 - **Browser storage caps.** IndexedDB and localStorage quotas vary by browser; very large, media-rich workspaces can hit limits. Export `.sutra` regularly.
-- **Document export is native and offline.** PDF uses the browser print pipeline (opens a print-ready view — choose *Save as PDF*); **Word (.docx)** creates a local OOXML package and **Word 97-2003 (.doc)** remains available for legacy workflows. HTML, Markdown, RTF, and TXT are produced locally with no third-party library. PDF can render slightly differently across browsers. See [Document Export](docs/features/DOCUMENT_EXPORT.md).
+- **Document export is native and offline.** PDF uses a vendored local renderer for selectable paginated output, with a
+  print-ready browser fallback; **Word (.docx)** creates a local OOXML package and **Word 97-2003 (.doc)** remains available for legacy workflows. HTML, Markdown, RTF, and TXT are produced locally with no third-party library. PDF can render slightly differently across browsers. See [Document Export](docs/features/DOCUMENT_EXPORT.md).
 - **External media embeds** depend on the source's CORS / iframe policy and the approved-origin CSP list.
 - **Sutra Assistant Model IDs** must match the provider's exact string; typos fail at the provider.
 - **`file://` sandboxing** — some image-upload paths need an `http(s)://` origin; use a static server if you hit this.
@@ -473,7 +485,13 @@ npm run check:network                   # approved-origin/CDN guard
 npm run test:e2e                        # Chromium, Firefox, WebKit Playwright matrix
 ```
 
-Brand icons are generated from two canonical master PNGs (`assets/brand/sutra/`) with `python scripts/generate-sutra-brand-assets.py` (requires Pillow). Full reference: [`docs/features/BRAND_ASSETS.md`](docs/features/BRAND_ASSETS.md).
+Brand icons are generated from two canonical master PNGs (`assets/brand/sutra/`) with `python scripts/generate-sutra-brand-assets.py` (requires Pillow). Full reference: [`docs/features/BRAND_ASSETS.md`](docs/features/BRAND_ASSETS.md). The bundled daily-loop SVG glyphs use the existing [local icon system](src/components/icons/README.md).
+
+Local October reliability work and its unperformed CI gates are recorded in the
+[student workflow handoff](docs/plans/STUDENT_WORKFLOW_HANDOFF_20261015.md).
+[Connected-feature proposals](docs/plans/CONNECTED_FEATURES_PROPOSAL_20261015.md)
+cover subscription authentication, Calendar, API/MCP, quotas, automations, and
+the licensing decision; these are not shipped features.
 
 Per the release process, the suite also includes rebrand and responsive guards (`scripts/sutra-rebrand-check.mjs`, `scripts/sutra-responsive-check.mjs`) and a `node --check` syntax pass over each `src` JS file. A browser QA harness is provided at `scripts/sutra-persistence-qa.js`.
 
@@ -481,9 +499,9 @@ Per the release process, the suite also includes rebrand and responsive guards (
 
 Sutra is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for the full terms.
 
-You may use, modify, and distribute this project under Apache 2.0. When redistributing or building derivative works, please retain the `LICENSE` and `NOTICE` files in full, clearly indicate that your version has been modified, and use the recommended attribution phrase: **"Based on Sutra by Tanuj Ranjith."** (Sutra was formerly NoteFlow Atelier; the legacy attribution phrase remains accurate for older forks.)
+You may use, modify, and distribute this project, including commercially, under Apache 2.0. It does not require downstream modifications to be published. When redistributing, follow section 4: include the license, identify modified files, and retain the applicable copyright, attribution, and NOTICE content as required. Suggested credit: **"Based on Sutra by Tanuj Ranjith."** That exact phrase is optional, not an additional license condition. Sutra was formerly NoteFlow Atelier; the legacy attribution phrase remains accurate for older forks.
 
-The Sutra name, logo, and official branding should not be used in a way that implies endorsement or official affiliation with the original project. See [`TRADEMARK.md`](TRADEMARK.md) for brand usage guidelines.
+Truthful references to Sutra are welcome. Separately marketed forks should use a distinct product name and logo and clearly identify their unofficial status. Do not imply endorsement or official affiliation that does not exist. See [`TRADEMARK.md`](TRADEMARK.md) for the brand guidelines; they do not change the code license.
 
 > **NoteFlow Classic** is a separate legacy app that lives under `noteflow-classic/`. It is not Sutra and is maintained independently.
 

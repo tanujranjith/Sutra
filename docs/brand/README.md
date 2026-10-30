@@ -10,5 +10,39 @@ canonical production masters remain:
 - [`sutra-app-icon-master.png`](../../assets/brand/sutra/sutra-app-icon-master.png)
 - [`sutra-assistant-icon-master.png`](../../assets/brand/sutra/sutra-assistant-icon-master.png)
 
+The Assistant runtime derivatives are generated from the transparent
+[`sutra-assistant-avatar-master.png`](../../assets/brand/sutra/sutra-assistant-avatar-master.png),
+extracted from the approved Assistant logo. The original logo master remains
+intact. Rerun `scripts/generate-sutra-brand-assets.py` to regenerate icon sizes.
+
 Keep the board under `docs/brand/` so it remains available to contributors
 without entering Sutra's allowlisted production deploy artifact.
+
+### Assistant cutout provenance
+
+Created with built-in imagegen from `sutra-assistant-icon-master.png`, with
+transparent output requested. Prompt:
+
+> Use case: background-extraction. Edit target: supplied Sutra Assistant logo. Extract ONLY the entire cyan/blue/purple ribbon character including its pale face and two blue pill eyes, remove the surrounding off-white background and floor shadow completely to genuine transparency. Preserve exact character silhouette, ribbon shape, colors, shading, face, and eye positions. No mouth, no additional eyes, no redesign, no text. Center the cutout in a square canvas with modest 8% transparent padding so it can float as a UI avatar. Output a clean transparent PNG.
+
+### Animated eyes
+
+Built-in imagegen produced [`sutra-assistant-face-master.png`](../../assets/brand/sutra/sutra-assistant-face-master.png) from the transparent avatar. Prompt: remove only the two blue pill eyes, seamlessly restore the pale face, preserve canvas, character geometry, colors, and transparency; no mouth or new features. The brand generator makes a 128px face. Live and gallery CSS supply independent eyes; static icons retain the original eyes.
+
+### Transparent Sutra S
+
+Runtime app icons, favicon, transparent mark, and `assets/logos/sutra.png` now
+come from [`sutra-mark-master.png`](../../assets/brand/sutra/sutra-mark-master.png).
+The approved original logo master remains unchanged. Transparent space around
+and through the S shows the current theme background. The maskable PWA icon
+uses an opaque navy backing and safe-area padding; social artwork composites
+the transparent mark onto its existing light background.
+
+Created using built-in imagegen. Prompt: extract the exact cyan/blue/purple
+ribbon S; remove the off-white background, floor shadow, and background through
+both openings; preserve geometry, folds, colors, and shading; center on a square
+transparent canvas with clear padding and clean edges for light and dark UI.
+
+Browser favicons (`sutra-favicon-16.png`, `sutra-favicon-32.png`, and
+`favicon.ico`) use a white backing. These are separate from transparent runtime
+logos and ordinary PWA PNGs. All three entry pages reference the favicon files.

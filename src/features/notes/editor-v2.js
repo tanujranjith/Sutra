@@ -142,10 +142,65 @@
         });
     }
 
+    function isHelpDocument() {
+        return !!(state.blockBridge && state.blockBridge.isHelpDocument && state.blockBridge.isHelpDocument());
+    }
+
+    function helpAnchorPrefix() {
+        var hostId = state.hostEl && state.hostEl.id ? String(state.hostEl.id) : 'sutra-editor-v2';
+        return hostId + '--help-';
+    }
+
+    function transformHelpAnchors(root, restoreStorageIds) {
+        if (!root || !root.querySelectorAll) return;
+        var prefix = helpAnchorPrefix();
+        var idMap = Object.create(null);
+        Array.prototype.forEach.call(root.querySelectorAll('[id]'), function (el) {
+            var id = String(el.getAttribute('id') || '');
+            if (!id) return;
+            var canonicalId = id.indexOf(prefix) === 0 ? id.slice(prefix.length) : id;
+            idMap[canonicalId] = restoreStorageIds ? canonicalId : prefix + canonicalId;
+        });
+
+        Array.prototype.forEach.call(root.querySelectorAll('[id]'), function (el) {
+            var id = String(el.getAttribute('id') || '');
+            var canonicalId = id.indexOf(prefix) === 0 ? id.slice(prefix.length) : id;
+            if (Object.prototype.hasOwnProperty.call(idMap, canonicalId)) el.setAttribute('id', idMap[canonicalId]);
+        });
+
+        Array.prototype.forEach.call(root.querySelectorAll('[data-editor-anchor]'), function (el) {
+            var target = String(el.getAttribute('data-editor-anchor') || '');
+            var canonicalTarget = target.indexOf(prefix) === 0 ? target.slice(prefix.length) : target;
+            if (Object.prototype.hasOwnProperty.call(idMap, canonicalTarget)) {
+                el.setAttribute('data-editor-anchor', idMap[canonicalTarget]);
+            }
+        });
+
+        Array.prototype.forEach.call(root.querySelectorAll('a[href^="#"]'), function (el) {
+            var href = String(el.getAttribute('href') || '');
+            var target = href.slice(1);
+            try { target = decodeURIComponent(target); } catch (e) { /* keep the literal fragment */ }
+            var canonicalTarget = target.indexOf(prefix) === 0 ? target.slice(prefix.length) : target;
+            if (!Object.prototype.hasOwnProperty.call(idMap, canonicalTarget)) return;
+            el.setAttribute('href', '#' + encodeURIComponent(idMap[canonicalTarget]));
+        });
+    }
+
     // Storage/paste HTML → HTML the v2 schema understands losslessly.
     function normalizeLegacyHtml(html) {
         var tpl = parseHtmlToTemplate(html);
         var root = tpl.content;
+        // Generated Help is a protected reference, not an editable note. Reuse
+        // the preserved-node path so its semantic headings and native buttons
+        // survive schema parsing. Input still comes through the core sanitizer.
+        if (isHelpDocument()) {
+            var help = document.createElement('div');
+            help.className = 'sutra-help-document';
+            help.setAttribute('contenteditable', 'false');
+            help.appendChild(root);
+            transformHelpAnchors(help, false);
+            return help.outerHTML;
+        }
         convertLegacyChecklistsIn(root);
         convertLegacyFontTagsIn(root);
         var out = document.createElement('div');
@@ -649,6 +704,595 @@
         }
     };
 
+    /* Page breaks are view-only widgets. Positions and measurements supplied
+     * to this pure planner are in CSS pixels relative to the primary paper
+     * pane, after old widgets and manual-break block heights have been
+     * removed from layout. */
+    function coalescePageLineEvents(events) {
+        var ordered = (events || []).slice().sort(function (a, b) { return a.pos - b.pos; });
+        var result = [];
+        ordered.forEach(function (event) {
+            var previous = result[result.length - 1];
+            if (previous && event.type === 'line' && previous.type === 'line' && previous.pos === event.pos) {
+                previous.top = Math.min(Number(previous.top) || 0, Number(event.top) || 0);
+                previous.bottom = Math.max(Number(previous.bottom) || 0, Number(event.bottom) || 0);
+                return;
+            }
+            result.push(Object.assign({}, event));
+        });
+        return result;
+    }
+
+    function groupPageLineRects(rects) {
+        var rows = [];
+        (rects || []).slice().sort(function (a, b) { return a.top - b.top || a.left - b.left; }).forEach(function (rect) {
+            if (!rect || rect.height <= 0 || rect.width <= 0) return;
+            var row = null;
+            for (var rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+                var candidate = rows[rowIndex];
+                if (rect.top > candidate.bottom + 4) break;
+                var baselineDifference = Math.abs(rect.bottom - candidate.baseline);
+                var baselineTolerance = Math.max(1.5, Math.min(rect.height, candidate.minHeight) * 0.15);
+                var verticalOverlap = Math.min(rect.bottom, candidate.bottom) - Math.max(rect.top, candidate.top);
+                var horizontalGap = Math.max(candidate.left - rect.right, rect.left - candidate.right, 0);
+                if (baselineDifference <= baselineTolerance || (verticalOverlap > 0 &&
+                    (baselineDifference <= 4 || horizontalGap <= 3))) {
+                    row = candidate;
+                    break;
+                }
+            }
+            if (!row) {
+                rows.push({ top: rect.top, bottom: rect.bottom, baseline: rect.bottom,
+                    left: rect.left, right: rect.right, minHeight: rect.height });
+            } else {
+                row.top = Math.min(row.top, rect.top);
+                row.bottom = Math.max(row.bottom, rect.bottom);
+                row.baseline = (row.baseline + rect.bottom) / 2;
+                row.left = Math.min(row.left, rect.left);
+                row.right = Math.max(row.right, rect.right);
+                row.minHeight = Math.min(row.minHeight, rect.height);
+            }
+        });
+        return rows.sort(function (a, b) { return a.top - b.top; });
+    }
+
+    function planAutomaticPageBreaks(events, options) {
+        options = options || {};
+        if (!options.enabled) return [];
+        var pageHeight = Number(options.pageHeight) || 0;
+        var topPadding = Math.max(0, Number(options.topPadding) || 0);
+        var bottomPadding = Math.max(0, Number(options.bottomPadding) || 0);
+        var gapHeight = Math.max(0, Number(options.gapHeight) || 60);
+        if (pageHeight <= 0 || pageHeight <= topPadding + bottomPadding) return [];
+
+        var pageStart = 0;
+        var pageBottom = pageHeight;
+        var contentBottom = pageBottom - bottomPadding;
+        var insertedHeight = 0;
+        var interval = pageHeight + gapHeight;
+        var breaks = [];
+        var ordered = coalescePageLineEvents(events);
+
+        ordered.forEach(function (event) {
+            var top = Number(event.top) + insertedHeight;
+            var bottom = Number(event.bottom == null ? event.top : event.bottom) + insertedHeight;
+            if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+
+            // An oversized image, embed, drawing, or table may span more than
+            // one sheet. Keep it intact and align following content to a later
+            // sheet instead of clipping or repeatedly inserting at its start.
+            while (top >= pageBottom + gapHeight + topPadding) {
+                pageStart += interval;
+                pageBottom = pageStart + pageHeight;
+                contentBottom = pageBottom - bottomPadding;
+            }
+
+            if (event.type === 'manual') {
+                if (event.hasFollowing === false) return;
+                // The original page-break atom has zero visual height while
+                // page mode is active. Its replacement widget fills the
+                // remaining paper, gray gap, and next sheet's top margin.
+                if (top >= pageBottom + gapHeight + topPadding) {
+                    pageStart += interval;
+                    pageBottom = pageStart + pageHeight;
+                    contentBottom = pageBottom - bottomPadding;
+                }
+                var manualTarget = pageBottom + gapHeight + topPadding;
+                var manualHeight = Math.max(0, manualTarget - top);
+                if (manualHeight > 0) {
+                    breaks.push({ pos: event.pos, height: manualHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, anchorKind: event.type, reason: 'manual',
+                        marginLeft: event.marginLeft, marginRight: event.marginRight });
+                    insertedHeight += manualHeight;
+                }
+                pageStart = pageBottom + gapHeight;
+                pageBottom = pageStart + pageHeight;
+                contentBottom = pageBottom - bottomPadding;
+                return;
+            }
+
+            var eventHeight = Math.max(0, bottom - top);
+            var usableHeight = pageHeight - topPadding - bottomPadding;
+            if (event.type === 'atom' && eventHeight > usableHeight) return;
+            if (bottom <= contentBottom) return;
+
+            var target = pageBottom + gapHeight + topPadding;
+            var spacerHeight = Math.max(0, target - top);
+            if (spacerHeight > 0) {
+                breaks.push({ pos: event.pos, height: spacerHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, anchorKind: event.type, reason: 'automatic',
+                    marginLeft: event.marginLeft, marginRight: event.marginRight });
+                insertedHeight += spacerHeight;
+                pageStart = pageBottom + gapHeight;
+                pageBottom = pageStart + pageHeight;
+                contentBottom = pageBottom - bottomPadding;
+            }
+        });
+        return breaks;
+    }
+
+    function buildPageLayoutExtension(eng) {
+        var key = new eng.PluginKey('sutraPageLayout');
+
+        function primaryPaneRoot(view) {
+            var host = state.hostEl;
+            if (!host || !host.closest) return null;
+            var root = host.closest('.notes-pane-primary');
+            if (!root || !root.contains(view.dom) || !root.closest('#view-notes') || root.classList.contains('is-page-locked')) return null;
+            return root;
+        }
+
+        function readPageMetrics(root, host) {
+            var style = window.getComputedStyle(root);
+            var rootRect = root.getBoundingClientRect();
+            var rootHeight = Number(root.offsetHeight) || rootRect.height || 1;
+            var hostRect = host && host.getBoundingClientRect ? host.getBoundingClientRect() : null;
+            var hostWidth = host && Number(host.offsetWidth) || 0;
+            var hostScale = hostRect && hostWidth ? hostRect.width / hostWidth : 1;
+            var rootScale = rootHeight ? rootRect.height / rootHeight : 1;
+            var relativeHostScale = hostScale / (rootScale > 0 ? rootScale : 1);
+            var pageHeight = parseFloat(style.getPropertyValue('--notes-page-height')) || 1056;
+            var gapHeight = parseFloat(style.getPropertyValue('--notes-page-auto-gap-height')) || 60;
+            return {
+                rootRect: rootRect,
+                hostRect: hostRect,
+                hostWidth: hostWidth,
+                rootScale: rootScale > 0 ? rootScale : 1,
+                hostScale: hostScale > 0 ? hostScale : 1,
+                relativeHostScale: relativeHostScale > 0 ? relativeHostScale : 1,
+                pageHeight: pageHeight,
+                topPadding: parseFloat(style.paddingTop) || 0,
+                bottomPadding: parseFloat(style.paddingBottom) || 0,
+                leftPadding: parseFloat(style.paddingLeft) || 0,
+                rightPadding: parseFloat(style.paddingRight) || 0,
+                gapHeight: gapHeight
+            };
+        }
+
+        function paneYFromClientY(clientY, metrics) {
+            return (clientY - metrics.rootRect.top) / metrics.rootScale;
+        }
+
+        function isManualPageBreak(dom) {
+            return !!(dom && dom.nodeType === 1 && ((dom.matches && dom.matches('.atelier-page-break'))
+                || (dom.querySelector && dom.querySelector('.atelier-page-break'))));
+        }
+
+        function addBlockGeometry(view, node, pos, metrics, events) {
+            var dom;
+            try { dom = view.nodeDOM(pos); } catch (e) { return; }
+            if (!dom || dom.nodeType !== 1 || !dom.getBoundingClientRect) return;
+            var rect = dom.getBoundingClientRect();
+            if (!rect) return;
+            var top = paneYFromClientY(rect.top, metrics);
+            var bottom = paneYFromClientY(rect.bottom, metrics);
+            if (isManualPageBreak(dom)) {
+                var after = pos + node.nodeSize;
+                if (after < view.state.doc.content.size) {
+                    var afterCoords;
+                    try { afterCoords = view.coordsAtPos(after, 1); } catch (e2) { afterCoords = null; }
+                    var manualTop = afterCoords ? paneYFromClientY(afterCoords.top, metrics) : top;
+                    var manualMargins = getSpacerMargins(insertionContainerForPos(view, after, 1, dom), metrics);
+                    events.push({ type: 'manual', pos: after, top: manualTop, bottom: manualTop, hasFollowing: true,
+                        marginLeft: manualMargins.left, marginRight: manualMargins.right });
+                }
+                return;
+            }
+            if (rect.height <= 0) return;
+            var atomMargins = getSpacerMargins(insertionContainerForPos(view, pos, -1, dom), metrics);
+            events.push({ type: 'atom', pos: pos, top: top, bottom: bottom,
+                marginLeft: atomMargins.left, marginRight: atomMargins.right });
+        }
+
+        function insertionContainerForPos(view, pos, side, fallback) {
+            try {
+                var location = view.domAtPos(pos, side);
+                var node = location && location.node;
+                var element = node && (node.nodeType === 1 ? node : node.parentElement);
+                return element || fallback || view.dom;
+            } catch (e) {
+                return fallback || view.dom;
+            }
+        }
+
+        function getSpacerMargins(blockDOM, metrics) {
+            var rect = blockDOM && blockDOM.getBoundingClientRect ? blockDOM.getBoundingClientRect() : null;
+            var rootRect = metrics.rootRect;
+            if (!rect || !rootRect) return {
+                left: -metrics.leftPadding,
+                right: -metrics.rightPadding
+            };
+            // Decorations inside lists and other indented blocks still need a
+            // full-width gray page gap. Measure the containing block against
+            // the paper pane so nested indentation is included.
+            return {
+                left: (rootRect.left - rect.left) / metrics.rootScale,
+                right: (rect.right - rootRect.right) / metrics.rootScale
+            };
+        }
+
+        function lineStartForY(view, start, end, targetTop) {
+            var low = start, high = Math.max(start, end - 1);
+            while (low < high) {
+                var mid = Math.floor((low + high) / 2);
+                var coords;
+                try { coords = view.coordsAtPos(mid, 1); } catch (e) { return start; }
+                if (coords.top < targetTop - 0.75) low = mid + 1;
+                else high = mid;
+            }
+            return low;
+        }
+
+        function addTextblockGeometry(view, node, pos, metrics, events) {
+            var dom;
+            try { dom = view.nodeDOM(pos); } catch (e) { return; }
+            if (!dom || !dom.nodeType || !document.createRange) return;
+            var range = document.createRange();
+            var rects = [];
+            try {
+                range.selectNodeContents(dom);
+                rects = Array.prototype.slice.call(range.getClientRects());
+            } catch (e2) { return; }
+            if (!rects.length) return;
+            var rows = groupPageLineRects(rects);
+            var start = pos + 1;
+            var end = pos + node.nodeSize - 1;
+            var margins = getSpacerMargins(dom, metrics);
+            var lineEventsByPos = Object.create(null);
+            rows.forEach(function (row) {
+                var linePos = lineStartForY(view, start, end, row.top);
+                if (linePos < start || linePos >= end) return;
+                var lineEvent = lineEventsByPos[linePos];
+                var paneTop = paneYFromClientY(row.top, metrics);
+                var paneBottom = paneYFromClientY(row.bottom, metrics);
+                if (!lineEvent) {
+                    lineEventsByPos[linePos] = lineEvent = {
+                        type: 'line', pos: linePos, top: paneTop, bottom: paneBottom,
+                        marginLeft: margins.left, marginRight: margins.right
+                    };
+                } else {
+                    lineEvent.top = Math.min(lineEvent.top, paneTop);
+                    lineEvent.bottom = Math.max(lineEvent.bottom, paneBottom);
+                }
+            });
+            Object.keys(lineEventsByPos).forEach(function (linePos) { events.push(lineEventsByPos[linePos]); });
+        }
+
+        function collectManualPageBreakNodes(view) {
+            var nodes = [];
+            view.state.doc.descendants(function (node, pos) {
+                if (node.isBlock && node.isAtom) {
+                    var dom;
+                    try { dom = view.nodeDOM(pos); } catch (e) { dom = null; }
+                    if (isManualPageBreak(dom) && pos + node.nodeSize < view.state.doc.content.size) nodes.push(dom);
+                    return false;
+                }
+                return true;
+            });
+            return nodes;
+        }
+
+        function collectGeometry(view, metrics) {
+            var events = [];
+            view.state.doc.descendants(function (node, pos) {
+                if (node.isTextblock) {
+                    addTextblockGeometry(view, node, pos, metrics, events);
+                    return false;
+                }
+                var isTable = node.type && node.type.name === 'table';
+                if (isTable || (node.isBlock && node.isAtom)) {
+                    addBlockGeometry(view, node, pos, metrics, events);
+                    return false;
+                }
+                return true;
+            });
+            return events;
+        }
+
+        return eng.Extension.create({
+            name: 'sutraPageLayout',
+            addProseMirrorPlugins: function () {
+                return [new eng.Plugin({
+                    key: key,
+                    state: {
+                        init: function () { return eng.DecorationSet.empty; },
+                        apply: function (tr, previous) {
+                            var meta = tr.getMeta(key);
+                            if (meta && meta.decorations) return meta.decorations;
+                            return tr.docChanged ? previous.map(tr.mapping, tr.doc) : previous;
+                        }
+                    },
+                    props: {
+                        decorations: function (editorState) { return key.getState(editorState); }
+                    },
+                    view: function (editorView) {
+                        var disposed = false;
+                        var internalDispatch = false;
+                        var frame = null;
+                        var resizeObserver = null;
+                        var mutationObserver = null;
+                        var manualSnapshots = new Map();
+                        var currentManualNodes = new Set();
+                        var signature = '';
+                        var resizeSignature = '';
+                        var layoutErrorReported = false;
+                        var scheduleFrame = window.requestAnimationFrame || function (callback) { return setTimeout(callback, 16); };
+                        var cancelFrame = window.cancelAnimationFrame || clearTimeout;
+                        var root = primaryPaneRoot(editorView);
+
+                        function restoreManualNodes() {
+                            manualSnapshots.forEach(function (styleText, node) {
+                                if (!node || !node.setAttribute) return;
+                                if (styleText == null) node.removeAttribute('style');
+                                else node.setAttribute('style', styleText);
+                            });
+                            manualSnapshots.clear();
+                            currentManualNodes.clear();
+                        }
+
+                        function prepareManualNodes(nodes) {
+                            var next = new Set(nodes);
+                            currentManualNodes.forEach(function (node) {
+                                if (next.has(node)) return;
+                                var oldStyle = manualSnapshots.get(node);
+                                if (oldStyle == null) node.removeAttribute('style');
+                                else node.setAttribute('style', oldStyle);
+                                manualSnapshots.delete(node);
+                            });
+                            currentManualNodes = next;
+                            nodes.forEach(function (node) {
+                                if (!manualSnapshots.has(node)) manualSnapshots.set(node, node.getAttribute('style'));
+                                node.style.setProperty('height', '0px', 'important');
+                                node.style.setProperty('min-height', '0px', 'important');
+                                node.style.setProperty('margin', '0px', 'important');
+                                node.style.setProperty('padding', '0px', 'important');
+                                node.style.setProperty('border', '0px', 'important');
+                                node.style.setProperty('box-shadow', 'none', 'important');
+                                node.style.setProperty('background', 'transparent', 'important');
+                                node.style.setProperty('line-height', '0px', 'important');
+                            });
+                        }
+
+                        function setDecorations(view, nextDecorations, nextSignature) {
+                            if (signature === nextSignature) return;
+                            signature = nextSignature;
+                            var tr = view.state.tr.setMeta(key, { decorations: nextDecorations }).setMeta('addToHistory', false);
+                            internalDispatch = true;
+                            try { view.dispatch(tr); } finally { internalDispatch = false; }
+                        }
+
+                        function emptyDecorations(view) {
+                            setDecorations(view, eng.DecorationSet.empty, '');
+                        }
+
+                        function makeSpacerDOM(entry, metrics, gapHeight) {
+                            var spacer = document.createElement('div');
+                            spacer.className = 'notes-page-auto-break';
+                            spacer.setAttribute('data-notes-auto-page-break', 'true');
+                            spacer.setAttribute('data-notes-auto-page-reason', entry.reason || 'automatic');
+                            spacer.setAttribute('data-notes-auto-page-target', String(entry.pageBoundary));
+                            spacer.setAttribute('data-notes-auto-page-gap-offset', String(entry.gapOffset));
+                            spacer.setAttribute('data-notes-auto-page-anchor-kind', entry.anchorKind || '');
+                            spacer.setAttribute('data-notes-auto-page-anchor-pos', String(entry.pos));
+                            spacer.setAttribute('contenteditable', 'false');
+                            spacer.setAttribute('aria-hidden', 'true');
+                            var relativeHostScale = metrics.relativeHostScale;
+                            spacer.style.height = (entry.height / relativeHostScale) + 'px';
+                            spacer.style.marginLeft = ((Number(entry.marginLeft) || 0) / relativeHostScale) + 'px';
+                            spacer.style.marginRight = ((Number(entry.marginRight) || 0) / relativeHostScale) + 'px';
+                            spacer.style.setProperty('--notes-auto-gap-top', (entry.gapOffset / relativeHostScale) + 'px');
+                            spacer.style.setProperty('--notes-auto-gap-height', (entry.gapOffset < 0 ? 0 : gapHeight / relativeHostScale) + 'px');
+                            var gap = document.createElement('div');
+                            gap.className = 'notes-page-auto-break-gap';
+                            if (entry.gapOffset < 0) gap.style.display = 'none';
+                            spacer.appendChild(gap);
+                            return spacer;
+                        }
+
+                        function pageLayoutAnchorTop(view, spacer, metrics) {
+                            var anchorKind = spacer.getAttribute('data-notes-auto-page-anchor-kind');
+                            var anchorPos = Number(spacer.getAttribute('data-notes-auto-page-anchor-pos'));
+                            if (!Number.isInteger(anchorPos) || anchorPos < 0 || anchorPos > view.state.doc.content.size) return null;
+                            try {
+                                if (anchorKind === 'atom') {
+                                    var atom = view.nodeDOM(anchorPos);
+                                    var atomRect = atom && atom.getBoundingClientRect ? atom.getBoundingClientRect() : null;
+                                    return atomRect && Number.isFinite(atomRect.top) ? paneYFromClientY(atomRect.top, metrics) : null;
+                                }
+                                if (anchorKind === 'line' || anchorKind === 'manual') {
+                                    var coords = view.coordsAtPos(anchorPos, 1);
+                                    return coords && Number.isFinite(coords.top) ? paneYFromClientY(coords.top, metrics) : null;
+                                }
+                            } catch (e) { /* stale or temporarily unmeasurable anchors skip flow correction */ }
+                            return null;
+                        }
+
+                        function alignGapWidgetsToPageBoundaries(view, root, metrics) {
+                            Array.prototype.forEach.call(root.querySelectorAll('.notes-page-auto-break[data-notes-auto-page-target]'), function (spacer) {
+                                var pageBoundary = Number(spacer.getAttribute('data-notes-auto-page-target'));
+                                var gapOffsetInPlan = Number(spacer.getAttribute('data-notes-auto-page-gap-offset'));
+                                if (gapOffsetInPlan < 0 || !Number.isFinite(pageBoundary)) return;
+                                var gap = spacer && spacer.querySelector('.notes-page-auto-break-gap');
+                                var spacerRect = spacer && spacer.getBoundingClientRect ? spacer.getBoundingClientRect() : null;
+                                if (!gap || !spacerRect || metrics.relativeHostScale <= 0) return;
+
+                                // Planned heights use the original, unpaginated coordinates. Once earlier
+                                // widgets enter the document, measure this event's own anchor after its
+                                // widget and correct flow before painting the divider. This avoids both
+                                // accumulated line-box drift and accidentally measuring a later caption.
+                                var actualAnchorTop = pageLayoutAnchorTop(view, spacer, metrics);
+                                if (actualAnchorTop != null) {
+                                    var expectedTextTop = pageBoundary + metrics.gapHeight + metrics.topPadding;
+                                    var correction = expectedTextTop - actualAnchorTop;
+                                    if (Number.isFinite(correction) && Math.abs(correction) > 0.25) {
+                                        var flowHeight = spacerRect.height / metrics.rootScale;
+                                        spacer.style.height = (Math.max(0, flowHeight + correction) / metrics.relativeHostScale) + 'px';
+                                        spacerRect = spacer.getBoundingClientRect();
+                                    }
+                                }
+
+                                var spacerTop = paneYFromClientY(spacerRect.top, metrics);
+                                var gapOffset = pageBoundary - spacerTop;
+                                if (!Number.isFinite(gapOffset)) return;
+                                // ProseMirror widgets can sit a few subpixels away from the
+                                // measured text-line coordinate. Align the painted divider to
+                                // the physical sheet edge after the widget enters the DOM.
+                                gap.style.top = (gapOffset / metrics.relativeHostScale) + 'px';
+                            });
+                        }
+
+                        function measureAndApply(view) {
+                            if (disposed) return;
+                            root = primaryPaneRoot(view);
+                            if (!root || !document.body || !document.body.classList.contains('notes-pages-mode')
+                                || !root.getClientRects || !root.getClientRects().length) {
+                                restoreManualNodes();
+                                emptyDecorations(view);
+                                return;
+                            }
+                            if (view.composing) return;
+
+                            // Hide old widgets and neutralize stored manual
+                            // break atoms before reading geometry. Both remain
+                            // intact in the ProseMirror document and storage.
+                            var oldWidgets = Array.prototype.slice.call(root.querySelectorAll('.notes-page-auto-break[data-notes-auto-page-break]'));
+                            var oldDisplays = oldWidgets.map(function (node) { return node.style.display; });
+                            oldWidgets.forEach(function (node) { node.style.display = 'none'; });
+                            var metrics, plan;
+                            try {
+                                prepareManualNodes(collectManualPageBreakNodes(view));
+                                // readPageMetrics below forces layout after
+                                // removing old gaps and manual-break height.
+                                metrics = readPageMetrics(root, state.hostEl);
+                                var events = collectGeometry(view, metrics);
+                                plan = planAutomaticPageBreaks(events, {
+                                    enabled: true,
+                                    pageHeight: metrics.pageHeight,
+                                    topPadding: metrics.topPadding,
+                                    bottomPadding: metrics.bottomPadding,
+                                    gapHeight: metrics.gapHeight
+                                });
+                            } catch (layoutError) {
+                                restoreManualNodes();
+                                emptyDecorations(view);
+                                if (!layoutErrorReported && typeof window.SutraReportError === 'function') {
+                                    layoutErrorReported = true;
+                                    try {
+                                        window.SutraReportError(layoutError, {
+                                            where: 'notes.page-layout',
+                                            message: 'Automatic page layout could not be measured; document content was left unchanged.'
+                                        }, 'warning');
+                                    } catch (reportFailure) { /* diagnostics must not interrupt editor input */ }
+                                }
+                                return;
+                            } finally {
+                                oldWidgets.forEach(function (node, index) { node.style.display = oldDisplays[index]; });
+                            }
+
+                            layoutErrorReported = false;
+                            var decorations = [];
+                            var nextSignature = [metrics.rootScale, metrics.hostScale, metrics.relativeHostScale, metrics.hostWidth, metrics.pageHeight,
+                                metrics.topPadding, metrics.bottomPadding, metrics.leftPadding, metrics.rightPadding,
+                                metrics.gapHeight, root.offsetWidth].map(function (value) {
+                                return Number(value).toFixed(3);
+                            }).join(':') + ':' + plan.map(function (entry) {
+                                return entry.pos + ':' + Math.round(entry.height * 10) + ':' + Math.round(entry.gapOffset * 10)
+                                    + ':' + Math.round((entry.pageBoundary || 0) * 10)
+                                    + ':' + Math.round((entry.marginLeft || 0) * 10) + ':' + Math.round((entry.marginRight || 0) * 10)
+                                    + ':' + (entry.anchorKind || '');
+                            }).join('|');
+                            plan.forEach(function (entry) {
+                                if (entry.pos < 0 || entry.pos > view.state.doc.content.size) return;
+                                var spacer = makeSpacerDOM(entry, metrics, metrics.gapHeight);
+                                decorations.push(eng.Decoration.widget(entry.pos, spacer, {
+                                    key: 'notes-page-' + entry.pos + '-' + Math.round(entry.height * 10) + '-' + nextSignature,
+                                    side: -1,
+                                    ignoreSelection: true
+                                }));
+                            });
+                            setDecorations(view, eng.DecorationSet.create(view.state.doc, decorations), nextSignature);
+                            alignGapWidgetsToPageBoundaries(view, root, metrics);
+                        }
+
+                        function schedule() {
+                            if (disposed) return;
+                            if (frame != null) cancelFrame(frame);
+                            frame = scheduleFrame(function () {
+                                frame = null;
+                                measureAndApply(editorView);
+                            });
+                        }
+
+                        function onCompositionEnd() { schedule(); }
+                        function onContentLoad() { schedule(); }
+                        function onResizeObserver() {
+                            var currentRoot = primaryPaneRoot(editorView);
+                            var currentHost = state.hostEl;
+                            var currentHostRect = currentHost && currentHost.getBoundingClientRect ? currentHost.getBoundingClientRect() : null;
+                            var currentHostWidth = currentHost && Number(currentHost.offsetWidth) || 0;
+                            var currentHostScale = currentHostRect && currentHostWidth ? currentHostRect.width / currentHostWidth : 1;
+                            var nextResizeSignature = (currentRoot ? currentRoot.offsetWidth : 0) + ':' + currentHostWidth + ':' + Number(currentHostScale).toFixed(3);
+                            if (resizeSignature === nextResizeSignature) return;
+                            resizeSignature = nextResizeSignature;
+                            schedule();
+                        }
+                        editorView.dom.addEventListener('compositionend', onCompositionEnd);
+                        editorView.dom.addEventListener('load', onContentLoad, true);
+                        window.addEventListener('resize', schedule);
+                        if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', schedule);
+                        if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') document.fonts.ready.then(function () { if (!disposed) schedule(); });
+                        if (typeof window.ResizeObserver === 'function') {
+                            resizeObserver = new window.ResizeObserver(onResizeObserver);
+                            if (root) resizeObserver.observe(root);
+                            if (state.hostEl) resizeObserver.observe(state.hostEl);
+                        }
+                        if (typeof window.MutationObserver === 'function') {
+                            mutationObserver = new window.MutationObserver(schedule);
+                            mutationObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+                            if (root) mutationObserver.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
+                            if (state.hostEl) mutationObserver.observe(state.hostEl, { attributes: true, attributeFilter: ['style'] });
+                        }
+                        schedule();
+                        return {
+                            update: function (view, previousState) {
+                                if (!internalDispatch && (!previousState || previousState.doc !== view.state.doc)) schedule();
+                            },
+                            destroy: function () {
+                                disposed = true;
+                                if (frame != null) cancelFrame(frame);
+                                if (resizeObserver) resizeObserver.disconnect();
+                                if (mutationObserver) mutationObserver.disconnect();
+                                editorView.dom.removeEventListener('compositionend', onCompositionEnd);
+                                editorView.dom.removeEventListener('load', onContentLoad, true);
+                                window.removeEventListener('resize', schedule);
+                                if (document.fonts && document.fonts.removeEventListener) document.fonts.removeEventListener('loadingdone', schedule);
+                                restoreManualNodes();
+                            }
+                        };
+                    }
+                })];
+            }
+        });
+    }
+
 
     function mount(options) {
         options = options || {};
@@ -675,16 +1319,18 @@
         }) : null;
         try {
             state.editor = eng.create(host, {
+                editable: !isHelpDocument(),
                 placeholder: state.placeholder,
                 content: Object.prototype.hasOwnProperty.call(options, 'content')
                     ? normalizeLegacyHtml(options.content || '')
                     : '',
-                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng), buildCommentExtension(eng), state.authoring ? state.authoring.buildExtensions(eng) : []),
+                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng), buildCommentExtension(eng), buildPageLayoutExtension(eng), state.authoring ? state.authoring.buildExtensions(eng) : []),
                 editorProps: {
+                    attributes: isHelpDocument() ? { 'aria-readonly': 'true' } : {},
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
                     handleDrop: handleImageDrop,
-                    handleDOMEvents: { contextmenu: handleTableContextMenu }
+                    handleDOMEvents: { contextmenu: handleTableContextMenu, paste: handlePlainTextPaste, beforeinput: handlePlainTextInput }
                 },
                 onUpdate: function () {
                     if (state.applyingExternal > 0) return;
@@ -725,6 +1371,7 @@
     }
 
     function destroy() {
+        state.plainPaste = null;
         cancelPendingImageOperations();
         detachContextualListeners();
         if (state.mirrorTimer) {
@@ -790,6 +1437,13 @@
         var html = '';
         try { html = state.editor.getHTML(); } catch (e) { return ''; }
         var tpl = parseHtmlToTemplate(html);
+        if (isHelpDocument()) {
+            var help = tpl.content.querySelector('div.sutra-help-document');
+            if (help) {
+                transformHelpAnchors(help, true);
+                return help.innerHTML;
+            }
+        }
         convertTaskListsToLegacy(tpl.content);
         var out = document.createElement('div');
         out.appendChild(tpl.content.cloneNode(true));
@@ -1271,6 +1925,7 @@
     /* ---- Slash-command insert menu ---- */
     function slashItemDefs() {
         return [
+            ...['grammar', 'spelling', 'rephrase'].map(function (command) { return { label: '/' + command, keywords: command, icon: 'fa-magic', deferred: true, writingCommand: true, run: function (range) { if (state.authoring) state.authoring.openWriting(command, range); } }; }),
             { label: 'Sutra Assistant writing help', keywords: 'ai writing help', icon: 'fa-magic', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAI(range); } },
             { label: 'Sutra Assistant general help', icon: 'fa-robot', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAssistantGeneral(range); } },
             { label: 'Link', icon: 'fa-link', deferred: true, run: function (range) { if (state.authoring) state.authoring.openRichLink(null, range); } },
@@ -1437,7 +2092,10 @@
         var editor = state.editor;
         if (!item || !range || !editor || range.editor !== editor) return closeSlash();
         var current = currentSlashQuery();
-        if (!current || current.editor !== range.editor || current.from !== range.from || current.to !== range.to || current.text !== range.text) return closeSlash();
+        if (range.selection) {
+            var selection = editor.state.selection;
+            if (editor.state.doc !== range.doc || selection.from !== range.from || selection.to !== range.to) return closeSlash();
+        } else if (!current || current.editor !== range.editor || current.from !== range.from || current.to !== range.to || current.text !== range.text) return closeSlash();
         closeSlash();
         if (item.deferred) {
             // Leave the query intact until the user approves the dialog result.
@@ -1453,18 +2111,44 @@
     }
 
     function onEditorKeydown(event) {
+        if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey
+            && (String(event.key).toLowerCase() === 'v' || event.code === 'KeyV')) {
+            beginPlainTextPaste(event);
+        } else if (!['Control', 'Meta', 'Shift'].includes(event.key)) {
+            state.plainPaste = null;
+        }
         var view = state.editor && state.editor.view;
         if (event.isComposing || event.keyCode === 229 || ctx.composing || (view && view.composing)) {
             closeSlash();
             return;
         }
+        if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && state.editor && state.editor.isEditable && !state.editor.state.selection.empty) {
+            var selected = state.editor.state.selection;
+            ctx.slashRange = { from: selected.from, to: selected.to, text: state.editor.state.doc.textBetween(selected.from, selected.to), editor: state.editor, doc: state.editor.state.doc, selection: true };
+            ctx.slashFilter = ''; ctx.slashActiveIndex = 0; ctx.slashOpen = true;
+            ctx.slashItems = slashItemDefs().filter(function (item) { return item.writingCommand; });
+            renderSlashMenu(); positionSlashMenu();
+            event.preventDefault(); event.stopPropagation(); return;
+        }
         if (!ctx.slashOpen) return;
+        if ((event.key === 'Enter' || event.key === 'Tab') && ctx.slashRange && !ctx.slashRange.selection) {
+            // The menu is normally refreshed on an animation frame. A fast
+            // activation can arrive before that frame reflects the latest text.
+            maybeSlash();
+            if (!ctx.slashOpen) return;
+        }
+        if (ctx.slashRange && ctx.slashRange.selection && (/^[a-z]$/i.test(event.key) || event.key === 'Backspace')) {
+            ctx.slashFilter = event.key === 'Backspace' ? ctx.slashFilter.slice(0, -1) : ctx.slashFilter + event.key.toLowerCase();
+            ctx.slashItems = slashItemDefs().filter(function (item) { return item.writingCommand && item.keywords.indexOf(ctx.slashFilter) === 0; });
+            ctx.slashActiveIndex = 0; renderSlashMenu();
+            event.preventDefault(); event.stopPropagation(); return;
+        }
         var handled = true;
         if (event.key === 'ArrowDown') {
-            ctx.slashActiveIndex = (ctx.slashActiveIndex + 1) % ctx.slashItems.length;
+            ctx.slashActiveIndex = ctx.slashItems.length ? (ctx.slashActiveIndex + 1) % ctx.slashItems.length : 0;
             renderSlashMenu();
         } else if (event.key === 'ArrowUp') {
-            ctx.slashActiveIndex = (ctx.slashActiveIndex - 1 + ctx.slashItems.length) % ctx.slashItems.length;
+            ctx.slashActiveIndex = ctx.slashItems.length ? (ctx.slashActiveIndex - 1 + ctx.slashItems.length) % ctx.slashItems.length : 0;
             renderSlashMenu();
         } else if (event.key === 'Enter' || event.key === 'Tab') {
             chooseSlashItem(ctx.slashActiveIndex);
@@ -1697,6 +2381,7 @@
     }
 
     function cancelPendingImageOperations(matches) {
+        state.plainPaste = null;
         state.pendingImageOperations.slice().forEach(function (operation) {
             if (!matches || matches(operation)) cancelImageOperation(operation);
         });
@@ -1852,6 +2537,59 @@
         } catch (reportError) { /* diagnostics must not interrupt editor input */ }
     }
 
+    function insertPlainText(view, text) {
+        if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
+        if (!imageInsertContext(view, 'paste')) return false;
+        text = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+        if (!text) return false;
+        var transaction = view.state.tr;
+        if (view.state.selection.$from.parent.type.spec.code) {
+            transaction.insertText(text);
+        } else {
+            // Build text-only DOM, then one transaction: no recursive paste,
+            // source HTML, link paste rules, or clipboard-image handling.
+            var container = document.createElement('div');
+            text.split('\n').forEach(function (line) {
+                var paragraph = document.createElement('p');
+                if (line) paragraph.textContent = line;
+                else paragraph.appendChild(document.createElement('br'));
+                container.appendChild(paragraph);
+            });
+            var slice = engine().PMDOMParser.fromSchema(view.state.schema).parseSlice(container, {
+                preserveWhitespace: true, context: view.state.selection.$from
+            });
+            transaction.replaceSelection(slice);
+        }
+        view.dispatch(transaction.setStoredMarks([]).setMeta('preventAutolink', true).scrollIntoView());
+        scheduleMirrorFlush();
+        return true;
+    }
+
+    function beginPlainTextPaste(event) {
+        var view = state.editor && state.editor.view;
+        if (view && imageInsertContext(view, 'paste')) state.plainPaste = { at: Date.now() };
+    }
+
+    function handlePlainTextInput(view, event) {
+        if (event.inputType !== 'insertFromPaste' && event.inputType !== 'insertFromPasteAsQuotation') return false;
+        return handlePlainTextPaste(view, event);
+    }
+
+    function handlePlainTextPaste(view, event) {
+        var request = state.plainPaste;
+        var plain = event.shiftKey || (request && Date.now() - request.at < 2000);
+        if (!plain) return false;
+        var data = event.clipboardData || event.dataTransfer;
+        var text = window.SutraDOMSafety.clipboardText(data) || (typeof event.data === 'string' ? event.data : '');
+        // An empty paste event may be followed by beforeinput with the actual
+        // data. Let the browser continue rather than swallowing the paste.
+        if (!text) return true; // Handled by native input, without preventDefault.
+        event.preventDefault();
+        insertPlainText(view, text);
+        state.plainPaste = null;
+        return true;
+    }
+
     function handleImagePaste(view, event) {
         var data = event && event.clipboardData;
         if (!data) return false;
@@ -1962,7 +2700,7 @@
     }
 
     function insertHtml(html) {
-        if (!state.editor) return false;
+        if (!state.editor || !state.editor.isEditable) return false;
         try {
             state.editor.chain().focus().insertContent(normalizeLegacyHtml(html || ''), { parseOptions: { preserveWhitespace: false } }).run();
         } catch (e) {
@@ -2044,7 +2782,7 @@
     };
 
     function exec(kind, arg) {
-        if (!state.editor) return false;
+        if (!state.editor || !state.editor.isEditable) return false;
         var command = COMMANDS[kind];
         if (!command) return false;
         var ok = false;
@@ -2084,7 +2822,9 @@
         search: searchBridge,
         comments: commentsBridge,
         // Exposed for tests.
-        _normalizeLegacyHtml: normalizeLegacyHtml
+        _normalizeLegacyHtml: normalizeLegacyHtml,
+        _planAutomaticPageBreaks: planAutomaticPageBreaks,
+        _groupPageLineRects: groupPageLineRects
     };
     }
     var primaryEditor = createEditorInstance();

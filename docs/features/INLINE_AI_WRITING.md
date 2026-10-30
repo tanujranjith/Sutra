@@ -1,5 +1,49 @@
 # Inline AI writing help
 
+## Explicit passage commands
+
+Use `/grammar`, `/spelling`, or `/rephrase` in either Notes editor or Assistant
+chat. In Notes, select ordinary text within one paragraph and press `/`, then
+choose the command. The selection stays untouched while the menu and review
+are open. At a caret, eligible plain-text note blocks preload into the review;
+the scope identifies included blocks. Links, code, embeds, and mixed-format
+blocks stay untouched. In chat, enter `/grammar your passage`
+(or the other commands), then Send to open the review. In the full Assistant view,
+the shared review panel opens temporarily and closes after Cancel or Apply. Cancel
+keeps the command in the composer; Apply returns the reviewed draft there.
+
+Modern Notes removes a typed slash query immediately when its command is
+activated by Enter or click. Cancel leaves the passage unchanged and does not
+restore the consumed command; normal editor Undo remains available. A selected
+passage is not removed. Equivalent same-note reloads and repeated Notes-view
+notifications keep the writing review open. Actual source changes pause the
+review with an explicit warning and disable Apply; navigation, locking, and
+remote replacement still close it. Send remains inside the writing workflow.
+
+Edit the passage and instruction, then choose **Generate draft**. This sends
+only that passage and instruction through the configured provider. It excludes
+chat history, workspace retrieval, and attachments. The limit is 8,000 passage
+characters. Opening the review, an empty passage, and Cancel make no provider
+generation request. Provider credentials and the normal send disclosure remain
+required for generation.
+
+Review or edit the returned plain-text draft, then choose **Apply** or **Cancel**.
+In Notes, Apply corrects the captured passage through the owning editor's Undo.
+Whole-note drafts must preserve paragraph count/order. Modern Notes displays
+temporary changed-word decorations, then applies exact changed spans; those
+decorations never enter saved HTML. **View or edit full draft** exposes the
+complete editable result. In chat it returns the reviewed text to the composer;
+it does not send a second message. Editing the original text, changing its page
+or conversation, locking, or applying remote changes invalidates the review.
+
+To protect authored structure, selection commands reject links, code, embedded
+items, mixed formatting, and selections spanning paragraph boundaries. The
+Modern Editor preserves the selection's uniform text marks. In Classic Notes,
+select within one text run; a selection containing markup is rejected. Existing
+general writing help in Modern Notes uses the same passage review and Apply.
+
+## General writing help
+
 In the Modern Notes editor, open **Sutra Assistant writing help** from the
 slash menu (`/ai` remains a search alias), the toolbar, or the selection
 toolbar. The writing workspace opens
@@ -9,18 +53,18 @@ conversation and composer so the note request is easy to review. **Back to
 chat** returns to the same conversation and leaves any existing composer text
 untouched.
 
-The workspace shows the instruction, the exact note passage, and any selected
-text included in the request. A selected passage is limited to 16,000
-characters; without a selection, context comes from the current paragraph, up
-to 6,000 characters. Opening writing help sends nothing. **Generate draft**
+The workspace shows the instruction and exact note passage. In Modern Notes,
+writing help follows the same eligible current-note/selection rules and 8,000
+character limit as the explicit commands above. Opening writing help sends
+nothing. **Generate draft**
 uses the canonical configured Assistant provider and its existing send
 confirmation. Only the displayed passage/selection and instruction are sent;
 the request does not ask for workspace categories or other note context.
 
-The returned draft is plain text. Review or edit it, then choose **Insert at
-selection** or **Replace selected text**. Replace is available only for a
-nonempty selection. A slash invocation replaces only its captured slash query;
-the text before it stays intact. Accepted text uses native text/break nodes
+The returned draft is plain text. In Modern Notes, review the changed words or
+expand the full draft, then choose **Apply**. Other legacy writing entry points
+retain **Insert at selection** or **Replace selected text** as appropriate.
+Accepted text uses native text/break nodes
 and the owning editor's history/save path, so the usual Undo command remains
 available. Provider output is never parsed as HTML.
 

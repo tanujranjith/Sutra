@@ -202,6 +202,7 @@ test('Notes and folders stay inside the sidebar list during icon and page-link p
 test('the body-portaled Split View Note selector closes when its owner becomes inactive', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 760 });
   await openApp(page);
+  await page.evaluate(() => window.setActiveView('notes'));
   const ids = await page.evaluate(() => {
     const hooks = window.__sutraPublicBetaTestHooks;
     return [
@@ -209,6 +210,10 @@ test('the body-portaled Split View Note selector closes when its owner becomes i
       hooks.createNoteInActiveSpace('Portal owner secondary', '<p>Secondary note.</p>').id
     ];
   });
+  // Creating fixtures through the test hook does not change the current page.
+  // The first page after a fresh workspace may still be protected Help & Docs,
+  // which cannot own a split pair; load the ordinary note as the split owner.
+  await page.evaluate(primaryPageId => window.loadPage(primaryPageId), ids[0]);
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('split-note-portal-seed'));
 
   const menu = page.locator('#splitNoteSelect-menu');
@@ -224,7 +229,8 @@ test('the body-portaled Split View Note selector closes when its owner becomes i
   await expect(menu).toHaveClass(/is-open/);
   await expect(menu).not.toHaveAttribute('aria-hidden', 'true');
   expect(await menu.evaluate(element => element.inert)).toBe(false);
-  await expect(menu.locator('.nf-select-option').filter({ hasText: 'Portal owner primary' })).toHaveCount(1);
+  // The current primary cannot be selected as its own split partner.
+  await expect(menu.locator('.nf-select-option').filter({ hasText: 'Portal owner primary' })).toHaveCount(0);
   await expect(menu.locator('.nf-select-option').filter({ hasText: 'Portal owner secondary' })).toHaveCount(1);
 
   // This follows the app lifecycle path directly so the test exercises the

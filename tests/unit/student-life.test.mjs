@@ -188,25 +188,15 @@ test('financial runway reports a gap when outflow exceeds inflow', () => {
 
 /* ------------------------------------------------------------- Wellness */
 
-test('wellness trends average within window, flag low sleep, stay non-medical', () => {
-  const now = '2026-07-10T12:00:00Z';
-  const ws = { lifeWorkspace: {
+test('retired wellness trend API does not interpret legacy mood, stress, or sleep data', () => {
+  const trends = life.getWellnessTrends({ lifeWorkspace: {
     wellness: { checkIns: [
-      { createdAt: '2026-07-09T12:00:00Z', stress: 8 },
-      { createdAt: '2026-07-08T12:00:00Z', stress: 7 },
-      { createdAt: '2026-01-01T12:00:00Z', stress: 1 } // outside window
+      { createdAt: '2026-07-09T12:00:00Z', mood: 'low', stress: 8 },
+      { createdAt: '2026-07-08T12:00:00Z', mood: 'low', stress: 7 }
     ] },
     sleepTracker: { entries: [{ date: '2026-07-09', totalSleepMinutes: 360 }] }
-  } };
-  const trends = life.getWellnessTrends(ws, { now, days: 14 });
-  assert.equal(trends.samples.checkIns, 2, 'old check-in excluded');
-  assert.equal(trends.averages.stress, 7.5);
-  assert.equal(Object.prototype.hasOwnProperty.call(trends.averages, 'energy'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(trends.direction, 'energy'), false);
-  assert.equal(trends.averages.sleepMinutes, 360);
-  assert.ok(trends.signals.some((s) => /Stress has been high/.test(s)));
-  assert.ok(trends.signals.some((s) => /below seven hours/.test(s)));
-  assert.match(trends.disclaimer, /not medical/i);
+  } }, { now: '2026-07-10T12:00:00Z', days: 14 });
+  assert.deepEqual(trends, { available: false, reason: 'retired', signals: [] });
 });
 
 /* --------------------------------------------------------- Emergency Week */
@@ -242,6 +232,28 @@ test('emergency week tolerates tasks with no due date and empty workspace', () =
   assert.ok(plan.essentials.length + plan.deferred.length >= 1);
   const empty = life.buildEmergencyWeek({}, { now: '2026-07-10T08:00:00Z' });
   assert.deepEqual(empty.essentials, []);
+});
+
+test('emergency week respects canonical Homework completion and separate task semantics', () => {
+  const store = require('../../src/domain/homework-store.js');
+  const homework = store.normalizeWorkspace({ tasks: [
+    { id: 'reopened', title: 'Reopened assignment', done: false, completed: true, status: 'done', futureData: { keep: true } },
+    { id: 'finished', title: 'Finished assignment', done: true, completed: false },
+    { id: 'legacy', title: 'Legacy finished', completed: true }
+  ] });
+  const workspace = { homeworkWorkspace: homework, tasks: [
+    { id: 'open-task', title: 'Open task', completed: false },
+    { id: 'done-task', title: 'Finished task', completed: true, done: false }
+  ] };
+  const before = structuredClone(workspace);
+  const plan = life.buildEmergencyWeek(workspace, { now: '2026-07-10T08:00:00Z' });
+  const ids = plan.essentials.concat(plan.deferred).map(item => item.id);
+  assert.ok(ids.includes('reopened'));
+  assert.ok(ids.includes('open-task'));
+  assert.ok(!ids.includes('finished'));
+  assert.ok(!ids.includes('legacy'));
+  assert.ok(!ids.includes('done-task'));
+  assert.deepEqual(workspace, before);
 });
 
 /* --------------------------------------------------- Operating Manual */

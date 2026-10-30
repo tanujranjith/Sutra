@@ -127,8 +127,14 @@ test('locked records never expose body text or snippets', () => {
   assert.equal(byTitle.results[0].snippet, null, 'no snippet for locked pages');
   assert.equal(byTitle.results[0].locked, true);
 
+  const typoTitle = engine.search([locked], 'jounral', { now: NOW });
+  assert.equal(typoTitle.total, 1, 'locked titles retain typo recovery');
+  assert.equal(typoTitle.results[0].snippet, null, 'locked title matches still reveal no body snippet');
+
   const byBody = engine.search([locked], 'NEVER-SNIPPET', { now: NOW });
   assert.equal(byBody.total, 0, 'locked body text is not searchable');
+  const byTypoBody = engine.search([locked], 'secrett', { now: NOW });
+  assert.equal(byTypoBody.total, 0, 'typo recovery never searches a locked body');
 });
 
 test('snippets are centered on the match with valid highlight ranges', () => {
@@ -269,6 +275,39 @@ test('prematched records are always included in All and ranked modestly', () => 
   assert.equal(strongTitle.results[0].type, 'page', 'direct page match outranks prematched record');
 });
 
+test('Settings prematched results preserve bounded owner relevance', () => {
+  const records = [
+    { sourceId: 'help', type: 'assistant', title: 'Help: Appearance', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true },
+    { sourceId: 'answer', type: 'assistant', title: 'Answer: Change appearance', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true },
+    { sourceId: 'theme', type: 'setting', title: 'Settings: Theme', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true, settingsSearchScore: 250 }
+  ];
+  const out = engine.search(records, 'turn on dark mode', { now: NOW });
+
+  assert.equal(out.results[0].sourceId, 'theme', 'Settings owner relevance outranks generic secondary matches');
+  assert.equal(out.results[0].score, 250);
+  assert.equal(out.results.find(result => result.sourceId === 'help').score, 30, 'non-Settings prematched scoring stays unchanged');
+  assert.equal(out.results.find(result => result.sourceId === 'answer').score, 30);
+});
+
+test('Settings relevance is capped and strong direct title matches remain higher', () => {
+  const capped = engine.search([
+    { sourceId: 'capped', type: 'setting', title: 'Settings: Theme', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true, settingsSearchScore: '900' }
+  ], 'turn on dark mode', { now: NOW });
+  assert.equal(capped.results[0].score, 300);
+
+  const direct = engine.search([
+    { sourceId: 'owner', type: 'setting', title: 'Settings: Theme', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true, settingsSearchScore: 250 },
+    { sourceId: 'direct', type: 'setting', title: 'Dark Mode', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true, settingsSearchScore: 250 }
+  ], 'dark mode', { now: NOW });
+  assert.equal(direct.results[0].sourceId, 'direct');
+  assert.ok(direct.results[0].score > 300);
+
+  const invalid = engine.search([
+    { sourceId: 'invalid', type: 'setting', title: 'Settings: Theme', body: '', breadcrumb: '', metadata: {}, timestamp: 0, prematched: true, settingsSearchScore: Infinity }
+  ], 'turn on dark mode', { now: NOW });
+  assert.equal(invalid.results[0].score, 30, 'non-finite owner scores fall back to the existing prematched score');
+});
+
 test('due-soon and completed homework affect ranking', () => {
   const soon = { sourceId: 'hw-soon', type: 'homework', title: 'Biology lab', body: '', breadcrumb: '', metadata: { due: '2026-05-21' }, timestamp: 0 };
   const far = { sourceId: 'hw-far', type: 'homework', title: 'Biology essay', body: '', breadcrumb: '', metadata: { due: '2026-06-30' }, timestamp: 0 };
@@ -296,4 +335,74 @@ test('invalid records are rejected safely', () => {
     page({ title: 'Valid biology' })
   ], 'biology', { now: NOW });
   assert.equal(out.total, 1);
+});
+
+test('one-edit spelling recovery preserves title priority over body matches', () => {
+  const records = [
+    page({ sourceId: 'body', title: 'Word list', body: 'receive is a common spelling error' }),
+    page({ sourceId: 'typo-title', title: 'Receive practice', body: '' }),
+    page({ sourceId: 'exact-title', title: 'Recieve glossary', body: '' })
+  ];
+  const out = engine.search(records, 'recieve', { now: NOW });
+
+  assert.equal(out.total, 3);
+  assert.equal(out.results[0].sourceId, 'exact-title', 'a direct title match ranks first');
+  assert.equal(out.results[1].sourceId, 'typo-title', 'a one-edit title match outranks a one-edit body match');
+  assert.equal(out.results[1].matchKind, 'title');
+  assert.equal(out.results[2].sourceId, 'body', 'a one-edit body match stays below title matches');
+});
+
+test('two-word searches allow one typo while still requiring both query tokens', () => {
+  const records = [
+    page({ sourceId: 'matching', title: 'Receive Notes', body: '' }),
+    page({ sourceId: 'partial', title: 'Receive Guide', body: '' })
+  ];
+  const out = engine.search(records, 'recieve notes', { now: NOW });
+
+  assert.equal(out.total, 1);
+  assert.equal(out.results[0].sourceId, 'matching');
+});
+
+test('fuzzy and subsequence snippets expose the visible matched text ranges', () => {
+  const typo = engine.buildSnippet('Read the receive chapter before class.', ['recieve'], 120);
+  assert.ok(typo.ranges.some(([start, end]) => typo.text.slice(start, end).toLowerCase() === 'receive'));
+
+  const subsequence = engine.buildSnippet('AP Biology', ['apbio'], 120);
+  const highlighted = subsequence.ranges.map(([start, end]) => subsequence.text.slice(start, end));
+  assert.deepEqual(highlighted, ['AP', 'Bio']);
+});
+
+test('direct field matches outrank typo recovery, which outranks subsequence matches', () => {
+  const direct = engine.scoreField('Receive', 'receive');
+  const typo = engine.scoreField('Receive', 'recieve');
+  const subsequence = engine.scoreField('AP Biology', 'apbio');
+
+  assert.ok(direct > typo);
+  assert.ok(typo > subsequence);
+});
+
+test('token matching is capped while full literal phrase matching remains available', () => {
+  const manyTokens = Array.from({ length: 15 }, (_, index) => `topic${index}`).join(' ');
+  const normalizedTokens = engine.normalizeQuery(manyTokens);
+  assert.equal(normalizedTokens.words.length, 12);
+  assert.equal(normalizedTokens.phrase, manyTokens.toLowerCase());
+
+  const longPhrase = 'literal'.repeat(45);
+  assert.deepEqual(engine.normalizeQuery(longPhrase).words, [], 'an over-limit partial token is not fuzzy-matched');
+  const out = engine.search([
+    page({ title: 'Long note', body: `prefix ${longPhrase} suffix` })
+  ], longPhrase, { now: NOW });
+  assert.equal(out.total, 1, 'a full literal phrase longer than 256 characters still searches the complete body');
+  assert.equal(out.results[0].matchKind, 'body');
+});
+
+test('typo scans stop at 20,000 characters while literal body search still reaches later text', () => {
+  const lateToken = `${'x '.repeat(10000)}receive`;
+  assert.equal(engine.scoreField(lateToken, 'recieve'), 0, 'field typo recovery is bounded');
+
+  const record = page({ title: 'Reading list', body: lateToken });
+  assert.equal(engine.search([record], 'recieve', { now: NOW }).total, 0, 'body typo recovery is bounded');
+  const literal = engine.search([record], 'receive', { now: NOW });
+  assert.equal(literal.total, 1, 'literal matching still scans the full body');
+  assert.ok(literal.results[0].snippet.text.includes('receive'));
 });

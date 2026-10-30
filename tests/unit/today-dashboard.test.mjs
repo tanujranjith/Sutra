@@ -28,7 +28,7 @@ test('older Calm preferences migrate to the essentials-only composition', () => 
     preset: 'calm',
     order: dashboard.WIDGETS.map(widget => widget.id),
     hidden: ['tonight', 'habits', 'tracker', 'life-signals', 'academic-planner', 'momentum'],
-    sizes: { priorities: 'wide' }
+    sizes: {}
   });
   assert.deepEqual(Array.from(value.hidden), Array.from(dashboard.getDefaultPreferences().hidden));
   assert.equal(value.version, dashboard.VERSION);

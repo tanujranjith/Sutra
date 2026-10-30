@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Today view redesign coverage:
 // 1. SutraTodayCenter pure helpers are deterministic (injected clock):
@@ -8,8 +9,8 @@ import { expect, test } from '@playwright/test';
 //    filter, hides undated items unless explicitly filtered, caps zones with
 //    a "+N more" overflow that opens the Deadline Radar modal, and opens the
 //    correct source view on chip click.
-// 3. The Next Up card + footer counts populate from live data and fall back
-//    to friendly empty states.
+// 3. Your day uses live counts, metadata, actions and friendly empty states
+//    without duplicating its featured task or the retired mobile shell.
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -38,6 +39,7 @@ async function openApp(page) {
   // hydration cannot replace the arrays underneath this test.
   await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
+  await waitForAppReady(page);
   await page.waitForFunction(() => !!window.SutraTodayCenter && !!window.flowAtelier);
 }
 
@@ -146,7 +148,7 @@ test('pure helpers: urgency, grouping, prioritization, summary, agenda', async (
 });
 
 test('radar renders live data, filters, overflow, and opens the right source', async ({ page, isMobile }) => {
-  test.skip(isMobile, 'The phone Home shell uses its dedicated Next Up and agenda contract instead of the desktop radar.');
+  test.skip(isMobile, 'Phone radar uses the compact list; the shared data contract is covered below.');
   await openApp(page);
 
   await page.evaluate(() => {
@@ -251,7 +253,7 @@ test('radar consolidates linked Homework deadline, due marker, and focus block',
   expect(result).toHaveLength(1);
   expect(result[0]).toMatchObject({ source: 'homework', title: 'Finish the C++ code' });
   expect(result[0].scheduleSummary).toMatch(/^Scheduled /);
-  const chip = page.locator('#upcomingRadarMount .radar-chip', { hasText: 'Finish the C++ code' });
+  const chip = page.locator('#upcomingRadarMount .radar-chip, #upcomingRadarMount .radar-list-item', { hasText: 'Finish the C++ code' });
   await expect(chip).toHaveCount(1);
   await expect(chip.locator('.radar-chip-meta')).toContainText('Scheduled');
 });
@@ -307,8 +309,7 @@ test('Deadline Radar can mark tasks, Homework, and Timeline items done', async (
   }), ids)).toEqual({ task: true, homework: true, block: true });
 });
 
-test('Next Up card, footer counts, and empty states use live data', async ({ page, isMobile }) => {
-  test.skip(isMobile, 'The phone Home shell has separate live Next Up assertions below.');
+test('Your day counts, overdue review, and empty states use live data', async ({ page }) => {
   await openApp(page);
 
   // Empty workspace → clear empty states, zero counts, empty radar.
@@ -320,13 +321,14 @@ test('Next Up card, footer counts, and empty states use live data', async ({ pag
     fa.renderTaskViews();
   });
   await expect(page.locator('#todayDailyBrief .tnu-title')).toHaveText(/Nothing due/);
+  await expect(page.locator('.your-day-heading p')).toHaveText('0 tasks today');
   await expect(page.locator('#tccOverdueCount')).toHaveText('0');
   await expect(page.locator('#tccDueTodayCount')).toHaveText('0');
   await expect(page.locator('#tccDueWeekCount')).toHaveText('0');
   await expect(page.locator('#upcomingRadarMount .radar-empty')).toBeVisible();
 
-  // Seed an overdue high-priority task → it becomes Next Up with an overdue
-  // status pill, focus + open actions, and live footer counts.
+  // The existing recommendation retains its status in quiet metadata, with
+  // the visible overdue row connected to recovery instead of a duplicate footer.
   await page.evaluate(() => {
     const fa = window.flowAtelier;
     const dk = (off) => {
@@ -342,14 +344,15 @@ test('Next Up card, footer counts, and empty states use live data', async ({ pag
   });
   const brief = page.locator('#todayDailyBrief');
   await expect(brief.locator('.tnu-title')).toHaveText('QA overdue essay');
-  await expect(brief.locator('.tnu-status-pill')).toHaveText('Overdue by 3 days');
+  await expect(brief.locator('.tnu-meta')).toContainText('Overdue by 3 days');
   await expect(brief.locator('[data-donow-focus]')).toBeVisible();
   await expect(brief.locator('[data-brief-open-source]')).toBeVisible();
   await expect(page.locator('#tccOverdueCount')).toHaveText('1');
   await expect(page.locator('#tccDueWeekCount')).toHaveText('1');
 
-  // Footer overdue count opens the overdue recovery flow.
-  await page.click('[data-nextup-count="overdue"]');
+  await expect(brief.locator('.your-day-overdue')).toContainText('1 overdue');
+  await expect(page.locator('.today-nextup-footer')).toBeHidden();
+  await brief.locator('[data-donow-recover]').click();
   await expect(page.locator('#overdueRecoveryModal')).toHaveClass(/active/);
 });
 
@@ -383,20 +386,19 @@ test('mobile Today is a focused command surface with bounded chrome and live act
   });
 
   await expect(page.locator('body')).toHaveClass(/mobile-today-mode/);
-  const shell = page.locator('#todayMobileShell');
-  await expect(shell).toBeVisible();
+  const brief = page.locator('#todayDailyBrief');
+  await expect(page.locator('#todayMobileShell')).toBeHidden();
   await expect(page.locator('.top-nav')).toBeHidden();
   await expect(page.locator('#storageOptions')).toBeHidden();
-  await expect(page.locator('#view-today .today-cc-layout')).toBeHidden();
-
-  await expect(shell.locator('.today-mobile-appbar')).toBeVisible();
-  await expect(shell.locator('.today-mobile-greeting h1')).toContainText(/Good (morning|afternoon|evening)/);
-  await expect(shell.locator('.today-mobile-next .mobile-card-title')).toHaveText('Chemistry lab report');
-  await expect(shell.locator('.today-mobile-focus-cta')).toContainText(/Start \d+-min focus/);
-  await expect(shell.locator('.today-mobile-open-link')).toBeVisible();
-  await expect(shell.locator('.today-mobile-agenda-row')).toHaveCount(3);
-  await expect(shell.locator('.today-mobile-review-row')).toBeVisible();
-  await expect(shell.locator('.today-mobile-trust')).toBeVisible();
+  await expect(page.locator('#view-today .today-cc-layout')).toBeVisible();
+  await expect(brief.locator('.your-day-heading h3')).toHaveText('Your day');
+  await expect(brief.locator('.your-day-heading p')).toHaveText('1 task today');
+  await expect(brief.locator('.tnu-title')).toHaveText('Chemistry lab report');
+  await expect(brief.locator('[data-donow-focus]')).toBeVisible();
+  await expect(brief.locator('.tnu-actions > [data-brief-open-source]')).toBeVisible();
+  await expect(brief.locator('.your-day-task-row', { hasText: 'Chemistry lab report' })).toHaveCount(0);
+  await expect(page.locator('#homeQuickTaskInput')).toBeVisible();
+  await expect(page.locator('#view-today .today-radar-card')).toBeVisible();
 
   const geometry = await page.evaluate(() => {
     const nav = document.getElementById('sutraBottomNav');
@@ -407,18 +409,22 @@ test('mobile Today is a focused command surface with bounded chrome and live act
       horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
       navBottom: navBox && navBox.bottom,
       navHeight: navBox && navBox.height,
-      captureHeight: captureBox && captureBox.height
+      captureHeight: captureBox && captureBox.height,
+      dayBottom: document.querySelector('.your-day-panel').getBoundingClientRect().bottom,
+      radarTop: document.querySelector('.today-radar-card').getBoundingClientRect().top
     };
   });
   expect(geometry.horizontalOverflow).toBe(false);
   expect(geometry.navBottom).toBeLessThanOrEqual(845);
   expect(geometry.navHeight).toBeLessThanOrEqual(90);
   expect(geometry.captureHeight).toBeLessThanOrEqual(60);
+  expect(geometry.dayBottom).toBeLessThanOrEqual(geometry.radarTop);
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: '.tmp/mobile-today-implementation-390x844.png', fullPage: false });
-  const notificationTrigger = shell.locator('.today-mobile-notifications');
+  const notificationTrigger = page.locator('#sutraBottomNav [data-bn-view="__more"]');
   await notificationTrigger.click();
+  await page.locator('[data-mobile-more-action="notifications"]').click();
   const notificationPanel = page.locator('#notifPanel');
   await expect(notificationPanel).toHaveAttribute('aria-hidden', 'false');
   await expect(page.locator('body')).toHaveClass(/notif-panel-open/);

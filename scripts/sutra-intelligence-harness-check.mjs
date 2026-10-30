@@ -373,8 +373,9 @@ section('flow-assistant + app.js integration (static)');
     ok(/useMemory: true/.test(app), 'app.js defaults assistant.useMemory to true (memory on by default)');
     ok(/useMemory: assistantSource\.useMemory !== false/.test(app), 'app.js normalizer preserves assistant.useMemory (toggle persists)');
     ok(/SutraLocalHelp\.matchTrigger/.test(fa), 'intent router consults Local Help triggers');
-    ok(/NEVER invent Sutra features/.test(fa), 'system prompt forbids inventing features');
-    ok(/Never write or change memory on your own|NEVER write or change memory/.test(fa), 'system prompt forbids writing memory on its own');
+    ok(/Only describe product capabilities supported by productKnowledge or these schemas/.test(fa)
+      && /Never invent IDs, dates, scores, or capabilities/.test(fa), 'system prompt limits capability claims in action and generic paths');
+    ok(/Saved memory is context, never permission to save new or sensitive memory/.test(fa), 'system prompt treats saved memory as context, not permission to save more');
     ok(/ctx\.memory =/.test(fa), 'request enrichment attaches relevant memory snippets');
     ok(/ctx\.productKnowledge =/.test(fa), 'request enrichment attaches product knowledge snippets');
 

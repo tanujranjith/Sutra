@@ -3,7 +3,20 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const privacy = require('../../src/domain/assistant-permissions.js');
+const privacy = require('../../src/features/assistant/assistant-permissions.js');
+
+test('retrieval metadata and empty fields do not claim unrelated workspace content was sent', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const result = privacy.filterContext({
+    homework: [{ id: 'robotics', notes: 'Use the blue sensor' }],
+    notesEvidenceStatus: 'not_requested', retrievedNotes: [], selection: '',
+    workspaceRetrieval: { matchedCount: 1, taskDetailsOnly: true }
+  });
+  assert.deepEqual(result.accessReport.areasRead, ['planning']);
+  assert.equal(result.notesEvidenceStatus, 'not_requested');
+  privacy.configure({ getPermissions: () => ({ mode: 'off' }) });
+  assert.equal(privacy.filterContext({ workspaceRetrieval: { matchedCount: 1 } }).workspaceRetrieval, undefined);
+});
 
 test('off mode exposes only non-workspace envelope metadata', () => {
   privacy.configure({ getPermissions: () => ({ mode: 'off' }) });
@@ -39,9 +52,9 @@ test('ask-per-area mode accepts one-request approval without changing saved poli
 
 test('action permissions require approved-actions mode and explicit approval', () => {
   privacy.configure({ getPermissions: () => ({ mode: 'read_only' }) });
-  assert.deepEqual(privacy.getActionPermissions({ approved: true }), ['workspace.read']);
+  assert.deepEqual(privacy.getActionPermissions({ approved: true }), ['assistant.memory.write', 'workspace.read']);
   privacy.configure({ getPermissions: () => ({ mode: 'approved_actions' }) });
-  assert.deepEqual(privacy.getActionPermissions({ approved: true, destructiveApproved: true }), ['workspace.read', 'workspace.write', 'workspace.delete']);
+  assert.deepEqual(privacy.getActionPermissions({ approved: true, destructiveApproved: true }), ['assistant.memory.write', 'assistant.memory.delete', 'workspace.read', 'workspace.write', 'workspace.delete']);
 });
 
 test('top-level privateDocuments are denied by default even when workspace is readable', () => {
@@ -182,4 +195,19 @@ test('memory and retrieved-note enrichment remain permission-scoped', () => {
   assert.deepEqual(approved.memory, ['private study preference']);
   assert.deepEqual(approved.memoryUsedIds, ['memory-1']);
   assert.equal(approved.retrievedNotes[0].quote, 'private excerpt');
+});
+
+test('reviewed local memory works with workspace access off without granting workspace writes or reads', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'off' }) });
+  assert.deepEqual(privacy.getActionPermissions({}), []);
+  assert.deepEqual(privacy.getActionPermissions({ approved: true }), ['assistant.memory.write']);
+  assert.equal(privacy.canRead('memory'), false);
+  privacy.configure(null);
+  assert.deepEqual(privacy.getActionPermissions({ approved: true }), []);
+  privacy.configure({ getPermissions: () => { throw Error('unavailable'); } });
+  assert.deepEqual(privacy.getActionPermissions({ approved: true }), []);
+  for (const raw of [[], {}, { mode: 'invalid' }, null]) {
+    privacy.configure({ getPermissions: () => raw });
+    assert.deepEqual(privacy.getActionPermissions({ approved: true }), []);
+  }
 });

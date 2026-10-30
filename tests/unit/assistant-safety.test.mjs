@@ -5,6 +5,24 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const safety = require('../../src/features/assistant/assistant-safety.js');
 
+function createReceiptDocument() {
+  return {
+    createElement(tagName) {
+      return {
+        tagName,
+        children: [],
+        setAttribute() {},
+        addEventListener() {},
+        appendChild(child) { this.children.push(child); return child; }
+      };
+    }
+  };
+}
+
+function receiptText(node) {
+  return [node.textContent || '', ...(node.children || []).map(receiptText)].join(' ');
+}
+
 test('local and provider receipts disclose transmission without retaining secrets', () => {
   const local = safety.normalizeReceipt({ local: true, deterministicEngines: ['Product Knowledge'], areasInspected: ['notes'], dataTransmitted: false });
   assert.equal(local.summary, 'Answered locally');
@@ -37,6 +55,26 @@ test('source validation fails closed for deleted, stale, and locked objects whil
   const deleted = safety.validateSource({ kind: 'note', id: 'gone', title: 'Gone', href: 'sutra://page/gone' }, resolver);
   assert.equal(deleted.status, 'unavailable');
   assert.equal(deleted.href, '');
+});
+
+test('locked receipt labels distinguish an explicitly authorized one-time read without exposing its body', () => {
+  const resolver = (_kind, id) => id === 'n1'
+    ? { id: 'n1', kind: 'note', title: 'Sealed Algebra', locked: true, quote: 'never show this', href: 'sutra://page/n1' }
+    : null;
+  const rendered = safety.renderReceipt({
+    sources: [{ kind: 'note', id: 'n1', title: 'Old title', readOnce: true, quote: 'private body' }]
+  }, { document: createReceiptDocument(), resolveSource: resolver });
+
+  assert.match(receiptText(rendered), /Sealed Algebra \(note, locked; read once with PIN for this request\)/);
+  assert.doesNotMatch(receiptText(rendered), /private body|never show this/);
+  assert.equal(rendered._sutraReceipt.sources[0].readOnce, true);
+  assert.equal(rendered._sutraReceipt.sources[0].quote, '');
+  assert.equal(rendered._sutraReceipt.sources[0].href, '');
+
+  const ordinary = safety.renderReceipt({
+    sources: [{ kind: 'note', id: 'n1', title: 'Sealed Algebra' }]
+  }, { document: createReceiptDocument(), resolveSource: resolver });
+  assert.match(receiptText(ordinary), /Sealed Algebra \(note, locked\)/);
 });
 
 test('live action targets reject invented and deleted ids and renew confirmation after a change', () => {

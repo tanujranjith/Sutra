@@ -33,6 +33,26 @@ loads from static hosting or directly from a local file.
   Because `app.js` runs at global scope, top-level names share one namespace —
   worth keeping in mind when reading or extending it.
 
+Assistant source-card DOM construction lives in `assistant-core.js` with injected
+document, live-source resolver, navigation, and exclusion callbacks. The core
+keeps canonical state resolution and routing. Task/exam source identities and
+informational one-time PIN-read labels survive chat normalization; those labels
+never authorize later reads. Life Calculator resolves the shared
+`SutraCustomTabs.evaluateExpression` parser only on user evaluation, preserving
+the existing script load order.
+
+The pure Assistant model/normalization module loads before workspace hydration,
+outside the optional Assistant pack, so disabled/lazy Assistant UI cannot discard
+saved source identities. Missing source cards can recover metadata from their
+saved response receipt; this does not retrieve bodies or grant access.
+
+The on-demand investigation loop and pure response-receipt builder also live in
+`SutraAssistantCore`. `flow-assistant.js` owns canonical registry reads, current
+privacy/scope checks, source clarification and progress UI; `app.js` retains the
+provider harness and both chat entry points. Every investigation transport goes
+through that existing harness, with at most three calls and no automatic retries.
+No durable index or second workspace is introduced.
+
 ### Core safety layer (loaded before everything else)
 
 The safety layer also includes **`src/core/migrations.js`**
@@ -88,9 +108,16 @@ unregistered `window.*`, un-inventoried workspace fields) are blocked in CI by
 
 ---
 
+Dedicated Assistant scripts live together in `src/features/assistant/`, including
+`assistant-permissions.js` and `surface-assistant-actions.js`. Their positions in
+`Sutra.html` are unchanged: permissions load early, while surface actions load
+after the engines they support. Shared entity adapters, persistence, diagnostics,
+and closure-bound runtime bridges retain their existing ownership.
+
 ## 3. Feature modules
 
-Self-contained feature areas live in **`src/features/*.js`**:
+Self-contained feature areas live in domain subdirectories under
+**`src/features/`** (see [`src/features/README.md`](../../src/features/README.md)):
 
 - `flow-assistant.js` — **Sutra Assistant**, the contextual chat panel and its
   Suggested Actions / Apply-Decline change cards / Assistant Activity.
@@ -103,8 +130,10 @@ Self-contained feature areas live in **`src/features/*.js`**:
   parsing, reasoning-aware timeout scaling, and per-response/aggregate
   diagnostics. No DOM, no network. See
   [`SUTRA_ASSISTANT.md` §15](../features/SUTRA_ASSISTANT.md).
-- `homework.js` — the Homework module (its own localStorage source of truth,
-  mirrored into `appData`).
+- `homework.js` — the Homework UI, using the established `SutraHomeworkStore`.
+  See [Homework storage and compatibility](../privacy-security/DATA_AND_BACKUPS.md#homework--established-store-and-legacy-compatibility)
+  and the [migration record](HOMEWORK_STORAGE_MIGRATION.md) for current canonical
+  persistence, the read-only migration adapter, and retained v1 mutation paths.
 - `ap-study.js` — AP Study.
 - `review.js` — Review / flashcards (spaced repetition).
 - `business-workspace.js` — Projects & Work.
@@ -201,12 +230,20 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
 
 - **One workspace object** (`appData`) is the in-memory truth; it persists to
   **IndexedDB** (`noteflow_atelier_db`). Course-file binaries persist separately
-  to `noteflow_attachments_db`; homework mirrors to localStorage.
+  to `noteflow_attachments_db`; Homework retains its established store and legacy
+  compatibility boundaries described above.
 - **One hydrate path** merges stored data over defaults and normalizes it on
   load; **one debounced save path** (with a lifecycle flush) writes it back.
 - `src/persistence/workspace-db.js` deliberately reuses one IndexedDB connection,
   closes it on `versionchange`, rejects blocked upgrades, and exposes an explicit
   close/reopen seam so future schema upgrades cannot leak connections or hang.
+- The shell loads `workspace-coordinator.js` before `legacy-workspace-migration.js`.
+  Boot recovery/repair takes the shared writer lock before reading and uses
+  atomic `writeIf` for replacement, journaling and the confirmed-root marker.
+  A superseded candidate is discarded. Boot and core share the coordinator's
+  canonical `hashRecord` and document identity; accepted boot writes notify other
+  documents without creating a self-conflict. Storage failures propagate into
+  the normal startup read guard.
 - **One persistence-health pipeline** wraps core saves, localStorage mirrors,
   IndexedDB transactions, attachment cache warming, imports, backups, and
   emergency exports. It records the last confirmed save, classifies quota /
@@ -251,7 +288,8 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
   circuit breaker pauses sync without blocking local saves. This is sync-time
   block merging, not a CRDT/OT collaborative editor. The normative contract is
   [`SYNC_PROTOCOL.md`](./SYNC_PROTOCOL.md).
-- **Workspace schema v7 makes sync portability and Assistant ownership explicit.** The classification
+- **Schema v7 introduced sync portability and Assistant ownership; the current
+  migration registry supports v8.** The classification
   in `persistence-inventory.json` covers all top-level fields, named nested
   durable contracts, localStorage mirrors, browser stores, assets, secrets, and
   deliberate exclusions. `appData.assistantChatHistory` owns durable
@@ -315,13 +353,14 @@ Run with Node from the project root:
   the HTML entry points (`document.getElementById` returns only the first match,
   so a dup id silently mis-wires).
 - `npm run verify` - the strongest practical local pass: `check:all` +
-  `build:deploy` + `check:deploy` + a deterministic serial Chromium e2e smoke
-  (`test:e2e:smoke`). The full browser matrix stays on `npm run test:e2e`.
+  `test:unit` + `build:deploy` + `check:deploy` + deterministic serial Chromium
+  smoke and Sync suites (`test:e2e:smoke`, `test:e2e:sync`). The full browser
+  matrix stays on `npm run test:e2e`.
 - `npm run check:guardrails` - architecture guardrails: fails CI when a change
   adds a new raw `innerHTML =` / `insertAdjacentHTML` / `document.write`, a new
   direct `localStorage.setItem` / `sessionStorage.setItem`, an unregistered
   `window.*` global, or a top-level workspace field missing from
-  `docs/persistence-inventory.json`. Baseline lives in
+  `docs/architecture/persistence-inventory.json`. Baseline lives in
   `scripts/guardrail-baseline.json`; reviewed exceptions use an inline
   `// sutra-allow-html:` / `// sutra-allow-storage:` marker, or
   `npm run check:guardrails:update` to deliberately re-baseline.
@@ -388,7 +427,7 @@ Sutra/
 ├─ tests/          e2e/ bench/ fixtures/                  # Playwright (see tests/README.md)
 ├─ docs/           architecture/ features/                # by topic (see docs/README.md)
 │                  privacy-security/ release/ archive/
-└─ assets/         brand/ vendor/ ss/
+└─ assets/         brand/ vendor/ marketing/ logos/ legacy/
 ```
 
 ## 12. Sutra.html load order (load-bearing)
@@ -398,7 +437,8 @@ cascade and the global-scope execution order both depend on it. Do not reorder.
 
 1. **`<head>`** — `assets/vendor/jszip` → core **safety layer** (`safe-storage` →
    `error-reporter` → `dom-safety` → `feature-guard` → `migrations`) →
-   **`src/state/workspace-normalizers.js`** → `src/sync/*` in protocol-to-engine
+   **`src/state/workspace-normalizers.js`** → domain modules and the pure
+   `features/assistant/assistant-core.js` chat normalizer → `src/sync/*` in protocol-to-engine
    dependency order → `components/icons/*` →
    stylesheets `styles/features/startup-intro.css`, `styles/base/styles.css`,
    `styles/themes/sutra-pro.css`, `styles/features/sutra-intelligence.css` →
@@ -466,7 +506,7 @@ reads must not open the Sync database or request provider data. The existing
 `SutraSync` and `SutraCloudSync` APIs retain their operational semantics;
 their open actions select the corresponding section in the shared modal.
 Sync scheduling stays inside its engine/bridge. Snapshot scheduling uses a
-separate Web Lock and successful-upload receipt in version-2 device-local
+separate Web Lock and successful-upload receipt in version-3 device-local
 Cloud metadata. The encryption helpers and provider registry stay in place.
 
 The restructure deliberately **stopped at green checkpoints**. Remaining work,

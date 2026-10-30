@@ -7,7 +7,7 @@ import { extractFunction } from '../helpers/extract-function.mjs';
 const appSource = readFileSync(new URL('../../src/core/app.js', import.meta.url), 'utf8');
 const notificationsSource = readFileSync(new URL('../../src/features/workspace/notifications.js', import.meta.url), 'utf8');
 
-function deriveNotifications(deadlines) {
+function deriveNotifications(deadlines, categories = {}) {
   const storage = new Map();
   const document = {
     readyState: 'loading',
@@ -32,7 +32,7 @@ function deriveNotifications(deadlines) {
   window.window = window;
   vm.runInNewContext(notificationsSource, { window, document, console, Date, Map, Set, Math, JSON });
   window.SutraNotifications.importState({
-    prefs: { enabled: true, categories: { timeline: true, release: false } }
+    prefs: { enabled: true, categories: { timeline: true, release: false, ...categories } }
   });
   return window.SutraNotifications.getNotifications();
 }
@@ -80,6 +80,15 @@ test('imported calendar blocks remain Timeline context without becoming overdue 
   ]);
 
   assert.deepEqual(Array.from(notifications, item => item.title), ['Manual Timeline block']);
+});
+
+test('canonical task deadlines use the Tasks category without changing their source identity', () => {
+  const task = { id: 'task:qa', source: 'task', sourceId: 'qa', title: 'QA task', due: new Date(Date.now() + 3600000) };
+  const notifications = deriveNotifications([task]);
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].source, 'task');
+  assert.equal(notifications[0].sourceId, 'qa');
+  assert.equal(deriveNotifications([task], { tasks: false }).length, 0);
 });
 
 test('the canonical deadline bridge marks ICS blocks non-notifying without changing Timeline storage', () => {

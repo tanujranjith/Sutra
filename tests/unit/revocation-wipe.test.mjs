@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const wipeApi = require('../../src/persistence/revocation-wipe.js');
+const coordinatorApi = require('../../src/persistence/workspace-coordinator.js');
 const wipeSource = fs.readFileSync(new URL('../../src/persistence/revocation-wipe.js', import.meta.url), 'utf8');
 const migrationSource = fs.readFileSync(new URL('../../src/boot/legacy-workspace-migration.js', import.meta.url), 'utf8');
 
@@ -62,6 +63,12 @@ function isolatedWipeRuntime(storageMode) {
     Date,
     Set,
     module: { exports: {} },
+    SutraWorkspaceCoordinator: {
+      ...coordinatorApi,
+      create(options) {
+        return coordinatorApi.create({ ...options, locks: null, BroadcastChannel: null });
+      }
+    },
     SutraWorkspaceDB: {
       create() {
         createCalls += 1;

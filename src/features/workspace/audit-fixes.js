@@ -35,6 +35,14 @@
     function refreshUndatedTaskCue() {
         var host = document.getElementById('todayDailyBrief');
         if (!host || cueUpdating) return;
+        // Your day owns capture and links to To-do; do not append a second
+        // featured card from this legacy observer (or touch saved tasks).
+        if (host.closest('.your-day-panel')) {
+            var duplicate = host.querySelector('.audit-undated-task-cue');
+            if (duplicate) duplicate.remove();
+            cueTaskId = '';
+            return;
+        }
         var task = getTasks().find(function (item) {
             return item && !item.completed && item.isActive !== false && !item.dueDate;
         });
@@ -194,9 +202,10 @@
             var errorEl = document.getElementById('sutraSyncRunningError');
             if (!errorEl) return;
             errorEl.textContent = 'Sync is paused because encrypted cloud data could not be verified. Your local workspace and local saves remain available.';
+            errorEl.dataset.syncIntegrityGuidance = 'true';
             errorEl.hidden = false;
             var existing = document.getElementById('sutraSyncRecoveryGuidance');
-            if (existing) return;
+            if (existing) { existing.hidden = false; return; }
             var guidance = document.createElement('div');
             guidance.id = 'sutraSyncRecoveryGuidance';
             guidance.className = 'sutra-sync-panel sutra-sync-recovery-guidance';
@@ -205,10 +214,12 @@
             heading.textContent = 'Safe recovery steps';
             var list = document.createElement('ol');
             [
-                'Keep the encrypted .sutra backup you just made before changing Sync settings.',
+                'Make and verify an encrypted .sutra safety backup before changing Sync settings.',
+                'This warning cannot distinguish a different encryption key from damaged ciphertext or metadata.',
                 'Confirm this browser is signed in to the same Sutra Cloud account and use the original Sync passphrase or recovery kit.',
                 'If another trusted device still syncs, leave its cloud history intact and verify the vault there before changing anything.',
                 'Do not create a new vault key or keep retrying an unknown passphrase; Sync stays fail-closed to protect the workspace.',
+                'After checking the account and original key, choose Retry verification for one deliberate attempt. Use Lock on this device first if you need to unlock with the original passphrase.',
                 'Deleting the cloud vault is a last-resort, permanent action for every device. It is not required to preserve local work.'
             ].forEach(function (item) {
                 var row = document.createElement('li');
@@ -220,7 +231,18 @@
         }
         window.addEventListener('sutra:sync-status', function (event) {
             var detail = event && event.detail;
-            if (!detail || detail.state !== 'encryption-error') return;
+            if (!detail) return;
+            if (detail.state !== 'encryption-error') {
+                var guidance = document.getElementById('sutraSyncRecoveryGuidance');
+                if (guidance) guidance.hidden = true;
+                var errorEl = document.getElementById('sutraSyncRunningError');
+                if (errorEl && errorEl.dataset.syncIntegrityGuidance === 'true') {
+                    errorEl.hidden = true;
+                    errorEl.textContent = '';
+                    delete errorEl.dataset.syncIntegrityGuidance;
+                }
+                return;
+            }
             renderSyncRecoveryGuidance();
         });
         window.showToast = function (message, options) {

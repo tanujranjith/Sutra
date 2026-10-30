@@ -11,11 +11,18 @@ const responsiveTestMatch = [
   /.*quick-capture-student-flow\.spec\.mjs$/,
   /.*today-redesign\.spec\.mjs$/,
   /.*onboarding-redesign\.spec\.mjs$/,
-  /.*export-options-modal\.spec\.mjs$/
+  /.*export-options-modal\.spec\.mjs$/,
+  /.*update-banner-layering\.spec\.mjs$/
 ];
 
 const playwrightPort = Number(process.env.PLAYWRIGHT_PORT || 5173);
-const playwrightOutputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || '.tmp/playwright-results';
+// Keep earlier CI preflight traces when another Playwright invocation starts.
+// Worker processes inherit the same run identity when they load this config.
+if (process.env.CI && !process.env.SUTRA_CI_PLAYWRIGHT_RUN_ID) {
+  process.env.SUTRA_CI_PLAYWRIGHT_RUN_ID = `${Date.now()}-${process.pid}`;
+}
+const playwrightOutputDir = process.env.PLAYWRIGHT_OUTPUT_DIR
+  || (process.env.CI ? `.tmp/playwright-results/run-${process.env.SUTRA_CI_PLAYWRIGHT_RUN_ID}` : '.tmp/playwright-results');
 const playwrightTrace = process.env.PLAYWRIGHT_TRACE === 'off' ? 'off' : 'retain-on-failure';
 
 export default defineConfig({
@@ -30,7 +37,7 @@ export default defineConfig({
   // Proven stable at 10/10 with retries=0 locally, so no local retry is needed;
   // CI keeps a single retry only as generic shared-runner infra safety.
   retries: process.env.CI ? 1 : 0,
-  reporter: [['list']],
+  reporter: [['list'], ...(process.env.CI ? [['./scripts/playwright-ci-failure-reporter.mjs']] : [])],
   use: {
     baseURL: `http://127.0.0.1:${playwrightPort}`,
     trace: playwrightTrace,
@@ -46,7 +53,13 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'chrome', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'webkit',
+      // Repeated full-app starts vary across hosted WebKit runners. Allow the
+      // complete workflow while retaining the independent assertion deadlines.
+      timeout: process.env.CI ? 120_000 : 60_000,
+      use: { ...devices['Desktop Safari'] }
+    },
     { name: 'mobile-chromium', testMatch: responsiveTestMatch, use: { ...devices['Pixel 7'] } },
     { name: 'mobile-webkit', testMatch: responsiveTestMatch, use: { ...devices['iPhone 13'] } },
     {

@@ -30,6 +30,7 @@ async function openApp(page) {
     && !!window.flowAtelier
     && !!window.SutraAssistantConversationController);
   await page.evaluate(() => window.setWorkspacePreference('assistant.enabled', true));
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('action-review-test-ready'));
 }
 
 test('a terse scheduling promise recovers concrete dates from its user turn', async ({ page }) => {
@@ -80,6 +81,7 @@ test('persisted Assistant replies show review cards and mutate only after Apply'
 
   await openApp(page);
   const seeded = await page.evaluate(({ userText, replyText }) => {
+    window.SutraAssistantPermissions.setMode('approved_actions');
     const controller = window.SutraAssistantConversationController;
     const before = window.flowAtelier.timeBlocks.length;
     const chat = controller.create({

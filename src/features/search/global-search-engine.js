@@ -23,6 +23,12 @@
   var SNIPPET_CONTEXT = 44;
   var MAX_RANGES = 12;
   var MAX_BODY_WORDS = 6;
+  var MAX_QUERY_CHARS = 256;
+  var MAX_QUERY_TOKENS = 12;
+  var MIN_FUZZY_WORD_LENGTH = 4;
+  var MAX_FUZZY_WORD_LENGTH = 64;
+  var MAX_FUZZY_FIELD_CHARS = 20000;
+  var MAX_FUZZY_BODY_CHARS = 20000;
 
   var TYPE_LABELS = {
     page: 'Page',
@@ -58,14 +64,23 @@
 
   function normalizeQuery(query) {
     var phrase = text(query).trim().toLowerCase();
-    var words = phrase.split(/\s+/).filter(function (w) { return w.length > 0; });
+    var tokenSource = phrase.slice(0, MAX_QUERY_CHARS);
+    if (phrase.length > MAX_QUERY_CHARS && tokenSource && !/\s$/.test(tokenSource)) {
+      var partialTokenStart = tokenSource.search(/\s+\S*$/);
+      tokenSource = partialTokenStart < 0 ? '' : tokenSource.slice(0, partialTokenStart);
+    }
+    var words = [];
+    var tokenPattern = /\S+/g;
+    var match;
+    while (words.length < MAX_QUERY_TOKENS && (match = tokenPattern.exec(tokenSource))) {
+      words.push(match[0]);
+    }
     return { phrase: phrase, words: words };
   }
 
   // Score one field against one query word.
-  // prefix > word-boundary > infix > in-order subsequence > no match.
-  function scoreField(haystack, word) {
-    var h = text(haystack).toLowerCase();
+  // Direct prefix/boundary/infix > one-edit token > loose subsequence > no match.
+  function scoreLowerField(h, fuzzyText, word) {
     if (!h || !word) return 0;
     var idx = h.indexOf(word);
     if (idx === 0) return 1000;
@@ -74,46 +89,189 @@
       var boundary = !/[a-z0-9]/.test(prev);
       return (boundary ? 700 : 500) - Math.min(idx, 100);
     }
+    if (word.length > MAX_FUZZY_WORD_LENGTH) return 0;
+    // Only literal matching scans the full field. Fuzzy and subsequence work
+    // stays within a bounded prefix so large fields cannot multiply CPU cost.
     // In-order subsequence so "apbio" still finds "AP Biology".
     var hi = 0, gaps = 0, matched = 0;
     for (var qi = 0; qi < word.length; qi += 1) {
-      var found = h.indexOf(word.charAt(qi), hi);
-      if (found < 0) return 0;
+      var found = fuzzyText.indexOf(word.charAt(qi), hi);
+      if (found < 0) break;
       if (found > hi) gaps += found - hi;
       hi = found + 1;
       matched += 1;
     }
-    return Math.max(1, 120 - gaps - (h.length - matched));
+    var subsequenceScore = matched === word.length
+      ? Math.max(1, 120 - gaps - (fuzzyText.length - matched))
+      : 0;
+    // A one-character insertion, deletion, substitution, or adjacent swap
+    // against a complete token is useful typo recovery. The score stays below
+    // direct matches and above loose subsequences when both are possible.
+    var typoMatch = findTypoToken(fuzzyText, word, MAX_FUZZY_FIELD_CHARS);
+    return typoMatch ? 150 : subsequenceScore;
+  }
+
+  function scoreFieldMatches(value, words) {
+    if (!words.length) return [];
+    var source = text(value);
+    var lower = source.toLowerCase();
+    var fuzzyText = boundedFuzzySource(source, MAX_FUZZY_FIELD_CHARS).toLowerCase();
+    return words.map(function (word) { return scoreLowerField(lower, fuzzyText, word); });
+  }
+
+  function maxScore(scores) {
+    return scores.reduce(function (best, score) { return Math.max(best, score); }, 0);
+  }
+
+  function countPositiveScores(scores) {
+    return scores.reduce(function (total, score) { return total + (score > 0 ? 1 : 0); }, 0);
+  }
+
+  function scoreField(haystack, word) {
+    return scoreFieldMatches(haystack, [word])[0] || 0;
   }
 
   function bestFieldScore(value, words) {
-    var best = 0;
-    for (var i = 0; i < words.length; i += 1) {
-      var s = scoreField(value, words[i]);
-      if (s > best) best = s;
-    }
-    return best;
+    return maxScore(scoreFieldMatches(value, words));
   }
 
-  function countFieldHits(value, words) {
-    var h = text(value).toLowerCase();
-    if (!h) return 0;
-    var hits = 0;
-    for (var i = 0; i < words.length; i += 1) {
-      if (words[i] && h.indexOf(words[i]) >= 0) hits += 1;
+  function bodyWordMatches(value, words, lowerValue) {
+    if (!words.length) return [];
+    var body = text(value);
+    var lower = lowerValue == null ? body.toLowerCase() : lowerValue;
+    var fuzzyText = boundedFuzzySource(body, MAX_FUZZY_BODY_CHARS).toLowerCase();
+    var fuzzyTokens = [];
+    var tokenPattern = /[a-z0-9]+/g;
+    var match;
+    while ((match = tokenPattern.exec(fuzzyText))) {
+      if (match[0].length >= 3 && match[0].length <= MAX_FUZZY_WORD_LENGTH + 1) {
+        fuzzyTokens.push(match[0]);
+      }
     }
-    return hits;
+    return words.map(function (word) {
+      if (!word) return false;
+      // Keep literal matches across the complete body. Only the typo scan is
+      // bounded, so older deep-body search behavior remains intact.
+      if (lower.indexOf(word) >= 0) return true;
+      if (word.length < MIN_FUZZY_WORD_LENGTH || word.length > MAX_FUZZY_WORD_LENGTH) return false;
+      return fuzzyTokens.some(function (candidate) { return isOneEditTokenMatch(word, candidate); });
+    });
+  }
+
+  // Accept one clear spelling slip on a complete token. Direct substring
+  // matches remain stronger, while typo recovery outranks loose subsequences.
+  // Short words are excluded so common one- and two-letter queries stay precise.
+  function isOneEditTokenMatch(left, right) {
+    var a = text(left).toLowerCase();
+    var b = text(right).toLowerCase();
+    if (a.length < MIN_FUZZY_WORD_LENGTH || a.length > MAX_FUZZY_WORD_LENGTH
+      || Math.min(a.length, b.length) < 3 || Math.abs(a.length - b.length) > 1) return false;
+
+    if (a.length === b.length) {
+      var mismatches = [];
+      for (var sameIndex = 0; sameIndex < a.length; sameIndex += 1) {
+        if (a.charAt(sameIndex) !== b.charAt(sameIndex)) mismatches.push(sameIndex);
+        if (mismatches.length > 2) return false;
+      }
+      if (mismatches.length === 1) return true;
+      return mismatches.length === 2
+        && mismatches[1] === mismatches[0] + 1
+        && a.charAt(mismatches[0]) === b.charAt(mismatches[1])
+        && a.charAt(mismatches[1]) === b.charAt(mismatches[0]);
+    }
+
+    var longer = a.length > b.length ? a : b;
+    var shorter = a.length > b.length ? b : a;
+    var longIndex = 0;
+    var shortIndex = 0;
+    var skipped = false;
+    while (longIndex < longer.length && shortIndex < shorter.length) {
+      if (longer.charAt(longIndex) === shorter.charAt(shortIndex)) {
+        longIndex += 1;
+        shortIndex += 1;
+      } else if (!skipped) {
+        skipped = true;
+        longIndex += 1;
+      } else {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function boundedFuzzySource(value, maxChars) {
+    var source = text(value);
+    var limit = Math.max(1, Number(maxChars) || MAX_FUZZY_FIELD_CHARS);
+    if (source.length <= limit) return source;
+    source = source.slice(0, limit);
+    // Do not treat the partial token at the scan boundary as a complete word.
+    var index = source.length - 1;
+    if (/[a-z0-9]/i.test(source.charAt(index))) {
+      while (index >= 0 && /[a-z0-9]/i.test(source.charAt(index))) index -= 1;
+      source = index < 0 ? '' : source.slice(0, index + 1);
+    }
+    return source;
+  }
+
+  function findTypoToken(value, word, maxChars) {
+    if (!word || word.length < MIN_FUZZY_WORD_LENGTH || word.length > MAX_FUZZY_WORD_LENGTH) return null;
+    var source = boundedFuzzySource(value, maxChars);
+    var lower = source.toLowerCase();
+    var pattern = /[a-z0-9]+/g;
+    var match;
+    while ((match = pattern.exec(lower))) {
+      if (isOneEditTokenMatch(word, match[0])) {
+        return { start: match.index, end: match.index + match[0].length };
+      }
+    }
+    return null;
+  }
+
+  function findSubsequencePositions(value, word) {
+    if (!word || word.length > MAX_FUZZY_WORD_LENGTH) return [];
+    var haystack = text(value).toLowerCase();
+    var positions = [];
+    var from = 0;
+    for (var i = 0; i < word.length; i += 1) {
+      var found = haystack.indexOf(word.charAt(i), from);
+      if (found < 0) return [];
+      positions.push(found);
+      from = found + 1;
+    }
+    return positions;
+  }
+
+  function appendPositionRanges(ranges, positions) {
+    if (!positions.length) return;
+    var start = positions[0];
+    var end = start + 1;
+    for (var i = 1; i < positions.length; i += 1) {
+      if (positions[i] === end) {
+        end += 1;
+      } else {
+        appendRangeIfFree(ranges, start, end);
+        start = positions[i];
+        end = start + 1;
+      }
+    }
+    appendRangeIfFree(ranges, start, end);
+  }
+
+  function appendRangeIfFree(ranges, start, end) {
+    if (ranges.length >= MAX_RANGES) return;
+    var overlaps = ranges.some(function (range) { return start < range[1] && end > range[0]; });
+    if (!overlaps) ranges.push([start, end]);
   }
 
   // A long query should not turn every record containing one common token
-  // into a result. Keep single-token fuzzy matching, but require meaningful
-  // literal token coverage once the user supplies a more specific query.
-  function countCoveredWords(record, words, metadata) {
-    return words.reduce(function (total, word) {
-      var covered = countFieldHits(record.title, [word]) > 0
-        || countFieldHits(record.breadcrumb, [word]) > 0
-        || (!record.locked && countFieldHits(record.body, [word]) > 0)
-        || (record.type !== 'page' && countFieldHits(metadata, [word]) > 0);
+  // into a result. Keep single-token typo recovery, but require meaningful
+  // query-term coverage once the user supplies a more specific query.
+  function countCoveredWords(record, words, titleScores, pathScores, metaScores, bodyMatches) {
+    return words.reduce(function (total, word, index) {
+      var covered = titleScores[index] > 0
+        || pathScores[index] > 0
+        || (!record.locked && bodyMatches[index] === true)
+        || (record.type !== 'page' && metaScores[index] > 0);
       return total + (covered ? 1 : 0);
     }, 0);
   }
@@ -125,11 +283,21 @@
   }
 
   // Earliest position (case-insensitive) of any query word inside text.
-  function firstMatchPosition(value, words) {
-    var h = text(value).toLowerCase();
+  function firstMatchPosition(value, words, fuzzyLimit) {
+    var source = text(value);
+    var h = source.toLowerCase();
+    var fuzzyText = boundedFuzzySource(source, fuzzyLimit).toLowerCase();
     var best = -1;
     for (var i = 0; i < words.length; i += 1) {
       var found = words[i] ? h.indexOf(words[i]) : -1;
+      if (found < 0 && words[i]) {
+        var typo = findTypoToken(fuzzyText, words[i], fuzzyLimit);
+        if (typo) found = typo.start;
+        else {
+          var positions = findSubsequencePositions(fuzzyText, words[i]);
+          if (positions.length) found = positions[0];
+        }
+      }
       if (found >= 0 && (best < 0 || found < best)) best = found;
     }
     return best;
@@ -137,14 +305,14 @@
 
   // Bounded contextual snippet with non-overlapping [start, end) match
   // ranges relative to the returned snippet text.
-  function buildSnippet(value, words, maxLength) {
+  function buildSnippet(value, words, maxLength, fuzzyLimit) {
     var source = text(value);
     var maxLen = Math.max(60, Number(maxLength) || SNIPPET_LENGTH);
     if (!source) return null;
     if (source.length <= maxLen) {
       return { text: source, ranges: collectRanges(source, words) };
     }
-    var pos = firstMatchPosition(source, words);
+    var pos = firstMatchPosition(source, words, fuzzyLimit);
     var start = pos < 0 ? 0 : Math.max(0, pos - SNIPPET_CONTEXT);
     var end = Math.min(source.length, start + maxLen);
     if (end - start < maxLen) start = Math.max(0, end - maxLen);
@@ -169,6 +337,7 @@
   function collectRanges(snippet, words) {
     var ranges = [];
     var lower = text(snippet).toLowerCase();
+    var fuzzyText = boundedFuzzySource(snippet, MAX_FUZZY_FIELD_CHARS).toLowerCase();
     for (var w = 0; w < words.length; w += 1) {
       var word = words[w];
       if (!word) continue;
@@ -180,6 +349,14 @@
         var overlaps = ranges.some(function (r) { return found < r[1] && end > r[0]; });
         if (!overlaps) ranges.push([found, end]);
         from = end;
+      }
+      if (lower.indexOf(word) < 0 && ranges.length < MAX_RANGES) {
+        var typo = findTypoToken(fuzzyText, word, MAX_FUZZY_FIELD_CHARS);
+        if (typo) appendRangeIfFree(ranges, typo.start, typo.end);
+        else {
+          var positions = findSubsequencePositions(fuzzyText, word);
+          if (positions.length) appendPositionRanges(ranges, positions);
+        }
       }
     }
     return ranges.sort(function (a, b) { return a[0] - b[0]; });
@@ -232,6 +409,13 @@
     var locked = raw.locked === true;
     var title = text(raw.title).trim();
     if (!title) return null;
+    var settingsSearchScore = null;
+    if (type === 'setting' && raw.settingsSearchScore != null && raw.settingsSearchScore !== '') {
+      var parsedSettingsScore = Number(raw.settingsSearchScore);
+      if (Number.isFinite(parsedSettingsScore)) {
+        settingsSearchScore = Math.max(0, Math.min(300, parsedSettingsScore));
+      }
+    }
     return {
       sourceId: id,
       type: type,
@@ -242,6 +426,7 @@
       timestamp: Number(raw.timestamp) || 0,
       locked: locked,
       prematched: raw.prematched === true,
+      settingsSearchScore: settingsSearchScore,
       action: typeof raw.action === 'function' ? raw.action : null
     };
   }
@@ -250,13 +435,19 @@
     var words = query.words;
     var phrase = query.phrase;
     var metadata = metadataText(record);
-    var titleBest = bestFieldScore(record.title, words);
-    var titleHits = countFieldHits(record.title, words);
-    var pathBest = bestFieldScore(record.breadcrumb, words);
-    var metaBest = bestFieldScore(metadata, words);
-    var bodyHits = record.locked ? 0 : Math.min(countFieldHits(record.body, words), MAX_BODY_WORDS);
+    var titleScores = scoreFieldMatches(record.title, words);
+    var pathScores = scoreFieldMatches(record.breadcrumb, words);
+    var metaScores = scoreFieldMatches(metadata, words);
+    var titleBest = maxScore(titleScores);
+    var titleHits = countPositiveScores(titleScores);
+    var pathBest = maxScore(pathScores);
+    var metaBest = maxScore(metaScores);
+    var bodyLower = record.locked ? '' : record.body.toLowerCase();
+    var bodyMatches = record.locked ? [] : bodyWordMatches(record.body, words, bodyLower);
+    var bodyHitCount = bodyMatches.reduce(function (total, matched) { return total + (matched ? 1 : 0); }, 0);
+    var bodyHits = Math.min(bodyHitCount, MAX_BODY_WORDS);
     var phraseInTitle = !!phrase && record.title.toLowerCase().indexOf(phrase) >= 0;
-    var phraseInBody = !record.locked && !!phrase && record.body.toLowerCase().indexOf(phrase) >= 0;
+    var phraseInBody = !record.locked && !!phrase && bodyLower.indexOf(phrase) >= 0;
 
     var titleMatched = titleBest > 0 || pathBest > 0 || phraseInTitle;
     var bodyMatched = bodyHits > 0 || phraseInBody;
@@ -266,6 +457,13 @@
       // Already filtered by the owning module; never dropped, never ranked
       // above a strong direct match.
       var preScore = 30 + Math.round(bestFieldScore(record.title, [phrase]) * 0.5);
+      if (record.type === 'setting' && Number.isFinite(record.settingsSearchScore)) {
+        var directTitleScore = titleBest;
+        if (phraseInTitle) {
+          directTitleScore = Math.max(directTitleScore, bestFieldScore(record.title, [phrase]));
+        }
+        preScore = Math.max(record.settingsSearchScore, directTitleScore >= 400 ? directTitleScore : 0);
+      }
       return {
         record: record,
         score: preScore,
@@ -283,7 +481,7 @@
     var qualified = titleMatched || bodyMatched || (record.type !== 'page' && metaMatched);
     if (!qualified) return null;
 
-    var coveredWords = countCoveredWords(record, words, metadata);
+    var coveredWords = countCoveredWords(record, words, titleScores, pathScores, metaScores, bodyMatches);
     if (words.length > 1 && coveredWords < requiredWordCoverage(words.length)) return null;
     var allWords = coveredWords === words.length;
 
@@ -300,7 +498,7 @@
 
     var snippet = null;
     if (bodyMatched && !record.locked && record.body) {
-      snippet = buildSnippet(record.body, words, SNIPPET_LENGTH);
+      snippet = buildSnippet(record.body, words, SNIPPET_LENGTH, MAX_FUZZY_BODY_CHARS);
     }
 
     return {
@@ -331,7 +529,7 @@
     var now = Number(opts.now) || Date.now();
     var parsedQuery = normalizeQuery(query);
 
-    if (!parsedQuery.words.length) {
+    if (!parsedQuery.phrase) {
       return { query: text(query), filter: filter, total: 0, results: [], counts: {} };
     }
 

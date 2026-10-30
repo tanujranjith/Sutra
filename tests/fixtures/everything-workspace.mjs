@@ -45,12 +45,12 @@ export const EVERYTHING_ASSISTANT_HISTORY = {
       partial: false,
       restoredFromBackup: false,
       sources: [{
-        id: 'source-parity-1', kind: 'note', noteId: 'page-child',
+        id: 'source-parity-1', key: 'note:page-child', kind: 'note', noteId: 'page-child',
         blockId: 'block-rich', title: 'Parity Parent::Parity Child',
         headingPath: ['Evidence'], quote: 'Unique parity evidence.',
         href: 'sutra://page/page-child', updatedAt: EVERYTHING_STAMP,
         version: 'version-parity', sourceOffsets: null, score: 0, confidence: 'high',
-        reasonCodes: ['exact-match'], safetyFlags: [], stale: false
+        reasonCodes: ['exact-match'], safetyFlags: [], stale: false, readOnce: false
       }],
       grounding: {
         evidenceStatus: 'supported', query: 'synthetic parity query',
@@ -258,8 +258,8 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
     collegeTracker: atomic(base, 'collegeTracker', {
       activeTab: 'research',
       research: [{ id: 'college-research-parity', college: 'Synthetic University', notes: 'Research sentinel' }],
-      checklist: [{ id: 'college-check-parity', task: 'Synthetic checklist', completed: false }],
-      deadlines: [{ id: 'college-deadline-parity', college: 'Synthetic University', date: '2026-11-01' }],
+      checklist: [{ id: 'college-check-parity', task: 'Synthetic checklist', completed: false, completedDeadlineDates: { earlyDeadline: '2026-11-01', regularDeadline: '2027-01-01', fafsaDeadline: '2026-12-01', cssDeadline: '2026-12-15' } }],
+      deadlines: [{ id: 'college-deadline-parity', college: 'Synthetic University', date: '2026-11-01', completedDeadlineDates: { essaysDoneBy: '2026-10-20', submitBy: '2026-10-31', applicationDeadline: '2026-11-01' } }],
       essays: [{ id: 'college-essay-parity', title: 'Parity essay', status: 'drafting' }],
       prompts: [{ id: 'college-prompt-parity', prompt: 'Describe a synthetic experience.', completed: false }]
     }),
@@ -295,6 +295,35 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       skills: [{ id: 'skill-parity', name: 'Synthetic skill', level: 3 }],
       fitness: [{ id: 'fitness-parity', activity: 'Walk', duration: 30 }],
       calories: [{ id: 'calorie-parity', meal: 'Synthetic lunch', calories: 500 }],
+      sleepTracker: {
+        targetSleepMinutes: 425,
+        entries: [{
+          id: 'sleep-parity', date: '2026-07-15', totalSleepMinutes: 390,
+          note: 'Synthetic retired sleep entry',
+          futureEntryMetadata: { measuredMinutes: 0, verified: false }
+        }],
+        futureSleepValue: 0
+      },
+      wellness: {
+        checkIns: [{
+          id: 'wellness-check-in-parity', createdAt: EVERYTHING_STAMP,
+          mood: 'steady', stress: 2, sleep: 'synthetic', note: 'Synthetic retired check-in',
+          futureCheckInMetadata: { source: 'parity-fixture', rating: 0, retained: false }
+        }],
+        journalEntries: [{
+          id: 'wellness-journal-parity', createdAt: EVERYTHING_STAMP,
+          prompt: 'Synthetic retired prompt', body: 'Synthetic retired wellness reflection'
+        }],
+        breathing: {
+          preferredPattern: 'box', preferredDuration: 300,
+          reducedMotion: false, soundEnabled: false, ambientSound: 'off',
+          breathingCuesEnabled: false, volume: 0.35, muted: false,
+          sessionsCompleted: 2, lastCompletedAt: EVERYTHING_STAMP,
+          futureBreathingValue: false,
+          futureBreathingMetadata: { completedSessions: 0, preserved: false }
+        },
+        futureWellnessMetadata: { nested: { count: 0, archived: false } }
+      },
       books: [{ id: 'book-parity', title: 'Synthetic Book', status: 'reading' }],
       spending: [{ id: 'spend-parity', description: 'Synthetic notebook', amount: 12.5 }],
       journals: [{ id: 'journal-parity', title: 'Synthetic reflection', content: 'Journal sentinel' }]
@@ -401,6 +430,8 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
     operatingManual: { version: 1, preferredStudyTimes: ['16:00'], reminderStyle: 'calm', planningStyle: 'focused', accessibility: { reducedMotion: true }, notes: 'Operating manual sentinel' },
     portfolioWorkspace: { version: 1, entries: [{ id: 'portfolio-parity', title: 'Synthetic Portfolio Project', artifactPageIds: ['page-child'] }], settings: { publicByDefault: false } },
     testingHub: atomic(base, 'testingHub', {
+      takenExams: { sat: '2026-06-06', act: '2026-06-13' },
+      officialResults: { sat: { examDate: '2026-06-06', totalScore: '1450', recordedAt: EVERYTHING_STAMP, futureResultField: { sentinel: true } } },
       exams: [{ id: 'testing-exam-parity', name: 'Synthetic SAT', targetScore: 1500 }],
       practiceLogs: [{ id: 'testing-practice-parity', examId: 'testing-exam-parity', score: 1450 }],
       mistakes: [{ id: 'mistake-parity', examId: 'testing-exam-parity', topic: 'Synthetic algebra' }],
@@ -450,7 +481,7 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
         assistant: { ...(preferences.assistant || {}), enabled: true, saveChatHistory: true, includeChatsInEncryptedBackups: true, includeChatsInPlaintextRecovery: false, chatMemoryMode: 'recent', chatMemoryDepth: 15, requireApprovalForActions: true,
           personalization: { nickname: 'Synthetic Student', persona: 'balanced', responseLength: 'concise', customInstructions: 'Use synthetic examples.', aboutUser: 'Parity fixture only.' },
           localEndpoint: { enabled: false, baseUrl: '', model: '', visionCapable: false } },
-        studentPreferences: { ...(preferences.studentPreferences || {}), schoolStartHour: 7, preferredReviewStyle: 'mixed' },
+        studentPreferences: { ...(preferences.studentPreferences || {}), schoolStartHour: 7, schoolEndHour: 15, earliestStudyHour: 16, latestStudyHour: 21, studyBlockMinutes: 45, breakMinutes: 10, bedtimeHour: 22, scheduleWeekends: false, overloadThreshold: 5, defaultHomeworkDifficulty: 'medium', preferredReviewStyle: 'mixed', hardestClasses: ['course-parity'] },
         integrations: { spotifyEnabled: false, chatgptEnabled: false },
         notifications: { mode: 'focused', deadlineAlerts: true, studyReminders: false, plannerAlerts: true },
         accessibility: { interfaceScale: 120, largerTouchTargets: true, highContrast: true, quietMode: true },

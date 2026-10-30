@@ -1,5 +1,10 @@
 # Feature-Upgrade Wave — Progress & TODO
 
+> Historical implementation log for the June–July 2026 wave. Completion and
+> test statements below describe that work, not current release certification.
+> Use the linked feature guides for current behavior and the current CI readiness
+> record for outstanding validation.
+
 Honest status of the 10-feature upgrade wave. "Complete" means shipped and
 covered by checks/tests; "Partial" means a real, working increment landed with
 remaining work listed; "Pre-existing" means it was already substantially built

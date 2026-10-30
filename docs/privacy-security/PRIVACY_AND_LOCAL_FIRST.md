@@ -1,10 +1,16 @@
-﻿# Privacy and Local-First
+# Privacy and Local-First
 
 _Sutra is a private, local-first workspace for students. This document is the
 plain statement of what that means: where your data lives, what never leaves
 your device, and how to take it with you or wipe it completely._
 
 `PRIVATE * LOCAL-FIRST * STUDENT-BUILT`
+
+Local diagnostics redact segmented provider credentials, authorization tokens,
+and credential fields before storage, console output, notifications, and export.
+Diagnostic getters return separate copies so a caller cannot alter the stored
+report. Imported Homework titles and IDs are escaped in both text and quoted
+HTML attributes without changing their stored values.
 
 ---
 
@@ -16,7 +22,7 @@ from a local file, with:
 
 - **no backend** of Sutra's own,
 - **no required accounts** - you can use everything without signing up; an
-  account is needed only for the optional Sutra Cloud backup feature,
+  account is needed only for optional account-based backup destinations or Sutra Sync,
 - **no telemetry** - Sutra does not phone home or track usage,
 - **optional cloud sync/backup off by default** - nothing is silently copied to a server.
 
@@ -36,7 +42,7 @@ assignment, Testing Hub and AP Study data, Review decks, College and Life and
 Projects & Work data, streaks and habits, focus templates, themes, preferences,
 and onboarding state - is stored locally in your browser. None of it is sent
 anywhere by Sutra unless you explicitly export it, send it to an AI provider, or
-enable optional encrypted Google Drive sync.
+enable optional encrypted backup or Sync.
 
 ---
 
@@ -79,9 +85,10 @@ restored workspace keeps its setup and only needs the key re-entered.
 
 Sutra uses your browser's local storage facilities:
 
-- **IndexedDB** holds the bulk of your workspace and your binary attachments.
-- **localStorage** holds homework data, a small set of preferences, optional
-  saved Assistant conversations, and the Storage Health/save-failure banner
+- **IndexedDB** holds the canonical workspace, including enabled durable Assistant
+  conversations, and a separate database holds binary attachments.
+- **localStorage** retains legacy Homework keys, a small set of preferences, optional
+  Assistant compatibility mirrors, and the Storage Health/save-failure banner
   state needed to warn you after a reload if IndexedDB could not confirm a save.
 - **sessionStorage** holds session-scoped items — principally default-mode AI
   API keys and a compatibility copy of the current chat while the tab is open.
@@ -117,16 +124,17 @@ for details and the always-visible privacy badge.
 If you want even the AI side to stay on your own machine or network, point Sutra
 at a **Local / Custom OpenAI-Compatible endpoint**.
 
-Fresh startup, manual encrypted `.sutra` backup, and JSON backup are designed to complete with **zero third-party requests**. Optional network calls happen only after a user action: Google Drive OAuth/sync, AI provider calls, configured localhost/127.0.0.1 local endpoints, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, and optional secondary document import/export helper libraries. If those optional helpers are offline, Sutra should fail gracefully and keep the workspace in memory.
+Fresh startup, manual encrypted `.sutra` backup, and JSON backup are designed to complete with **zero third-party requests**. Optional connections require explicit user enablement or action; enabled Sync and
+automatic backup can then run without a new click. Network paths include: enabled Sutra Sync, configured backup-provider requests, Google Drive OAuth/sync, AI provider calls, configured localhost/127.0.0.1 local endpoints, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, and explicitly invoked local helpers. Document import/export libraries are
+vendored and load from the same origin. If those optional helpers are offline, Sutra should fail gracefully and keep the workspace in memory.
 
 ---
 
 ## 6. Document Background images are local
 
 A note's **Document Background** is stored as image data on the page itself
-(an inline data URL), alongside your other content on your device. It is never
-uploaded by Sutra and only leaves your device if **you** export a backup or a
-note that includes it. A **locked page never reveals its background behind the
+(an inline data URL), alongside your other content on your device. It leaves the device only through an explicit export or a separately enabled
+encrypted backup/Sync path. A **locked page never reveals its background behind the
 PIN screen.** See [`DOCUMENT_BACKGROUNDS.md`](../features/DOCUMENT_BACKGROUNDS.md).
 
 ---
@@ -138,6 +146,27 @@ re-entered after a reload - the in-session "unlocked" state is intentionally
 **not persisted** - and its content (including any Document Background) stays
 gated behind the lock screen. The lock is part of the page's stored data and
 travels in backups, so a restored page is still locked.
+
+New and changed page PINs use PBKDF2-HMAC-SHA-256 with 210,000 iterations and a
+random 16-byte salt. The existing `lockHash` string stores the versioned
+`v2$210000$<hex verifier>`; `lockSalt` retains its existing hex salt field.
+Legacy salted SHA-256 verifiers remain accepted and are upgraded with a fresh
+salt after a successful normal page unlock, through the canonical save path.
+Assistant one-time verification and deletion checks do not silently rewrite
+the page. Unknown verifier versions fail closed. These fields already travel
+with the page through normalization, version history, backups, and encrypted
+Sync; no extra PIN field or storage is introduced. Older Sutra versions cannot
+verify the new format, so open these workspaces with the updated app.
+
+PIN management requires the page to remain unlocked in the current session.
+Changing a normal or duress PIN rechecks page identity and lock state after key
+derivation; removing a normal PIN rechecks them after confirmation. Automatic
+relocking, a replaced page, changed lock metadata, or blocked workspace writes
+cancel the operation without changing the existing protection.
+
+**This does not encrypt local note content.** Someone who can inspect or modify
+the browser profile can bypass an in-app lock. It protects normal Sutra screens,
+not browser developer tools, disk access, or previously exported plaintext.
 
 The same in-session authorization gate protects every page-owned plaintext
 surface. Until the page is unlocked, Sutra does not hydrate its body into the
@@ -230,8 +259,9 @@ your API keys, which are never exported.
 Because everything is local, wiping Sutra is a matter of clearing this site's
 local storage:
 
-1. **Export a backup first** (Settings -> Data) if you might want your data back -
-   once cleared, it is gone, as there is no server copy.
+1. **Export a backup first** (Settings -> Data) if you might want your data back.
+   Clearing site data removes the local copy; it cannot delete downloaded files
+   or previously enabled remote backups/Sync data.
 2. In your browser's site-data controls (for example DevTools -> Application ->
    **Clear storage**, or the browser's per-site "clear data" option), clear the
    storage for the Sutra page. This empties the IndexedDB databases
@@ -263,7 +293,7 @@ recovery includes them only by explicit opt-in.
 | Are my API keys saved or exported? | By default they are session-only. If you opt in to remembering them, they are encrypted on this device only; they are never exported or synced. |
 | Does the local Intelligence layer call a server? | No. It computes signals on-device. |
 | Can I take my data with me? | Yes - export encrypted `.sutra` or JSON; legacy `.atelier` still imports. |
-| Can I delete everything? | Yes - clear this site's storage; nothing remains on any server. |
+| Can I delete local data? | Yes — clear this site's storage. Remote backups/Sync and downloaded files require their separate deletion controls. |
 
 ---
 

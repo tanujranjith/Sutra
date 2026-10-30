@@ -1,5 +1,10 @@
 # Sutra Assistant
 
+Retired wellness, health-tracking, and Life journal records remain portable in
+backups but are excluded from Assistant retrieval and context, including when an
+older workspace contains an enabled wellness-access flag. See
+[Life workspace](LIFE_WORKSPACE.md).
+
 _Sutra is a private, local-first workspace for students. The local Assistant
 experience is available in every fresh workspace; connecting an AI provider is
 optional. Sutra Assistant is the part of Sutra that can answer questions, summarize
@@ -67,35 +72,151 @@ currently see) anchors directly after the badge.
 
 ---
 
-## 3. Workspace Access — how much the Assistant can see
+## 3. Workspace access and context depth
 
-You control how much of your workspace the Assistant is allowed to read when it
-builds context for a request. This is the **Workspace Access** setting, with
-three levels:
+New workspaces start with **Everyday**: Read + reviewed changes,
+Workspace-aware context, Stateful conversation with five recent messages, and
+explicit previews/approval for every workspace mutation. No provider is connected
+or contacted by choosing a preset. Locked pages still need page-scoped PIN
+consent; financial/private documents still need their separate opt-in.
 
-- **Current Screen Only** — the Assistant sees only what is on the screen you
-  are looking at right now. The tightest scope.
-- **Current Area** — the Assistant sees the feature area you are working in
-  (for example, the current notes, the current homework view), not your entire
-  workspace.
-- **Full Workspace Context** — the Assistant may draw on signals from across
-  your whole workspace (notes, tasks, homework, AP Study, Review, and so on),
-  by way of Sutra Intelligence's derived signals.
+**Settings → Assistant → Assistant preset** applies existing portable fields:
+
+- **Private** disables workspace reading, selects Minimal and Stateless, and
+  turns off sensitive-content opt-ins. It does not erase chats or saved memories.
+- **Everyday** selects the defaults above without clearing explicit area Blocks
+  or changing existing sensitive-content choices. Apply and Undo stay in chat.
+- **Advanced (customize)** keeps the current configuration and directs you to
+  the individual controls below; it grants no additional access.
+
+Preset selection applies immediately and refuses to overwrite an unsaved
+Settings draft: Save or Revert that draft first. A blocked action also offers
+**Use Everyday Assistant**, with a configuration confirmation; enabling it
+does not apply the proposal. The proposal still needs its own Apply click.
+Permission changes take effect in the current session immediately. The controls
+show **Saving Assistant access** until the canonical workspace save is confirmed;
+they stay disabled while that save is pending. If the save fails, the selected
+permissions remain active in the current session and the failure is reported
+with a **Retry save** action. Treat the change as saved only after the
+confirmation appears.
+Existing saved workspaces are not upgraded automatically. Older missing
+permissions remain Off on load/import; older missing conversation preferences
+retain Current view / Stateless. No new durable field or permission store exists.
+Current view retains its canonical `currentView` value through case-insensitive
+settings normalization; a load, import, or preference read must not widen it to
+Workspace-aware.
+Deterministic local chat turns are committed through the canonical readback-
+verified save before their reply is published. A save failure preserves the
+in-memory conversation and the existing save-health warning; it never sends a
+handled local command to a provider as a fallback. The lifecycle flush remains
+a backup for unfinished work, rather than the reply's durability boundary.
+
+Settings → Assistant exposes two separate controls:
+
+- **Workspace access** grants permission: No workspace access, Read workspace,
+  Read allowed areas, or Read + reviewed changes. Older migrated workspaces can
+  retain No workspace access until you explicitly change it.
+- **Context depth** chooses where to search: Minimal (view only), Current view,
+  or Workspace-aware. Choosing Workspace-aware never overrides an access denial.
+
+Under **Access by area**, set Tasks & schedule, Notes, Courses, Study & grades,
+College, Life, Business, Other workspace content, and Saved Assistant memory to
+Use access mode, Allow, or Block. Block always excludes that area. Read allowed
+areas requires Allow for each area; the other reading modes permit ordinary
+areas unless blocked. No workspace access denies every area. These controls use
+the existing canonical permissions and persist with the workspace. The preset,
+workspace-access, and per-area controls are disabled while Sutra Assistant is
+off; their saved values are retained and available again when it is enabled.
+
+Saved-memory permission is checked before retrieval or usage bookkeeping. Denied
+requests do not read saved memories or update their last-used timestamps, and
+selection metadata excludes their IDs. Authorized usage records only memories
+retained after the final privacy filter and both request-budget passes.
+
+To read a blocked to-do list, choose **Read workspace** and ensure
+**Tasks & schedule** is not blocked. Locked pages still require their separate
+Assistant consent/PIN flow, and sensitive-content preferences remain unchanged.
 
 Choose the narrowest level that still lets the Assistant be useful. Whatever you
 pick, the context is assembled **locally** first; only the portion needed for
 your message is included when a request is sent to your chosen provider.
 
+Minimal does not automatically retrieve note excerpts or saved memories. Ordinary
+requests exclude generated Help & Docs pages; explicit documentation questions
+can retrieve them. Note evidence is limited to four excerpts, at most two per
+note, and each excerpt keeps its own chunk ID so budgeting cannot repeat one
+excerpt in place of several distinct matches.
+
+Generic questions omit action schemas. Requests to change workspace content send
+up to twelve relevant schemas from the canonical Actions Bank; the complete bank
+remains available in Local Help and continues to validate all reviewed actions.
+Workspace JSON is compact, and duplicate receipt bookkeeping stays local.
+Selected task records carry a named saved-notes field (up to 1,000 characters,
+with a truncation flag), rather than relying on a general search excerpt.
+Sources used covers tasks, exams, and other selected workspace records as well
+as note excerpts. It is rebuilt after privacy filtering and request budgeting.
+One-time PIN reads are labeled for that request; the label grants no future
+access, and protected excerpts are not retained in source cards or exports.
+The automatic text-request budget is 6,000 estimated tokens including a 1,536-token
+response reserve. The final serialized prompt and conversation are measured;
+whole evidence records and older turns are omitted when needed, with a partial
+context warning. User-supplied messages and attachments are never silently cut
+to fit this budget; large explicit inputs can still exceed it. Estimates are
+conservative character estimates, not provider tokenizer counts.
+
 With local routing enabled, requests such as “search my notes for…” and “what do
 my notes say about…” run entirely on-device and return quoted, clickable note
 evidence without requiring a provider.
+
+### On-demand workspace investigation
+
+Explicit workspace requests such as “investigate my Orchid assignment notes,”
+“compare my Orchid and Cedar assignment records,” or “compare my Orchid worksheet
+with Biology Midterm” can ask the connected provider to search and then read
+additional permitted canonical records. Ordinary factual questions retain the
+existing single-request context selection; greetings, Minimal
+context, current-note/selected-text requests, attachments, theme creation, and
+one-time PIN reads keep their existing paths. Local note searches still run
+on-device when local routing is enabled.
+
+An investigation starts without an automatic workspace body dump or saved memory.
+The provider can request a specific local search, receive at most four matching
+records as metadata, and request at most four of those records as bounded evidence.
+Similar matches prompt **Which matching sources should I read?** before any body
+is sent. Choose one source or several to compare. Distinct comparison sources
+remain separate, and the answer is instructed to disclose contradictions and
+missing evidence. Search matches and bodies are re-resolved against canonical
+state and current permissions before every send. Locked notes never enter this
+loop, including notes unlocked in the editor; it cannot unlock a page or reuse a
+one-time PIN ticket. Exclusions, private/financial preferences, retired wellness
+records, Help pages, note/course scope and per-area denials continue to apply.
+
+The same text-only lookup protocol works through the existing Gemini, OpenAI and
+other configured provider adapters, without native tool support. A provider may
+answer directly when the supplied evidence is sufficient. A lookup has at most
+three provider calls, with automatic transport retries disabled inside this loop.
+Every serialized text request stays within 6,000 estimated tokens including the
+1,536-token answer reserve. Whole evidence records and older conversation turns
+may be omitted together with their source cards; explicit user input is never
+cut. An oversized request makes no call. Budget/turn limits and malformed lookup
+requests produce a visible partial-result explanation rather than implying a
+complete investigation.
+
+The UI shows concise lookup progress and the final answer. Lookup JSON, hidden
+reasoning, intermediate answers and controllers are not saved as conversation
+turns. **Sources used** and the response receipt reflect metadata/evidence actually
+sent, including a stopped or failed lookup; response token/latency totals aggregate
+its provider turns. Stop cancels the active transport and pending source choice.
+Changing permissions while choosing also cancels that choice. Final action
+proposals still use the existing review, Apply, cancellation and Undo lifecycle.
+No workspace schema, persistent index or second data store is introduced.
 
 ### Selected-text awareness
 
 The Assistant is aware of **text you have selected**. If you highlight a passage
 in a note before asking a question, that selection becomes part of the context
 for your request — useful for "rewrite this," "explain this," or "turn this into
-flashcards." Selection awareness respects your Workspace Access level.
+flashcards." Selection awareness respects both context depth and Notes access.
 
 ---
 
@@ -111,6 +232,25 @@ The Assistant has two memory modes:
 - **Conversation Memory** — the Assistant remembers earlier turns in the current
   conversation so you can follow up naturally ("now make it shorter," "do the
   same for chapter 3").
+
+Stateful requests include the configured recent messages plus at most four
+older message excerpts (180 characters each), preserving each original role and
+labeling them as excerpts that newer messages supersede. This is a local
+extractive recap of the current chat, with no additional AI call or saved summary.
+The same request budget may remove older turns; Stateless sends no recap.
+
+Recent conversation receives priority over ambient workspace matches. Questions
+about this chat's history use Minimal workspace context instead of unrelated
+notes. Adding a note in the full Assistant binds its canonical note ID into the
+existing conversation scope after send consent; later follow-ups re-read that
+same note under current permissions. Another open page's selection or Canvas is
+not included in that note-scoped context. Excluding a note excerpt also keeps
+its page's full editor selection and Canvas summary out of the next request.
+Older label-only chips can recover a scope
+only from a unique exact canonical title match. Locked content still needs a new
+page-scoped consent flow. Natural edit requests such as “revise it and put it in
+there” expose the canonical anchored-note action schema and produce reviewed
+proposals; permissions never imply that model prose has actually edited a note.
 
 Visible conversations are saved locally by default so both the docked panel and
 full Assistant view share the same chats. You can disable **Save chat history**
@@ -163,7 +303,7 @@ persist and travel in backups exactly like the rest of your workspace.
 
 When a question may depend on your notes, Sutra builds a local, chunked index of
 unlocked notes and retrieves ranked quoted spans using text, fuzzy, metadata,
-backlink, and recency signals. Grounded replies show a **Sources used** panel
+backlink, and recency signals. Grounded replies show **Details → Sources**
 with note title, heading path, exact excerpt, update date, confidence, and why
 the source matched. Source links open the note directly. Locked-note bodies are
 excluded by default; if you explicitly ask about an identified locked page,
@@ -171,8 +311,23 @@ Assistant asks for one-time permission and the page PIN before including that
 page in the current request. The grant does not unlock the editor, change saved
 privacy settings, or authorize later requests. Without that grant, safe metadata
 may identify a locked source without quoting or linking its contents.
+Unlocking a page for editing does not authorize Assistant context: its selected
+text and Canvas contents remain excluded until separately authorized for that
+page. This applies to Canvas in either editor pane.
 Context collection also preserves the canonical locked document: the blank
 editor privacy surface must never be copied back into the protected note.
+
+A verified one-time page read uses that page as its workspace evidence, even
+when Context depth is Minimal. It does not add similarly named notes, another
+open editor's content/selection, automatic workspace summaries, or saved memory.
+The page's excerpts remain bounded by the request budget and source exclusions;
+the ticket cannot be reused. Content questions with a valid ticket bypass the
+generic product-Help fallback. Explicit local note searches and ordinary
+how-to questions about PIN protection retain their local behavior.
+
+The shared receipt builder lives in `SutraAssistantCore.buildResponseReceipt`;
+core supplies its safety service, live source resolver and context-depth fallback
+so both chat surfaces keep the same disclosure rules.
 
 The **What Sutra knows about me** view combines readable-note counts, explicit
 memories and their source links, current Assistant permissions, and detected
@@ -181,8 +336,10 @@ Notes Knowledge Core, not a second hidden profile store.
 
 ### How this was answered
 
-Pre-send disclosures and every local or provider response include a compact,
-keyboard-accessible **How this was answered** receipt. Local receipts say that no
+Pre-send disclosures retain the **How this was answered** receipt. Responses use
+one **Details** button opening a compact, theme-aware panel with **Sources,
+Privacy, and Usage** tabs. Arrow keys switch tabs; Escape or outside click closes
+the panel. Local receipts under Privacy say that no
 provider was contacted and name the local engine, inspected workspace areas,
 referenced object types, and whether saved memory influenced the result. Provider
 receipts identify provider/model, Workspace Access, selected text and conversation
@@ -278,6 +435,122 @@ reference only earlier steps. The review surface shows those dependencies and
 will not apply a dependent step before its prerequisites. Review is intentionally
 available before write or destructive permission is granted; Apply performs the
 permission check. Every plan preview also binds to a bounded live-target snapshot.
+Missing, malformed, or failed permission services deny actions. Caller-supplied
+permission lists can restrict the policy but cannot expand it. Direct local
+action APIs also obey the workspace permission mode; callers must opt into
+approved actions, and destructive/plugin actions require their separate explicit
+approval metadata. The action-card Apply control supplies reviewed metadata only
+after its existing approval and high-risk confirmation flow. Local "remember
+that" commands propose a memory card and wait for **Save to memory**. Reviewed
+local memory changes have their own narrow permission: they work with workspace
+access Off or Read-only without granting workspace reads, workspace writes, or
+permission to send saved memories to a provider. Sensitive-memory filtering and
+destructive confirmation remain required; unavailable policy services deny the
+change. Smart Import checks
+the selected destinations' permissions when Apply is clicked, and reports
+partial failures instead of implying that every destination was saved. Reply
+buttons such as Save as note and Create task count as explicit reviewed actions
+and still obey the selected permission mode. Generated study flashcards are
+proposed in a review card before a deck is saved.
+
+### Get to know me
+
+Choose **Get to know me with Assistant** in Settings → Assistant → Student
+preferences, or ask **Help me set up my study preferences** in chat. The optional
+on-device conversation asks one question at a time: school start, school finish,
+study start, study finish, block length, break length, evening cutoff, weekends,
+review style, and harder
+classes. No provider or API key is needed. Times accept minutes, AM/PM and 24-hour
+notation. For an ambiguous answer such as 7:30, a short AM-or-PM follow-up retains
+the entered time. Ordinary answers such as 45 minutes, usually not on weekends,
+and practice questions are supported. An invalid answer clarifies only that
+question; an invalid finish does not discard the already accepted start.
+
+Reply **skip** to keep a current value or **cancel setup** to stop. The interview
+is scoped to its conversation. Its current step, accepted answers and pending
+AM/PM clarification are reconstructed from that conversation's canonical user
+messages before each reply. Saved conversations therefore resume after reload,
+chat switching or feature reinitialization without needing an AI provider. This
+does not run historical action proposals or create a separate persistent profile;
+when saved chat history is disabled, the normal session-only history rule applies.
+At the end,
+**Review in Settings** stages only supplied answers; **Save Changes** applies them
+through canonical Settings persistence, and **Revert** discards the draft. An
+existing draft for a supplied field must be saved or reverted first. No second
+profile store or new durable preference fields are created. Existing hour-valued
+preferences retain their units and now preserve fractions to the nearest minute
+(7:30 AM is 7.5); old whole-hour values remain valid. Midnight study finish is 24,
+and post-midnight evening cutoffs use 24–26. Settings displays real time inputs.
+This precision survives canonical normalization, JSON serialization, reload and
+the existing portable settings paths. Normal saved chat
+history follows the existing history/export controls; interview replies are not
+sent to a provider by the setup flow.
+
+Thinking effort is integrated into the full Assistant's message composer beside
+Send as a **Thinking · Auto** control. Its menu opens above the composer, marks
+the current choice, and supports arrow keys, Home/End, Enter, Escape, and outside
+click dismissal. On narrow screens the controls wrap within the composer so
+typing retains space. The same setting is available in the model picker and
+panel settings when the selected model supports it. GPT-6
+families expose their supported tiers, including Extra high and Maximum;
+unavailable tiers are omitted. Gemini 3 uses model-specific
+`thinkingLevel` choices; Gemini 2.5 retains its token-budget control. Auto leaves
+the provider default unchanged. Gemini 3 image/PDF input is recognized, and
+attachment errors identify the file and reason instead of displaying an object.
+Provider contract: [Google GenerateContent thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking).
+
+Task-list requests accept conversational wording such as "can u summarize my
+todos" and "check my homework". With local routing enabled, they read the
+canonical task stores locally. With local routing disabled, selective retrieval
+still supplies relevant permitted task records for the provider to summarize.
+Class-specific questions stay narrowed to matching records. Denied Planning
+access produces an access explanation rather than an empty-list claim; a Notes
+retrieval permission status refers only to Notes.
+
+The full Assistant model picker refreshes the selected provider on opening,
+on provider changes, and every five minutes while visible. Cached IDs remain
+usable during a failed refresh; successful catalogs replace seed IDs, including
+removals. Gemini and Anthropic pagination is followed to completion. A dropdown
+selection replaces an earlier custom ID for that provider; discovery never
+selects a model automatically. Local endpoints support model discovery too.
+Providers without a model-list API show a labeled built-in catalog.
+
+From the Assistant view, context retrieval searches the canonical workspace
+registry locally across planning, courses/files, learning/testing, college,
+life, work, custom dashboards, portfolio, and Focus templates. Notes use the
+existing permission-aware chunk index. Only matching excerpts enter the request:
+normally up to 16 records, or 40 for a general task list, followed by the shared
+request budget. Unrelated area summaries are removed. Narrow current-view and
+minimal scopes remain available; area denials, sensitive-category flags,
+locked-page consent/PIN tickets, and source exclusions still apply. Requests
+about a particular homework topic do not include every task.
+
+Standard Testing Hub profiles (including SAT/ACT) remain searchable even when
+their feature pack is hidden. Selected task records include their saved Reference
+URL, and records supply exact canonical citation URLs rather than asking the
+model to construct links from registry keys. In Stateful mode, a follow-up such
+as “that task's URL” can reuse the preceding user question for retrieval; Stateless
+mode does not read conversation history. Product Help does not intercept direct
+questions about saved workspace data. Its “Use provider instead” control preserves
+the original question, stays in the same Assistant surface, and skips local
+routing once while retaining the normal privacy and consent gates.
+
+Live action proposals survive saving the reply long enough to render Apply and
+Decline. Read-only access shows the proposal with a permission explanation; Apply
+still checks the current policy. Durable chat history and exports continue to
+strip action payloads, so a saved/reopened proposal requires regeneration rather
+than replaying an old action. A missing preview is explicitly explained, and
+unexpected preview failures are reported without applying the action.
+
+“What's in my to-do list?” is a deterministic local read of planner and Homework
+stores from either Assistant surface. It includes undated and distant open work,
+deduplicates Homework mirrors, and reports when a long list is shortened. Source
+receipts identify the selected workspace records, and context inspection
+previews query-selected records rather than a whole-workspace dump.
+
+Provider references: [Google model listing](https://ai.google.dev/api/models),
+[Claude model listing](https://platform.claude.com/docs/en/api/models/list), and
+[OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning).
 If a referenced task, note, course, deck, or Timeline block changes after review,
 the entire plan fails closed as stale before its first mutation and must be
 reviewed again.
@@ -315,9 +588,9 @@ You bring your own AI provider. Sutra supports:
   yourself on your own machine or network.
 
 For each provider you choose, you specify the exact **Model ID** to use (the
-provider's own model identifier). Your provider, model choices, and the custom
-endpoint configuration are **preferences** — they are saved with your workspace
-and travel in backups, so a restored workspace keeps its setup.
+provider's own model identifier). Provider and model choices are portable
+preferences. Custom/local endpoint configuration is device-local and excluded
+from exports and Sync; restore preserves the receiving device's endpoint.
 
 The setup wizard can test the connection, discover available models, show
 detected input capabilities, and explain the provider's cost/privacy boundary
@@ -416,7 +689,8 @@ balance.
    choose your provider, and enter the exact **Model ID**.
 3. Enter the **API key** in **Settings ▸ Assistant ▸ Your API Keys** (one field
    per provider). Session-only storage is the default; the optional encrypted
-   vault requires your local secret after restart. Keys and vault envelopes are
+   vault restores remembered credentials on this device without a separate
+   passphrase gate. Keys and vault envelopes are
    never exported.
 
 ---
@@ -457,7 +731,8 @@ field in **Settings ▸ Assistant ▸ API keys**, select the provider, then use
   `provider/model-name`.
 
 Availability and pricing belong to each provider. Sutra does not silently route
-between them, and all three keys remain session-only and export-excluded.
+between them. Keys are session-only by default; explicitly remembered keys use
+the encrypted device-local vault and remain export-excluded.
 
 ### DeepSeek, xAI (Grok), and Perplexity (Sonar)
 
@@ -519,8 +794,9 @@ dropped, and the attachment chip explains the safest supported next step.
 > to check.
 
 > **Keep your keys private.** Treat an API key like a password — anyone with it
-> can spend on your account. Don't paste keys into shared documents. Because
-> Sutra stores keys only in the browser session, closing the tab clears them.
+> can spend on your account. Don't paste keys into shared documents.
+> Session-only keys clear when their browser session ends. Explicitly remembered
+> keys remain encrypted on that device; never include them in shared content.
 
 ---
 
@@ -600,8 +876,9 @@ to keep even the AI side on your own machine or network.
   vision-capable model from your provider.
 - **The Assistant proposes, you apply.** It will not change your workspace
   without your Apply/confirm action — by design.
-- **Context is bounded by Workspace Access.** At **Current Screen Only**, the
-  Assistant genuinely cannot reason about data on other screens.
+- **Context is bounded by permission and scope.** Workspace access and per-area
+  denials control reads; Context depth narrows retrieval independently. See
+  [Workspace access and context depth](#3-workspace-access-and-context-depth).
 
 ---
 
@@ -612,18 +889,19 @@ Confirm you have selected a provider and entered its API key for this session. C
 or that your Local / Custom endpoint is running and reachable.
 
 **My API key disappeared.**
-Expected. Re-enter it for the current browser session. Provider/model choices
-remain remembered; credentials are never persisted or exported.
+Session-only keys clear when their session ends. Re-enter it, or explicitly
+enable encrypted device-local remembering. Provider/model choices remain
+portable; credentials are never exported.
 
 **The Assistant doesn't seem to know about my other notes/tasks.**
-Check **Workspace Access**. **Current Screen Only** and **Current Area**
-intentionally limit what it can see. Raise it to **Full Workspace Context** if
-you want cross-workspace awareness.
+Check **Workspace access**, **Access by area**, and **Context depth** separately.
+Use a reading mode that permits the requested area, then choose the search
+scope you want. Workspace-aware never overrides an access denial.
 
 **I attached an image and it was ignored.**
-Your selected model is likely text-only. Switch to a vision-capable model
-(for example, a current GPT-4-class, Claude 3+, or Gemini 1.5+ model) on a
-provider that supports image input.
+Read the attachment chip's compatibility explanation and choose a model whose
+current Sutra capability entry supports image input. Unsupported files are
+blocked with a reason; they should not be silently omitted.
 
 **It applied a change I didn't want.**
 Open **Assistant Activity** and **undo** the action. To prevent this in future,
@@ -649,6 +927,10 @@ indicator) to reveal it.
 - **Legacy aliases (retained so existing code/plugins keep working):**
   `window.flowAssistant`, `window.getFlowAssistantContext`, and
   `window.flowIntelligence` point at the same objects.
+- **Investigation seam:** `SutraAssistantCore.runWorkspaceInvestigation` owns the
+  pure bounded loop; `flowAssistant.performWorkspaceInvestigation` injects canonical
+  reads, per-read privacy checks, clarification UI and the existing core transport.
+  `flowAssistant.cancelWorkspaceInvestigation` is called by both chat Stop controls.
 - **Source:** `src/features/assistant/flow-assistant.js` (panel + actions) and
   `src/features/assistant/flow-intelligence.js` (`deriveStudentContext`).
 
@@ -837,9 +1119,11 @@ or transmitted**. `window.SutraIntelligence.getDiagnosticsSummary()` aggregates
 that buffer (average latency over measured requests, session token totals with
 unavailable usage excluded, retry / stalled / partial / cache-hit counts).
 
-Per-response stats surface as a **progressive-disclosure "Response details"
-chip** (a native `<details>`, keyboard-operable, announcing expand/collapse)
-beneath the provenance receipt, rendered via `SutraDOMSafety` (no `innerHTML`).
+Per-response stats appear in **Details → Usage**, beside the Sources and Privacy
+tabs, rendered through DOM nodes (no `innerHTML`). The dialog uses the native
+popover surface with a modal fallback, viewport bounds, keyboard tabs, and
+Escape dismissal. Reopened replies show an unavailable-usage explanation when
+session measurements no longer exist.
 The stats live in a session-scoped `Map` keyed by an ephemeral message id and
 are dropped on reload — they are **not** added to `chatStore`/`appData` or the
 persistence inventory.
@@ -851,3 +1135,161 @@ prompt was cache-eligible; Gemini reports `cachedContentTokenCount` only when a
 `cache_control` breakpoint hit). Streamed OpenAI-compatible usage requires
 `include_usage` support; where a provider omits usage entirely, the chip shows
 latency alone.
+
+### Docked sidebar and writing previews
+
+The live Assistant panel is a full-height right sidebar below the main
+navigation. Desktop views reserve its width; floating Focus, Feedback, and
+storage controls move beside it and return when it closes. Narrow screens use
+an overlay, with a full-width sidebar on phones. Existing provider, model,
+thinking, permissions, and conversation controls remain canonical.
+
+The sidebar keeps tutoring modes and Workspace pulse collapsed until opened,
+and uses a compact provider/thinking/context footer. Writing commands have a
+visible **Send** button; Enter sends the instruction and Shift+Enter adds a
+line. Their source disclosure remains available above the review.
+The normal sidebar composer has a full-width text row with attachment,
+dictation (when available), and Send controls underneath. Opening the full
+Assistant tab hides the sidebar and releases its reserved workspace width;
+the existing conversation remains intact.
+Its width reservation is disabled in that view as well, including if an old
+panel-open class remains while navigation settles.
+
+Workspace retrieval retains the visible Notes target for indirect questions
+such as “do you like my supplement?” and for explicitly scoped note chats.
+Permission filters and separate locked-note consent still apply. “Open note”
+identifies the page on screen; exact request context remains inspectable through
+the context button. Unrelated last-opened notes are not retained for other views.
+
+Ordinary to-dos use the existing `create_task` proposal and canonical To-do
+store (`SutraHomeworkStore`, `kind: task`), with review before Apply. They appear
+in All and General, and their receipts open To-do. The internal homework
+identity keeps existing persistence, links, task mutations, and Undo intact.
+Earlier Assistant reminders saved in the planner are retained. Reapplying an
+exact matching proposal reuses that reminder and offers **Move to To-do** rather
+than creating another one. The explicit move preserves its id and unknown
+metadata, waits for destination persistence before removing the planner value,
+and keeps the original on failure. Old receipts can still undo a moved reminder. Requests to add upcoming classroom tests also
+expose that schema; they are not limited to creating a cram session. Several
+distinct tasks can be proposed separately, and dates still require a clear
+interpretation from the current date or a clarification.
+In Stateful chats, short clarifications such as “separate” and “this Tuesday”
+retain the schemas from the recent user request. Only user turns retained in
+the request budget supply that intent; assistant capability claims do not.
+Cancel stops this carryover, and Stateless chats do not use previous turns.
+
+Note edit proposals quote exact source HTML rather than requiring the provider
+to count serialized character offsets. Before the first review, Sutra resolves
+an exact, unique quote against the current hash/version and validates all ranges
+and overlaps. Ambiguous or missing quotes are rejected; changed baselines keep
+the existing rebase/conflict gate. Prompt version metadata uses the same version
+contract as the canonical patch engine. Previously failed proposals may need
+regeneration after loading this update.
+
+In Modern Notes, writing commands preview exact changed spans without saving
+suggestions into the document. The existing Sutra logo with small eyes glides
+above visible changed words, pauses before revealing even a punctuation-only
+correction, and returns to its header. Reduced motion skips that travel. Apply uses the
+owning editor's transaction/save path, while Cancel removes the preview.
+Classic Notes and chat retain an editable full-draft review. See
+[Modern Notes Editor](MODERN_NOTES_EDITOR.md) for scope and stale-source guards.
+
+The docked sidebar, launcher, chat avatars, gallery, and moving logo use a
+transparent character extracted from the approved Assistant artwork,
+which contains its own eyes and no mouth. The former separate eye overlay is
+omitted so a second pair is not drawn over the new ribbon.
+The live header and launcher float gently. Their eyes are separate blue pill
+layers over an eyeless face image: they blink, occasionally double-blink, and
+glance sideways when idle. While thinking they look upward; while editing they
+look down toward the word. The gallery uses the same eye layers. Reduced/off
+motion keeps the eyes open and centered. The header tilts subtly while a chat
+or writing request is pending, and the full-view welcome logo floats. Inline
+editing retains its existing word-target travel. These use small CSS transform
+animations, add no provider calls, and stop under reduced/off motion. Original
+logo masters remain unchanged; no mouth or additional eyes are drawn.
+
+### Local motion inventory
+
+The [Assistant animation gallery](../prototypes/assistant-animation-gallery.html)
+is a development-only preview. Run `node scripts/generate-assistant-motion-preview.cjs`
+from the repository root to regenerate its HTML, CSS, and JavaScript, then open
+`/docs/prototypes/assistant-animation-gallery.html` on the local static server.
+The gallery contains only Assistant motion. Its main interactive concept has a
+small co-editor character leave the chat dock, follow each passage, and animate
+inline suggestions while retaining the original wording. Grammar, spelling,
+rephrase, writing help, and general help share this entrance and chat surface;
+general help demonstrates reading and discussion without changing the note.
+Follow-up directions can replace an unaccepted pass. Pause, Stop, explicit
+accept/discard, exact single-pass Undo, error feedback, return-to-chat, light/dark,
+and reduced motion are available. Replies and edits are scripted examples;
+the gallery remains scripted. The live sidebar and Modern Notes changed-word
+preview now implement the related interaction; gallery playback controls and
+scripted scenarios remain development-only.
+
+The character uses Sutra's existing Assistant logo with small cyan/purple eyes
+integrated into the mark's lower dots and subtle glances, without a mouth; the
+brand image itself is unchanged. Travel is a smooth glide with a quiet float
+and slight tilts, without squash/stretch, hopping, or sparkle bursts. A small
+pencil marks editing. The logo aligns above each affected word before typing
+the correction, keeping clear of the text. Wrapped words use a clear rail above
+their paragraph with the same horizontal alignment. The logo returns to chat
+when the pass is ready; it has no floating status badge. Travel respects
+pause/resume, playback speed, and both system and preview reduced-motion controls.
+The dock uses a fixed square target; the logo's scaled image is centered within
+it and remains still while docked, including after a completed pass.
+Inline suggestions use a word/whitespace comparison: unchanged text stays plain,
+and only changed spans show removed and inserted wording. The spelling scenario
+changes only misspelled words; grammar corrections retain surrounding wording.
+Explicit rephrasing can change more words, with the same local comparison.
+
+The calmer word-focus iteration was manually checked in Chrome: pausing an
+active correction showed the logo horizontally aligned with the affected word,
+clear of its text. No floating badge remained. Spelling still produced exactly
+three word replacements, and the logo returned to its chat dock on completion.
+Reduced motion, 390px document overflow, and console-error checks passed; the
+viewport was reset. Generator freshness, targeted syntax, and local links were
+checked. This remains a scripted gallery change, with no provider calls or
+production editor changes.
+
+The logo/precision follow-up was checked in a separate Chrome preview tab:
+spelling showed exactly `detials → details`, `seperately → separately`, and
+`questons → questions`, with surrounding text outside the change spans. Accept
+and Undo preserved the spelling scenario's exact source. Grammar showed only
+four changed words; logo loading, two animated eyes, happy/error expressions,
+paused travel remaining stationary, reduced motion, and 390px overflow checks
+passed. No robot body/arm elements remain. The viewport override was reset;
+provider usage and runtime workspace changes remain zero.
+
+The collapsed existing-motion library copies 21 Assistant keyframe definitions
+and source timings from the full view and side panel. It excludes shared UI and
+optional-theme families. Hover/focus transitions remain in the named styles.
+Editable templates live under `scripts/templates/assistant-motion/`; regenerate
+the three output files after editing them. The gallery has no workspace access,
+app scripts, provider calls, or production deployment role.
+
+The Assistant-only co-editor follow-up was manually checked in Chrome for all
+five entry paths, inline suggestion completion, acceptance, exact Undo (including
+the spelling-specific source), discard, Stop, and mid-pass chat redirection.
+Read-only general help left the passage unchanged. Connection interruption
+feedback, light/dark, reduced motion, and a 390px stacked layout passed; the
+viewport override was reset and no console warnings/errors were observed.
+Targeted JavaScript syntax, generator `--check`, and link checks passed. No
+automated suites or provider requests were run for this prototype-only change.
+
+October 24 local validation: runtime integrity, the 1,181-assertion Intelligence
+Harness, architecture guardrails, shell, cache-stamp, persistence-health, syntax,
+and link checks passed. Manual Chrome QA on disposable `localhost:5298` confirmed
+that a caret `/grammar` preloads two paragraphs, excludes its slash query, shows
+the block-scope disclosure, enables Generate, and preserves the original note on
+Cancel and reload. Gallery filtering, light/dark, pause/resume, and reduced motion
+were exercised; it showed no document-wide horizontal overflow. Provider usage
+was zero. New unit/E2E regressions are prepared for CI, not run locally. Successful
+live Stateful follow-ups and reviewed provider-generated edits remain unverified
+for this revision. No new durable fields were introduced; note identity uses the
+existing conversation scope. Existing permissions, PIN gates, and Apply remain.
+
+Personal class-list questions, including “classes im taking,” bypass fuzzy
+Product Knowledge / Local Help routing and use permitted workspace context.
+Class-list retrieval selects active class/AP course records and Homework fallback
+courses, omits activity/misc/self-study and archived records, and reports its
+40-record bound. Course type metadata is ephemeral; no workspace schema changes.

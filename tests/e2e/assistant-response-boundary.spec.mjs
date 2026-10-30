@@ -43,18 +43,14 @@ async function openApp(page) {
 
 // Configure the assistant for a deterministic, network-stubbed send.
 async function configureProvider(page, { provider, key, model }) {
+  await page.waitForFunction(() => !!window.SutraProviderMeta && !!window.SutraIntelligence);
   await page.evaluate(({ provider, key, model }) => {
-    localStorage.setItem('chat_provider', provider);
     localStorage.setItem('sutra_ai_send_ack_v1', '1'); // skip the one-time remote disclosure
-    sessionStorage.setItem(provider + '_api_key', key);
-    // getCurrentChatProvider reads the provider <select> first, so set it too.
-    const ps = document.getElementById('chatProviderSelect');
-    if (ps) ps.value = provider;
-    const custom = document.getElementById('chatCustomModelInput');
-    const sel = document.getElementById('chatModelSelect');
-    if (sel) sel.value = '';
-    if (custom) custom.value = model || '';
+    window.SutraProviderMeta.saveSessionKey(provider, key);
+    window.SutraProviderMeta.selectModel(provider, model || '');
   }, { provider, key, model });
+  await expect.poll(() => page.evaluate(() => window.SutraIntelligence.getActiveProviderModel()))
+    .toEqual({ provider, model: model || '' });
 }
 
 async function stubFetch(page, payload) {
@@ -149,7 +145,7 @@ test('stale notice clears on next send and a rejected send does not persist an o
   await expect(page.locator('.chatbot-msg.chatbot-notice')).toContainText(/choose a model/i);
 
   // Now provide a model + stub the network and send a real message.
-  await page.evaluate(() => { document.getElementById('chatCustomModelInput').value = 'gemini-2.5-flash'; });
+  await page.evaluate(() => window.SutraProviderMeta.selectModel('gemini', 'gemini-2.5-flash'));
   await stubFetch(page, { candidates: [{ content: { parts: [{ text: 'Second answer.' }] } }] });
   await send(page, 'second try with model');
 

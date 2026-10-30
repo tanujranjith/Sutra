@@ -106,6 +106,81 @@ test('HTML Pages import, execute locally, persist source, and clear locked conte
   await expect(page.locator('#htmlPageEditor [data-html-preview] iframe')).toHaveCount(0);
 });
 
+test('HTML page PIN unlock and removal restore the HTML surface without a reload', async ({ page }) => {
+  await openApp(page);
+  const originalSource = '<main><h1 id="private-html">Private HTML page</h1></main>';
+  const id = await page.evaluate(async (source) => {
+    const note = window.SutraHTMLPages.createPage('PIN-protected HTML', { source });
+    note.htmlDocument.futureField = { keep: true };
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(note.id, '2468');
+    window.loadPage(note.id);
+    return note.id;
+  }, originalSource);
+  const source = page.locator('#htmlPageEditor [data-html-source]');
+  const preview = page.frameLocator('#htmlPageEditor [data-html-preview] iframe');
+  const assertLocked = async () => {
+    await expect(page.locator('#lockedPageScreen')).toBeVisible();
+    await expect(page.locator('#htmlPageEditor')).toBeHidden();
+    await expect(source).toHaveValue('');
+    await expect(page.locator('#htmlPageEditor iframe')).toHaveCount(0);
+  };
+  const unlock = async (pin) => {
+    await page.locator('#lockScreenPinInput').fill(pin);
+    await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
+  };
+  const assertHTML = async (expectedSource, expectedText) => {
+    await expect(page.locator('#lockedPageScreen')).toBeHidden();
+    await expect(page.locator('#htmlPageEditor')).toBeVisible();
+    await expect(source).toHaveValue(expectedSource);
+    await expect(preview.locator('#private-html')).toHaveText(expectedText);
+    await expect(page.locator('#editorV2Host')).toBeHidden();
+  };
+
+  await assertLocked();
+  await unlock('1111');
+  await expect(page.locator('#lockScreenError')).toContainText('Incorrect PIN');
+  await assertLocked();
+  await unlock('2468');
+  await assertHTML(originalSource, 'Private HTML page');
+
+  // Editing after unlock must still save the HTML model, including unknown fields.
+  const editedSource = '<main><h1 id="private-html">Edited after unlocking</h1></main>';
+  await page.locator('#htmlPageEditor [data-html-edit-source]').click();
+  await source.fill(editedSource);
+  await expect(page.locator('#htmlPageEditor [data-html-save-status]')).toContainText('Saved locally');
+  await expect.poll(() => page.evaluate(async (pageId) => {
+    const workspace = await window.loadWorkspaceLocally();
+    return workspace.pages.find(item => item.id === pageId)?.htmlDocument?.source;
+  }, id)).toBe(editedSource);
+
+  await page.evaluate((pageId) => {
+    const other = window.flowAtelier.pages.find(item => item.id !== pageId);
+    window.loadPage(other.id);
+    window.loadPage(pageId);
+  }, id);
+  await assertLocked();
+  await page.locator('#lockScreenPinInput').fill('1111');
+  await page.locator('#lockScreenRemoveBtn').click();
+  await expect(page.locator('#lockScreenError')).toContainText('Incorrect PIN');
+  await assertLocked();
+  await page.locator('#lockScreenPinInput').fill('2468');
+  await page.locator('#lockScreenRemoveBtn').click();
+  await assertHTML(editedSource, 'Edited after unlocking');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('html-pin-removal-regression'));
+
+  await page.reload();
+  await waitForAppHydrated(page);
+  await page.waitForFunction(() => !!window.SutraHTMLPages);
+  await page.evaluate(pageId => window.loadPage(pageId), id);
+  await assertHTML(editedSource, 'Edited after unlocking');
+  const stored = await page.evaluate(pageId => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    return payload.pages.find(item => item.id === pageId);
+  }, id);
+  expect(stored.isLocked).toBe(false);
+  expect(stored.htmlDocument).toMatchObject({ version: 1, source: editedSource, futureField: { keep: true } });
+});
+
 test('HTML Pages keep Preview first and switch Code/Preview on phones', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
@@ -281,6 +356,13 @@ test('workspace privacy gate verifies PINs, refresh-locks, crosses tabs, and ref
   await openApp(page);
 
   const enabled = await page.evaluate(() => window.SutraWorkspaceLock.enable('2468', 5));
+  const supportsConfigLock = await page.evaluate(() => typeof navigator.locks?.request === 'function');
+  if (!supportsConfigLock) {
+    expect(enabled.ok).toBe(false);
+    expect(enabled.error).toContain('Web Locks');
+    expect(await page.evaluate(() => localStorage.getItem('sutra:workspaceLock:v1'))).toBeNull();
+    return;
+  }
   expect(enabled.ok).toBe(true);
   await expect(page.locator('#sutraWorkspaceLockScreen')).toBeVisible();
   await expect(page.locator('.app-container')).toHaveAttribute('inert', '');
@@ -346,6 +428,22 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   const options = await page.locator('#sutraWorkspaceLockTimeout option').allTextContents();
   expect(options).toEqual(expect.arrayContaining(['1 minute', '10 minutes', '45 minutes', '2 hours', '12 hours', 'Custom…']));
 
+  await page.evaluate(() => window.setActiveView('settings'));
+  await page.locator('[data-settings-nav="data"]').click();
+  await page.locator('#sutraWorkspaceLockEnableBtn').click();
+  await expect(page.locator('[data-lock-current]')).toBeHidden();
+  await expect(page.locator('[data-lock-new]')).toBeVisible();
+  await expect(page.locator('[data-lock-confirm]')).toBeVisible();
+  if (!await page.evaluate(() => typeof navigator.locks?.request === 'function')) {
+    await page.locator('[data-lock-new]').fill('2468');
+    await page.locator('[data-lock-confirm]').fill('2468');
+    await page.locator('[data-lock-submit]').click();
+    await expect(page.locator('[data-lock-dialog-error]')).toContainText('Web Locks');
+    expect(await page.evaluate(() => localStorage.getItem('sutra:workspaceLock:v1'))).toBeNull();
+    return;
+  }
+  await page.locator('[data-lock-cancel]').click();
+
   await page.evaluate(() => window.SutraWorkspaceLock.enable('2468', 5));
   await page.locator('#sutraWorkspaceUnlockPin').fill('2468');
   await page.locator('#sutraWorkspaceUnlockForm button').click();
@@ -354,6 +452,7 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   await page.evaluate(() => window.setActiveView('settings'));
   await expect(page.locator('#view-settings')).toBeVisible();
   await page.locator('[data-settings-nav="data"]').click();
+  await expect(page.locator('#sutraWorkspaceLockEnableBtn')).toBeHidden();
   await page.locator('#sutraWorkspaceLockTimeout').evaluate((select) => {
     select.value = 'custom';
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -361,6 +460,9 @@ test('workspace privacy lock offers expanded presets and a custom duration', asy
   await expect(page.locator('#sutraWorkspaceLockCustomWrap')).toBeVisible();
   await page.locator('#sutraWorkspaceLockCustomMinutes').fill('137');
   await page.locator('#sutraWorkspaceLockCustomApply').click();
+  await expect(page.locator('[data-lock-current]')).toBeVisible();
+  await expect(page.locator('[data-lock-new]')).toBeHidden();
+  await expect(page.locator('[data-lock-confirm]')).toBeHidden();
   await page.locator('[data-lock-current]').fill('2468');
   await page.locator('[data-lock-submit]').click();
   await expect(page.locator('#sutraWorkspaceLockScreen')).toBeVisible();

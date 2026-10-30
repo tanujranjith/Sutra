@@ -1,0 +1,204 @@
+import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
+
+test.use({ serviceWorkers: 'block' });
+
+async function openAssistant(page) {
+  await page.addInitScript(() => sessionStorage.setItem('sutra_intro_played', '1'));
+  await page.goto('/Sutra.html');
+  await waitForAppReady(page);
+  await page.evaluate(() => {
+    window.markStudentOnboardingCompleted?.(true);
+    document.getElementById('sutraStartupIntro')?.remove();
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) { overlay.hidden = true; overlay.classList.remove('active'); overlay.style.display = 'none'; }
+    document.body.classList.remove('onboarding-open');
+    window.setWorkspacePreference('assistant.enabled', true);
+    window.setActiveView('assistantview');
+  });
+  await expect(page.locator('#asstInput')).toBeVisible();
+}
+
+test('Gemini refreshes an existing catalog, selections replace custom overrides, and effort is visible for Gemini and OpenAI', async ({ page }) => {
+  let listRequests = 0;
+  await page.route(url => url.hostname === 'generativelanguage.googleapis.com' && url.pathname === '/v1beta/models', async route => {
+    listRequests++;
+    const second = new URL(route.request().url()).searchParams.get('pageToken') === 'second';
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(second
+      ? { models: [{ name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'] }] }
+      : { models: [{ name: 'models/gemma-example', supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-3.5-flash', supportedGenerationMethods: ['generateContent'] }], nextPageToken: 'second' }) });
+  });
+  await page.route('https://api.openai.com/v1/models', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [{ id: 'gpt-6-luna' }] }) }));
+  await openAssistant(page);
+  await page.evaluate(() => {
+    window.SutraProviderMeta.saveSessionKey('gemini', 'fake-gemini-key');
+    window.SutraProviderMeta.saveSessionKey('openai', 'fake-openai-key');
+    window.SutraProviderMeta.selectModel('gemini', 'gemma-example');
+    window.SutraSafeStorage.set('chat_models_cache_gemini', ['gemini-3.5-flash']);
+    window.setActiveView('assistantview');
+  });
+  await page.locator('#asstModelBtn').click();
+  const picker = page.locator('#asstModelPop');
+  const model = picker.locator('select[aria-label="Model"]');
+  await expect(model.locator('option[value="gemini-3.8-flash"]')).toHaveCount(1);
+  expect(listRequests).toBe(2);
+  await model.selectOption('gemma-example', { force: true });
+  await expect(page.locator('#asstReasoningRow')).toBeHidden();
+  await model.selectOption('gemini-3.8-flash', { force: true });
+  await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
+  await expect(picker.locator('input[aria-label="Model ID"]')).toHaveValue('');
+  await expect(page.locator('#asstReasoningRow')).toBeVisible();
+  await page.locator('#asstInput').click();
+  const effort = page.locator('#asstReasoningTrigger');
+  const effortMenu = page.getByRole('menu', { name: 'Thinking effort', exact: true });
+  await expect(page.locator('.asst-input-card #asstReasoningTrigger')).toBeVisible();
+  await expect(page.locator('#asstReasoningSelect')).toBeHidden();
+  await expect(page.locator('#asstReasoningRow .nf-select')).toHaveCount(0);
+  await expect(page.locator('#asstReasoningSelect-menu')).toHaveCount(0);
+  await expect(page.locator('#asstReasoningRow button:visible')).toHaveCount(1);
+  await effort.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(effortMenu).toBeVisible();
+  await expect(effortMenu.getByRole('menuitemradio', { name: 'Auto', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await expect(effort).toHaveAccessibleName('Thinking effort: High');
+  await expect(page.locator('#asstReasoningRow button:visible')).toHaveCount(1);
+  await expect(effort).toBeFocused();
+  await expect(effortMenu).toBeHidden();
+  await effort.click();
+  await expect(effortMenu.getByRole('menuitemradio', { name: 'High', exact: true })).toHaveAttribute('aria-checked', 'true');
+  const anchorBounds = await effort.boundingBox();
+  const menuBounds = await effortMenu.boundingBox();
+  expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(anchorBounds.y);
+  await page.keyboard.press('Escape');
+  await expect(effort).toBeFocused();
+  await expect(effortMenu).toBeHidden();
+  await effort.click();
+  await page.locator('#asstInput').click();
+  await expect(effortMenu).toBeHidden();
+  await page.locator('#asstModelBtn').click();
+  await picker.locator('select[aria-label="AI provider"]').selectOption('openai', { force: true });
+  await expect(model.locator('option[value="gpt-6-luna"]')).toHaveCount(1);
+  await model.selectOption('gpt-6-luna', { force: true });
+  await expect(page.locator('#asstReasoningRow')).toBeVisible();
+  await expect(page.locator('#asstReasoningOptions [data-effort="xhigh"]')).toHaveCount(1);
+  await page.locator('#asstInput').click();
+  await effort.click();
+  await effortMenu.getByRole('menuitemradio', { name: 'Extra high', exact: true }).click();
+  await expect(effort).toHaveAccessibleName('Thinking effort: Extra high');
+  await page.locator('#asstModelBtn').click();
+  await picker.locator('select[aria-label="AI provider"]').selectOption('gemini', { force: true });
+  await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
+  await page.locator('#asstInput').click();
+  await effort.click();
+  await effortMenu.getByRole('menuitemradio', { name: 'High', exact: true }).click();
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('model-selection-review'));
+  await page.reload();
+  await waitForAppReady(page);
+  await page.evaluate(() => window.setActiveView('assistantview'));
+  await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
+  await expect(effort).toHaveAccessibleName('Thinking effort: High');
+  await expect(page.locator('#asstReasoningRow .nf-select')).toHaveCount(0);
+  await expect(page.locator('#asstReasoningRow button:visible')).toHaveCount(1);
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await effort.click();
+    await expect(effortMenu).toBeVisible();
+    const bounds = await effortMenu.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    expect(bounds.y).toBeGreaterThanOrEqual(0);
+    const contained = await page.locator('.asst-input-card').evaluate(card => {
+      const box = card.getBoundingClientRect();
+      return ['asstReasoningTrigger', 'asstSendBtn', 'asstInput'].every(id => {
+        const control = document.getElementById(id).getBoundingClientRect();
+        return control.left >= box.left && control.right <= box.right && control.top >= box.top && control.bottom <= box.bottom;
+      }) && document.documentElement.scrollWidth <= window.innerWidth;
+    });
+    expect(contained).toBe(true);
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('Assistant reads the full to-do store locally and retrieves relevant cross-workspace context without dumping unrelated records', async ({ page }) => {
+  await openAssistant(page);
+  await page.evaluate(() => {
+    window.flowAtelier.tasks.push({ id: 'orchid-task', title: 'Orchid protocol worksheet', completed: false, priority: 'low', dueDate: '2099-12-01' });
+    window.flowAtelier.tasks.push({ id: 'undated-task', title: 'Clean locker', completed: false });
+    window.flowAtelier.collegeAppWorkspace.collegeTracker.push({ id: 'unrelated-school', school: 'Unrelated College Sentinel' });
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraAssistantPermissions.setArea('planning', 'approved');
+    window.SutraWorkspaceEntityRegistry.invalidate('assistant-fixture');
+  });
+  await page.locator('#asstInput').fill("what's in my to-do list?");
+  await page.locator('#asstSendBtn').click();
+  await expect(page.locator('#asstMessages')).toContainText('Orchid protocol worksheet');
+  await expect(page.locator('#asstMessages')).toContainText('Clean locker');
+  for (const prompt of ['can u summarize my todos', 'check my homework']) {
+    await page.locator('#asstInput').fill(prompt);
+    await page.locator('#asstSendBtn').click();
+    const reply = page.locator('#asstMessages .asst-msg.assistant').last();
+    await expect(reply).toContainText('Orchid protocol worksheet');
+    await expect(reply).toContainText('Clean locker');
+  }
+  await page.evaluate(() => window.setWorkspacePreference('assistant.localRouting', false));
+  for (const prompt of ['can u summarize my todos', 'check my homework']) {
+    const selected = await page.evaluate(text => window.flowAssistant.buildRequestEnrichment(text, 'gemini').context, prompt);
+    expect(selected.tasks.some(row => row.id === 'undated-task')).toBe(true);
+    expect(selected.workspaceCollege).toBeUndefined();
+  }
+  await page.evaluate(() => window.setWorkspacePreference('assistant.localRouting', true));
+  const context = await page.evaluate(() => window.flowAssistant.buildRequestEnrichment('Explain the Orchid protocol worksheet', 'gemini').context);
+  expect(context.tasks.some(row => row.id === 'orchid-task')).toBe(true);
+  expect(JSON.stringify(context)).not.toContain('Unrelated College Sentinel');
+  expect(context.college).toBeUndefined();
+  await page.evaluate(() => window.SutraAssistantPermissions.setArea('planning', 'denied'));
+  const denied = await page.evaluate(() => window.flowAssistant.buildRequestEnrichment('Explain the Orchid protocol worksheet', 'gemini').context);
+  expect(JSON.stringify(denied)).not.toContain('Orchid protocol worksheet');
+  await page.locator('#asstInput').fill('can u summarize my todos');
+  await page.locator('#asstSendBtn').click();
+  await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('To-do access is off');
+});
+
+test('Workspace-aware does not override permissions; visible access settings restore task reads and persist explicit area choices', async ({ page }) => {
+  await openAssistant(page);
+  await page.evaluate(() => {
+    window.flowAtelier.tasks.push({ id: 'access-fixture', title: 'Access review worksheet', completed: false });
+    window.SutraAssistantPermissions.setMode('off');
+    window.SutraAssistantPermissions.setArea('planning', 'denied');
+    window.SutraAssistantPermissions.setArea('notes', 'denied');
+    window.setActiveView('settings');
+  });
+  await page.locator('[data-settings-nav="assistant"]').click();
+  const mode = page.locator('#assistantWorkspaceAccess');
+  await expect(mode).toHaveValue('off');
+  await page.locator('[data-pref-path="assistant.contextDepth"]').selectOption('workspace', { force: true });
+  await expect(mode).toHaveValue('off');
+  await mode.selectOption('read_only');
+  const permissionStatus = page.locator('#assistantWorkspaceAccessStatus');
+  await expect(permissionStatus).toContainText('Tasks & schedule is not allowed');
+  await expect(permissionStatus).toContainText('Assistant access change saved locally.');
+  await page.getByText('Access by area', { exact: true }).click();
+  await page.getByLabel('Tasks & schedule access', { exact: true }).selectOption('approved');
+  await expect(permissionStatus).toContainText('Assistant can read your tasks');
+  await expect(permissionStatus).toContainText('Assistant access change saved locally.');
+  await expect(page.getByLabel('Notes access', { exact: true })).toHaveValue('denied');
+  await page.evaluate(() => window.setActiveView('assistantview'));
+  await page.locator('#asstInput').fill('can u summarize my todos');
+  await page.locator('#asstSendBtn').click();
+  await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('Access review worksheet');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('access-settings-review'));
+  await page.reload();
+  await waitForAppReady(page);
+  await page.evaluate(() => window.setActiveView('settings'));
+  await page.locator('[data-settings-nav="assistant"]').click();
+  await expect(mode).toHaveValue('read_only');
+  const permissions = await page.evaluate(() => window.SutraAssistantPermissions.get());
+  expect(permissions.areas.planning).toBe('approved');
+  expect(permissions.areas.notes).toBe('denied');
+  expect(permissions.allowLockedNotes).toBe(false);
+  expect(permissions.allowPrivateDocuments).toBe(false);
+  expect(permissions.allowFinancial).toBe(false);
+  expect(permissions.allowWellness).toBe(false);
+});

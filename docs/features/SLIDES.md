@@ -10,6 +10,11 @@ only prepares the dialog; it does not create a page.
 The deck lives at `page.slides`, which deliberately keeps ordinary note content
 and unknown page fields intact.
 
+Slides also supports Create Split View, including two Slides decks. Each pane
+owns its editor session and tools while writing the same canonical owning page
+record. The secondary editor runs without a separate app or persistence owner;
+see [Split View](MODERN_NOTES_EDITOR.md#split-view) for ownership and lock rules.
+
 ## Durable model
 
 `page.slides` normalizes to version 2 while retaining V1 and unknown-field compatibility. It contains the deck-wide `theme`,
@@ -100,6 +105,11 @@ speaker notes. Locked pages remain excluded. Sync transports the complete
 changes and inline image data use the same encrypted, deterministic path as
 other Note content.
 
+For a note-scoped request, the Assistant reads the authorized page's own deck.
+Live editor context is included only when it belongs to that same page, including
+while a page change is in progress. Protected decks require the Assistant's
+separate one-request consent and PIN check even when the editor is unlocked.
+
 Slides uses only local image files chosen by the student. V1 stores those image
 bytes in the page model so existing workspace backup and Sync transport retain
 them. Moving those bytes to the course attachment store is a follow-up needed
@@ -141,7 +151,7 @@ Assistant cannot create or alter image elements and never accepts a remote image
 URL or performs a network fetch.
 
 Operations are validated by the pure
-`src/features/workspace/surface-assistant-actions.js` engine before the page is
+`src/features/assistant/surface-assistant-actions.js` engine before the page is
 mutated. A batch commits through the normal page save path as one change and
 records a field-level Activity undo patch. Undo is fingerprint-bound to the
 touched slides/elements so it fails closed if the student changed them again.

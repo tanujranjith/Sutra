@@ -180,7 +180,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
         { id: 'open-note', title: 'Cell respiration', content: '<p>ATP and mitochondria</p>', tags: ['biology'] },
         { id: 'locked-note', title: 'Hidden title', content: 'hidden body', isLocked: true }
       ],
-      tasks: [{ id: 'task-1', title: 'Read chapter 4', notes: 'Take notes', dueDate: '2026-08-01' }],
+      tasks: [{ id: 'task-1', title: 'Read chapter 4', notes: 'Take notes', dueDate: '2026-08-01', sourceUrl: 'https://example.com/chapter-4' }],
       timeBlocks: [{ id: 'block-1', name: 'Biology review', date: '2026-08-01', start: '16:00', end: '16:30' }],
       homeworkWorkspace: {
         courses: [{ id: 'bio', name: 'Biology' }],
@@ -192,7 +192,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
         }]
       },
       courseWorkspace: {
-        courses: [{ id: 'bio', name: 'Biology', teacher: 'Dr. Rivera' }],
+        courses: [{ id: 'bio', name: 'Biology', teacher: 'Dr. Rivera', type: 'class' }],
         files: [{ id: 'file-1', courseId: 'bio', name: 'Lab rubric.pdf', mimeType: 'application/pdf' }]
       },
       reviewWorkspace: {
@@ -201,7 +201,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
       },
       academicWorkspace: {},
       apStudyWorkspace: {},
-      testingHub: {},
+      testingHub: { sat: { name: 'SAT', examDate: '2026-12-05' }, act: { name: 'ACT', examDate: '2026-12-31' }, custom: [{ id: 'custom-exam', name: 'Orchid exam', examDate: '2026-11-01' }] },
       gradePlanner: {},
       collegeAppWorkspace: {},
       collegeTracker: {},
@@ -250,6 +250,13 @@ test('browser adapters cover the connected student loop and preserve locked-note
     assert.equal(searchable.some((entity) => entity.key === 'note:locked-note'), false);
     assert.equal(searchable.some((entity) => entity.key === 'private_document:private-1'), false);
     assert.equal(searchable.find((entity) => entity.key === 'note:open-note').text.includes('ATP'), true);
+    assert.equal(searchable.find((entity) => entity.key === 'course:bio').metadata.courseType, 'class');
+    assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.referenceUrl, 'https://example.com/chapter-4');
+    assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.taskNotes, 'Take notes');
+    assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.taskNotesLength, 10);
+    assert.equal(searchable.find(entity => entity.key === 'testing_exam:sat').dates.due, '2026-12-05');
+    assert.equal(searchable.find(entity => entity.key === 'testing_exam:act').dates.due, '2026-12-31');
+    assert.equal(searchable.find(entity => entity.key === 'testing_exam:custom:custom-exam').dates.due, '2026-11-01');
 
     assert.equal((await registry.open('note:open-note')).ok, true);
     assert.equal((await registry.open('homework:hw-1')).ok, true);
@@ -261,10 +268,37 @@ test('browser adapters cover the connected student loop and preserve locked-note
       ['course', 'bio'],
       ['course-tab', 'overview']
     ]);
+    assert.equal((await registry.open('testing_exam:sat')).ok, true);
+    assert.deepEqual(calls.at(-1), ['view', 'testing']);
   } finally {
     Object.entries(previous).forEach(([key, value]) => {
       if (value === undefined) delete globalThis[key];
       else globalThis[key] = value;
     });
+  }
+});
+
+test('Homework entities use canonical completion while preserving progress and legacy metadata', async () => {
+  await Promise.resolve(); // release the previous adapter snapshot
+  const store = require('../../src/domain/homework-store.js');
+  const workspace = store.normalizeWorkspace({ tasks: [
+    { id: 'reopened', title: 'Reopened', done: false, completed: true, status: 'done', futureData: { keep: true } },
+    { id: 'progress', title: 'In progress', done: false, status: 'in-progress' },
+    { id: 'finished', title: 'Finished', done: true, status: 'in-progress' },
+    { id: 'legacy', title: 'Legacy', status: 'done' }
+  ] });
+  const before = structuredClone(workspace);
+  const previous = globalThis.flowAtelier;
+  globalThis.flowAtelier = { getWorkspaceEntitySources: () => ({ homeworkWorkspace: workspace }) };
+  try {
+    const adapter = adaptersModule.createAdapterDefinitions().find(definition => definition.id === 'homework');
+    const entities = adapter.collect();
+    assert.equal(entities.find(entity => entity.id === 'reopened').status, 'open');
+    assert.equal(entities.find(entity => entity.id === 'progress').status, 'in-progress');
+    assert.equal(entities.find(entity => entity.id === 'finished').status, 'completed');
+    assert.equal(entities.find(entity => entity.id === 'legacy').status, 'completed');
+    assert.deepEqual(workspace, before);
+  } finally {
+    if (previous === undefined) delete globalThis.flowAtelier; else globalThis.flowAtelier = previous;
   }
 });

@@ -1077,9 +1077,11 @@ function getDefaultTestingHub() {
         // 'custom:<id>') → ISO date taken. Unified here because AP exams live in
         // apStudyWorkspace and custom exams in `custom`, so a per-profile flag
         // wouldn't cover them. A taken exam drops off the "upcoming" list and
-        // shows a Completed badge. Set via the exam card or the assistant's
+        // shows a taken/results state. Set via the exam card or the assistant's
         // update_exam_status action.
-        takenExams: {}
+        takenExams: {},
+        // Explicit official results; practice/readiness scores never populate this map.
+        officialResults: {}
     };
 }
 
@@ -1392,6 +1394,8 @@ function normalizeTestingHub(raw) {
             return acc;
         }, {})
         : {};
+    merged.officialResults = raw.officialResults && typeof raw.officialResults === 'object' && !Array.isArray(raw.officialResults)
+        ? { ...raw.officialResults } : {};
     merged.activeExam = typeof raw.activeExam === 'string' ? raw.activeExam : 'ap';
 
     // Pinned exams: validate against known types and custom ids; cap at 8 stored.
@@ -1582,6 +1586,16 @@ function getPageActionsConfig(pageId) {
             onClick: () => { togglePageTemporaryMode(page.id); }
         },
         ...lockActions,
+        {
+            className: 'fas fa-columns',
+            label: 'Split with another page',
+            onClick: () => window.flowAtelier.openPageInSplitView(page.id)
+        },
+        {
+            className: 'fas fa-folder-open',
+            label: 'Move to space',
+            onClick: () => window.flowAtelier.openMovePageToSpace(page.id)
+        },
         {
             className: 'fas fa-copy',
             label: 'Duplicate page',
@@ -2454,14 +2468,7 @@ function updateToolbarTimeWidget() {
                 try {
                     if (typeof loadAtelierTheme === 'function') loadAtelierTheme();
                     if (typeof applyFontSettingsFromAppSettings === 'function') applyFontSettingsFromAppSettings();
-                    // Restore page mode if it was enabled
-                    if (appSettings && (appSettings.notes && appSettings.notes.pageModeEnabled || appSettings.notesPagesMode)) {
-                        setTimeout(() => {
-                            const el = document.getElementById('settingsPageModeEnabled');
-                            if (el) el.checked = true;
-                            if (typeof applyPageModeFromSettings === 'function') applyPageModeFromSettings();
-                        }, 200);
-                    }
+                    if (typeof loadPagesMode === 'function') loadPagesMode();
                     // Restore suggesting mode
                     if (appSettings && appSettings.suggestingModeEnabled) {
                         document.body.classList.add('suggesting-mode');
@@ -2942,7 +2949,7 @@ function populateProgressDashboard() {
             return status === 'complete';
         }
 
-        function mountSutraRevokedScreen(message) {
+        function mountSutraRevokedScreen(message, options = {}) {
             let screen = document.getElementById('sutraRevokedDeviceScreen');
             if (!screen) {
                 screen = document.createElement('section');
@@ -3001,7 +3008,12 @@ function populateProgressDashboard() {
             }
             for (const child of Array.from(document.body.children)) {
                 if (child === screen) continue;
-                child.hidden = true;
+                // WebKit's hidden-property updates are costly across this large
+                // shell. Inline priority also conceals existing display overrides.
+                if (child.style.getPropertyValue('display') !== 'none'
+                    || child.style.getPropertyPriority('display') !== 'important') {
+                    child.style.setProperty('display', 'none', 'important');
+                }
                 child.inert = true;
                 child.setAttribute('aria-hidden', 'true');
             }
@@ -3009,7 +3021,7 @@ function populateProgressDashboard() {
             if (copy) copy.textContent = String(message || 'Local Sutra user data has been removed from this browser.');
             const guard = window.SutraRevocationWipe && window.SutraRevocationWipe.readGuard();
             const action = screen.querySelector('#sutraRevokedDeviceReuse');
-            if (action) action.hidden = !guard || !sutraRevocationCleanupFinished(guard.status);
+            if (action) action.hidden = options.allowReuse === false || !guard || !sutraRevocationCleanupFinished(guard.status);
             const retry = screen.querySelector('#sutraRevokedDeviceRetry');
             if (retry) retry.hidden = !guard || guard.status !== 'cleanup-error' || !sutraSyncRuntime || !sutraSyncRuntime.transport;
             try { screen.querySelector('h1').focus(); } catch (error) {}
@@ -3073,8 +3085,7 @@ function populateProgressDashboard() {
         }
 
         function hashCanonicalWorkspaceRecord(value) {
-            if (value === null || value === undefined) return null;
-            return hashPersistenceString(JSON.stringify(value));
+            return window.SutraWorkspaceCoordinator.hashRecord(value);
         }
 
         function formatByteCount(bytes) {
@@ -3473,7 +3484,7 @@ function populateProgressDashboard() {
         function openSutraStorageHealthPanel() {
             try {
                 if (typeof setActiveView === 'function') setActiveView('settings');
-                if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory('data', { skipSearch: false });
+                if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory('data', { skipSearch: false, openDetail: true });
                 setTimeout(() => {
                     const target = document.getElementById('sutraHealthTechnicalDetails') || document.getElementById('atelierDataHealthExport');
                     if (target && typeof target.focus === 'function') target.focus();
@@ -3755,13 +3766,17 @@ function populateProgressDashboard() {
 
         function normalizeSettingChoice(value, allowedValues, fallbackValue) {
             const normalized = String(value || '').trim().toLowerCase();
-            return allowedValues.includes(normalized) ? normalized : fallbackValue;
+            return allowedValues.find(choice => String(choice).toLowerCase() === normalized) ?? fallbackValue;
         }
 
         function clampSettingNumber(value, fallbackValue, minValue, maxValue) {
             const numeric = Number(value);
             if (!Number.isFinite(numeric)) return fallbackValue;
             return Math.min(maxValue, Math.max(minValue, numeric));
+        }
+
+        function normalizeStudentPreferenceHour(value, fallbackValue, minValue, maxValue) {
+            return Math.round(clampSettingNumber(value, fallbackValue, minValue, maxValue) * 60) / 60;
         }
 
         function normalizeAssistantChatMemoryDepth(value, fallbackValue = 10) {
@@ -3936,9 +3951,9 @@ function populateProgressDashboard() {
                     panelDefault: 'closed',
                     selectedTextActions: true,
                     autoSuggestions: true,
-                    contextDepth: 'currentView',
-                    chatMemoryMode: 'stateless',
-                    chatMemoryDepth: 10,
+                    contextDepth: 'workspace',
+                    chatMemoryMode: 'stateful',
+                    chatMemoryDepth: 5,
                     saveChatHistory: true,
                     includeChatsInEncryptedBackups: true,
                     includeChatsInPlaintextRecovery: false,
@@ -4235,7 +4250,7 @@ function populateProgressDashboard() {
                     requireApprovalForActions: assistantSource.requireApprovalForActions !== false,
                     includeSelectionByDefault: assistantSource.includeSelectionByDefault !== false,
                     localRouting: assistantSource.localRouting !== false,
-                    reasoningEffort: normalizeSettingChoice(assistantSource.reasoningEffort, ['auto', 'off', 'minimal', 'low', 'medium', 'high'], defaults.assistant.reasoningEffort),
+                    reasoningEffort: normalizeSettingChoice(assistantSource.reasoningEffort, ['auto', 'off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], defaults.assistant.reasoningEffort),
                     personalization: {
                         nickname: String(assistantPersonalizationSource.nickname || '').trim().slice(0, 60),
                         persona: normalizeSettingChoice(assistantPersonalizationSource.persona, ['balanced', 'encouraging', 'direct', 'socratic', 'formal'], defaults.assistant.personalization.persona),
@@ -4263,13 +4278,13 @@ function populateProgressDashboard() {
                     }
                 },
                 studentPreferences: {
-                    schoolStartHour: Math.floor(clampSettingNumber(studentPrefSource.schoolStartHour, defaults.studentPreferences.schoolStartHour, 0, 23)),
-                    schoolEndHour: Math.floor(clampSettingNumber(studentPrefSource.schoolEndHour, defaults.studentPreferences.schoolEndHour, 0, 23)),
-                    earliestStudyHour: Math.floor(clampSettingNumber(studentPrefSource.earliestStudyHour, defaults.studentPreferences.earliestStudyHour, 0, 23)),
-                    latestStudyHour: Math.floor(clampSettingNumber(studentPrefSource.latestStudyHour, defaults.studentPreferences.latestStudyHour, 0, 24)),
+                    schoolStartHour: normalizeStudentPreferenceHour(studentPrefSource.schoolStartHour, defaults.studentPreferences.schoolStartHour, 0, 1439 / 60),
+                    schoolEndHour: normalizeStudentPreferenceHour(studentPrefSource.schoolEndHour, defaults.studentPreferences.schoolEndHour, 0, 1439 / 60),
+                    earliestStudyHour: normalizeStudentPreferenceHour(studentPrefSource.earliestStudyHour, defaults.studentPreferences.earliestStudyHour, 0, 1439 / 60),
+                    latestStudyHour: normalizeStudentPreferenceHour(studentPrefSource.latestStudyHour, defaults.studentPreferences.latestStudyHour, 0, 24),
                     studyBlockMinutes: Math.floor(clampSettingNumber(studentPrefSource.studyBlockMinutes, defaults.studentPreferences.studyBlockMinutes, 10, 180)),
                     breakMinutes: Math.floor(clampSettingNumber(studentPrefSource.breakMinutes, defaults.studentPreferences.breakMinutes, 0, 60)),
-                    bedtimeHour: Math.floor(clampSettingNumber(studentPrefSource.bedtimeHour, defaults.studentPreferences.bedtimeHour, 18, 26)),
+                    bedtimeHour: normalizeStudentPreferenceHour(studentPrefSource.bedtimeHour, defaults.studentPreferences.bedtimeHour, 18, 26),
                     scheduleWeekends: studentPrefSource.scheduleWeekends !== false,
                     overloadThreshold: Math.floor(clampSettingNumber(studentPrefSource.overloadThreshold, defaults.studentPreferences.overloadThreshold, 2, 20)),
                     defaultHomeworkDifficulty: normalizeSettingChoice(studentPrefSource.defaultHomeworkDifficulty, ['easy', 'medium', 'hard'], defaults.studentPreferences.defaultHomeworkDifficulty),
@@ -4479,6 +4494,8 @@ function populateProgressDashboard() {
         function applyWorkspacePreferences(options = {}) {
             if (!appSettings) return;
             const prefs = ensureWorkspacePreferences();
+            const assistantPack = window.SutraFeatureRegistry?.getState?.('assistant');
+            if (assistantPack && assistantPack.enabled !== (prefs.assistant.enabled === true)) syncLazyFeaturePacks();
             const rootStyle = document.documentElement ? document.documentElement.style : null;
             const body = document.body;
 
@@ -5866,23 +5883,17 @@ function populateProgressDashboard() {
             normalized.skills = Array.isArray(source.skills)
                 ? source.skills.map(row => createLifeSkillRow(row))
                 : defaults.skills;
-            normalized.fitness = Array.isArray(source.fitness)
-                ? source.fitness.map(row => createLifeFitnessRow(row))
-                : defaults.fitness;
-            normalized.calories = Array.isArray(source.calories)
-                ? source.calories.map(row => createLifeCalorieRow(row))
-                : defaults.calories;
+            normalized.fitness = cloneSerializable(source.fitness, defaults.fitness);
+            normalized.calories = cloneSerializable(source.calories, defaults.calories);
             normalized.books = Array.isArray(source.books)
                 ? source.books.map(row => createLifeBookRow(row))
                 : defaults.books;
             normalized.spending = Array.isArray(source.spending)
                 ? source.spending.map(row => createLifeSpendingRow(row))
                 : defaults.spending;
-            normalized.journals = Array.isArray(source.journals)
-                ? source.journals.map(row => createLifeJournalRow(row))
-                : defaults.journals;
-            normalized.sleepTracker = normalizeLifeSleepTracker(source.sleepTracker || defaults.sleepTracker);
-            normalized.wellness = normalizeWellnessData(source.wellness || defaults.wellness);
+            normalized.journals = cloneSerializable(source.journals, defaults.journals);
+            normalized.sleepTracker = cloneSerializable(source.sleepTracker, defaults.sleepTracker);
+            normalized.wellness = cloneSerializable(source.wellness, defaults.wellness);
             if (source.onboardingSeeded !== false) {
                 normalized.goals = normalized.goals.filter(row => {
                     const title = String(row.title || '').trim();
@@ -5899,14 +5910,6 @@ function populateProgressDashboard() {
                     const name = String(row.name || '').trim();
                     return name !== 'Public speaking';
                 });
-                normalized.fitness = normalized.fitness.filter(row => {
-                    const activity = String(row.activity || '').trim();
-                    return activity !== 'Run';
-                });
-                normalized.calories = normalized.calories.filter(row => {
-                    const meal = String(row.meal || '').trim();
-                    return meal !== 'Lunch';
-                });
                 normalized.books = normalized.books.filter(row => {
                     const title = String(row.title || '').trim();
                     return title !== 'Atomic Habits';
@@ -5914,10 +5917,6 @@ function populateProgressDashboard() {
                 normalized.spending = normalized.spending.filter(row => {
                     const category = String(row.category || '').trim();
                     return category !== 'Food';
-                });
-                normalized.journals = normalized.journals.filter(row => {
-                    const content = String(row.content || '').trim();
-                    return content !== 'Today I made progress on my weekly priorities.';
                 });
             }
             return normalized;
@@ -6921,7 +6920,7 @@ function populateProgressDashboard() {
                 masteryRecords: [],
                 confidenceObservations: [],
                 studentDecisionState: { version: 1, preset: 'balanced', snoozed: {}, dismissed: [], pinned: [] },
-                assistantPermissions: { version: 1, mode: 'read_only', areas: {}, allowLockedNotes: false, allowWellness: false, allowFinancial: false, allowPrivateDocuments: false },
+                assistantPermissions: { version: 1, mode: 'approved_actions', areas: {}, allowLockedNotes: false, allowWellness: false, allowFinancial: false, allowPrivateDocuments: false },
                 assistantMemory: { version: 1, enabled: false, items: [] },
                 assistantChatHistory: { version: 1, currentChatId: '', conversations: [], legacyMigrationComplete: false },
                 syncAuditLog: [],
@@ -7652,6 +7651,8 @@ function populateProgressDashboard() {
             }
             const defaults = getDefaultAppData();
             const merged = { ...defaults, ...stored };
+            // New defaults never upgrade an older workspace's access or history.
+            if (stored && !stored.assistantPermissions) merged.assistantPermissions = { ...defaults.assistantPermissions, mode: 'off' };
             const storedSettings = stored && stored.settings ? stored.settings : {};
             merged.settings = { ...defaults.settings, ...storedSettings };
             merged.settings.font = { ...defaults.settings.font, ...(stored && stored.settings && stored.settings.font ? stored.settings.font : {}) };
@@ -7664,7 +7665,8 @@ function populateProgressDashboard() {
                 ...(stored && stored.settings && stored.settings.dataHealth ? stored.settings.dataHealth : {})
             };
             merged.settings.preferences = normalizeWorkspacePreferences(
-                { ...defaults.settings.preferences, ...(stored && stored.settings && stored.settings.preferences ? stored.settings.preferences : {}) },
+                { ...defaults.settings.preferences, ...(stored && stored.settings && stored.settings.preferences ? stored.settings.preferences : {}),
+                    ...(stored ? { assistant: { contextDepth: 'currentView', chatMemoryMode: 'stateless', chatMemoryDepth: 10, ...(stored.settings?.preferences?.assistant || {}) } } : {}) },
                 getLegacyPreferenceSeed({ ...defaults.settings, ...storedSettings })
             );
             merged.settings.autoEventBlocksEnabled = merged.settings.autoEventBlocksEnabled !== false;
@@ -9428,7 +9430,7 @@ function populateProgressDashboard() {
                 analyzeEssayReuse: essay => engine.analyzeEssayReuse(collegeAppWorkspace.essayOrganizer, essay),
                 compareDecisionMatrix: () => engine.scoreDecisionMatrix(collegeAppWorkspace.decisionMatrix),
                 getFinancialRunway: (options = {}) => engine.computeFinancialRunway(getSutra2DomainSnapshot(), options),
-                getWellnessTrends: (options = {}) => engine.getWellnessTrends(getSutra2DomainSnapshot(), options),
+                getWellnessTrends: () => ({ available: false, reason: 'retired', signals: [] }),
                 previewEmergencyWeek: (options = {}) => engine.buildEmergencyWeek(getSutra2DomainSnapshot(), options),
                 applyEmergencyWeek(options = {}) {
                     requireReviewedStudentLife(options, 'Emergency Week plans');
@@ -9767,7 +9769,7 @@ function populateProgressDashboard() {
 
         function ensureAssistantPermissionState() {
             if (!appData.assistantPermissions || typeof appData.assistantPermissions !== 'object') {
-                appData.assistantPermissions = cloneSerializable(getDefaultAppData().assistantPermissions, {});
+                appData.assistantPermissions = { ...getDefaultAppData().assistantPermissions, mode: 'off' };
             }
             if (!appData.assistantPermissions.areas || typeof appData.assistantPermissions.areas !== 'object') appData.assistantPermissions.areas = {};
             return appData.assistantPermissions;
@@ -9786,6 +9788,15 @@ function populateProgressDashboard() {
             window.SutraAssistantPermissions = {
                 MODES: ['off', 'read_only', 'ask_per_area', 'approved_actions'],
                 get: () => cloneSerializable(ensureAssistantPermissionState(), {}),
+                applyPreset(name) {
+                    if (settingsDraftValues.size) throw new Error('Save or Revert your unsaved Settings changes before choosing a preset.');
+                    const plan = window.SutraAssistantPrivacy.presetPlan(name, ensureAssistantPermissionState());
+                    appData.assistantPermissions = plan.permissions;
+                    setWorkspacePreference('assistant', { ...appSettings.preferences.assistant, ...plan.preferences }, { persist: false, refresh: false });
+                    persistAppData();
+                    syncSettingsControls();
+                    return { persistenceStatus: 'scheduled' };
+                },
                 setMode(mode) {
                     if (!this.MODES.includes(String(mode))) throw new Error('Unknown assistant permission mode.');
                     ensureAssistantPermissionState().mode = String(mode);
@@ -9801,7 +9812,7 @@ function populateProgressDashboard() {
                     return { changedIds: [`assistantPermissions.areas.${name}`], warnings: [], undo: null, persistenceStatus: 'scheduled' };
                 },
                 setSensitive(area, allowed) {
-                    const keys = { locked_notes: 'allowLockedNotes', wellness: 'allowWellness', financial: 'allowFinancial', private_documents: 'allowPrivateDocuments' };
+                    const keys = { locked_notes: 'allowLockedNotes', financial: 'allowFinancial', private_documents: 'allowPrivateDocuments' };
                     const key = keys[String(area || '')];
                     if (!key) throw new Error('Unknown sensitive assistant area.');
                     ensureAssistantPermissionState()[key] = allowed === true;
@@ -10013,7 +10024,6 @@ function populateProgressDashboard() {
         let currentPageId = null;
         let secondaryPageId = null;
         let activeEditorPane = 'primary';
-        let splitViewEnabledBeforeFocusMode = false;
         let sidebarWasOpenBeforeFocusMode = false;
         let focusModeFullscreenLinked = false;
         let splitSecondaryDebounceTimer = null;
@@ -10028,6 +10038,8 @@ function populateProgressDashboard() {
         let activeSettingsCategory = 'appearance';
         let settingsLastAppliedAt = null;
         const settingsDraftValues = new Map();
+        let settingsSavePending = false;
+        let settingsSaveError = '';
         const splitScrollPositions = {};
         let pageToRenameId = null; // For rename functionality
         let themeApplyMode = 'current'; // 'current', 'all', 'custom'
@@ -10069,7 +10081,6 @@ function populateProgressDashboard() {
         let activeView = 'today';
         let searchQuery = '';
         let searchForceExpanded = false;
-        let activeCanvasRuntime = null;
         let topNavLayoutObserver = null;
         let notesFlowRowObserver = null;
         let toolbarResizeObserver = null;
@@ -11482,7 +11493,10 @@ function populateProgressDashboard() {
         }
 
         function renderCollegeCheckboxInput(sheetKey, rowId, field, checked) {
-            return `<input class="college-checkbox-input" type="checkbox" data-college-sheet="${sheetKey}" data-college-row-id="${rowId}" data-college-field="${field}" ${checked ? 'checked' : ''} />`;
+            const row = getCollegeRows(sheetKey).find(item => String(item.id) === String(rowId)) || {};
+            const names = { testOptional: 'Test optional', appSubmitted: 'Application submitted', transcriptSubmitted: 'Transcript submitted', recommendationsSubmitted: 'Recommendations submitted' };
+            const label = (names[field] || String(field).replace(/([A-Z])/g, ' $1')) + ' for ' + (row.college || row.school || 'row ' + rowId);
+            return `<input class="college-checkbox-input" type="checkbox" aria-label="${escapeHtml(label)}" data-college-sheet="${escapeHtml(sheetKey)}" data-college-row-id="${escapeHtml(String(rowId))}" data-college-field="${escapeHtml(field)}" ${checked ? 'checked' : ''} />`;
         }
 
         function renderCollegeTextareaInput(sheetKey, rowId, field, value, rows = 2) {
@@ -11859,7 +11873,7 @@ function populateProgressDashboard() {
         }
 
         function renderCollegeTracker() {
-            const root = document.getElementById('view-college');
+            const root = document.getElementById('collegeappPage-sheets');
             if (!root) return;
             collegeTracker = normalizeCollegeTracker(collegeTracker);
             applyCollegeTabState();
@@ -11868,7 +11882,7 @@ function populateProgressDashboard() {
         }
 
         function initCollegeTrackerUI() {
-            const root = document.getElementById('view-college');
+            const root = document.getElementById('collegeappPage-sheets');
             if (!root) return;
             if (root.dataset.bound === 'true') {
                 renderCollegeTracker();
@@ -13149,7 +13163,7 @@ function populateProgressDashboard() {
                 fields: [
                     { key: 'school', label: 'School', type: 'text', placeholder: 'School name' },
                     { key: 'essayType', label: 'Type', type: 'select', options: [{ value: '', label: '—' }].concat(COLLEGE_ESSAY_TYPES.map(t => ({ value: t.value, label: t.label }))), default: '' },
-                    { key: 'wordTarget', label: 'Word target', type: 'number', min: 0, max: 5000, step: 10, placeholder: 'e.g. 650' },
+                    { key: 'wordTarget', label: 'Word target', type: 'number', min: 0, max: 5000, step: 10, emptyValue: null, placeholder: 'e.g. 650' },
                     { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'Essay prompt...' },
                     { key: 'draftStatus', label: 'Draft Status', type: 'select', options: [
                         { value: 'brainstorming', label: 'Brainstorming' },
@@ -13281,7 +13295,7 @@ function populateProgressDashboard() {
                 title: 'Add Habit',
                 fields: [
                     { key: 'name', label: 'Habit Name', type: 'text', placeholder: 'e.g. Read 30 minutes' },
-                    { key: 'category', label: 'Category', type: 'text', placeholder: 'e.g. Health, Learning, Mindfulness' },
+                    { key: 'category', label: 'Category', type: 'text', placeholder: 'e.g. Learning, Projects, Personal' },
                     { key: 'targetPerWeek', label: 'Target per Week', type: 'number', min: 1, max: 14, default: 7, placeholder: '7' }
                 ],
                 createFn: seed => createLifeHabitRow(seed)
@@ -13394,6 +13408,7 @@ function populateProgressDashboard() {
         let _addItemModalContext = null;
 
         function openAddItemModal(collectionKey, workspace) {
+            if (workspace === 'life' && ['fitness', 'calories', 'journals', 'sleepEntries'].includes(collectionKey)) return;
             const config = ADD_ITEM_FIELD_CONFIGS[collectionKey];
             if (!config) return;
             const modal = document.getElementById('addItemModal');
@@ -13478,7 +13493,11 @@ function populateProgressDashboard() {
                 const el = bodyEl.querySelector(`[data-field-key="${f.key}"]`);
                 if (!el) return;
                 let val = el.value;
-                if (f.type === 'number') val = parseFloat(val) || (f.default !== undefined ? f.default : 0);
+                if (f.type === 'number') {
+                    const number = parseFloat(val);
+                    val = String(val).trim() === '' && Object.prototype.hasOwnProperty.call(f, 'emptyValue')
+                        ? f.emptyValue : Number.isFinite(number) ? number : (f.default !== undefined ? f.default : 0);
+                }
                 seed[f.key] = val;
             });
 
@@ -13653,7 +13672,8 @@ function populateProgressDashboard() {
             if (!college.scores || typeof college.scores !== 'object') college.scores = {};
             college.scores[criterionId] = Math.max(0, Math.min(10, normalizeFiniteNumber(target.value, 0)));
             persistAppData();
-            renderCollegeAppWorkspace();
+            target.value = college.scores[criterionId];
+            renderCollegeAppDecisionMatrix(true);
         }
 
         function updateCollegeAppMajorDecisionScore(target) {
@@ -13665,7 +13685,8 @@ function populateProgressDashboard() {
             if (!major.scores || typeof major.scores !== 'object') major.scores = {};
             major.scores[criterionId] = Math.max(0, Math.min(10, normalizeFiniteNumber(target.value, 0)));
             persistAppData();
-            renderCollegeAppWorkspace();
+            target.value = major.scores[criterionId];
+            renderCollegeAppMajorDecisionMatrix(true);
         }
 
         function getCollegeDeadlineCountdownMeta(deadline, status) {
@@ -14126,6 +14147,7 @@ function populateProgressDashboard() {
             const colleges = getCollegeAppRows('decisionColleges');
             const totalWeight = criteria.reduce((sum, criterion) => sum + Math.max(0, normalizeFiniteNumber(criterion.weight, 0)), 0);
             return colleges
+                .filter(college => criteria.some(criterion => Number(criterion.weight) > 0 && Number(college.scores && college.scores[criterion.id]) > 0))
                 .map(college => {
                     const weighted = criteria.reduce((sum, criterion) => {
                         const score = Math.max(0, Math.min(10, normalizeFiniteNumber(college.scores && college.scores[criterion.id], 0)));
@@ -14143,7 +14165,25 @@ function populateProgressDashboard() {
                 .sort((a, b) => b.normalizedScore - a.normalizedScore);
         }
 
-        function renderCollegeAppDecisionMatrix() {
+        function refreshDecisionScoreCards(host, criteria, records, prefix, scoreAttribute) {
+            if (!host) return;
+            const totalWeight = criteria.reduce((sum, criterion) => sum + Math.max(0, Number(criterion.weight) || 0), 0);
+            host.querySelectorAll('input[' + scoreAttribute + ']').forEach(input => {
+                const record = records.find(row => String(row.id) === input.dataset.collegeappRowId);
+                if (!record) return;
+                const score = Math.max(0, Math.min(10, Number(record.scores && record.scores[input.getAttribute(scoreAttribute)]) || 0));
+                const row = input.closest('.' + prefix + '-card-row');
+                const bar = row && row.querySelector('.' + prefix + '-card-score-bar');
+                if (bar) bar.style.width = (score * 10) + '%';
+                if (row) row.classList.toggle(prefix + '-card-row-zero', score === 0);
+                const card = input.closest(prefix === 'dm' ? '.dm-college-card' : '.mdm-major-card');
+                const total = card && card.querySelector('.' + prefix + '-weighted-total');
+                const weighted = criteria.reduce((sum, criterion) => sum + Math.max(0, Math.min(10, Number(record.scores && record.scores[criterion.id]) || 0)) * Math.max(0, Number(criterion.weight) || 0), 0);
+                if (total) total.textContent = (totalWeight ? weighted / totalWeight : 0).toFixed(2);
+            });
+        }
+
+        function renderCollegeAppDecisionMatrix(preserveInputs = false) {
             const criteriaContainer = document.getElementById('collegeAppDecisionCriteriaBody');
             const collegesHeader = document.getElementById('collegeAppDecisionCollegesHeader');
             const collegesBody = document.getElementById('collegeAppDecisionCollegesBody');
@@ -14155,8 +14195,9 @@ function populateProgressDashboard() {
             const criteria = getCollegeAppRows('decisionCriteria');
             const colleges = getCollegeAppRows('decisionColleges');
 
+            if (preserveInputs) refreshDecisionScoreCards(collegesBody, criteria, colleges, 'dm', 'data-collegeapp-score-criterion');
             /* ------ Criteria panel (compact two-column grid) ------ */
-            if (criteriaContainer) {
+            if (criteriaContainer && !preserveInputs) {
                 if (!criteria.length) {
                     criteriaContainer.innerHTML = '<div class="dm-empty"><i class="fas fa-sliders-h"></i>No criteria yet. Add weighted criteria to start ranking schools.</div>';
                 } else {
@@ -14183,7 +14224,7 @@ function populateProgressDashboard() {
             }
 
             /* ------ College Score Cards ------ */
-            if (collegesBody) {
+            if (collegesBody && !preserveInputs) {
                 if (!colleges.length) {
                     collegesBody.innerHTML = `<div class="dm-empty"><i class="fas fa-university"></i>No colleges in matrix yet. Add at least one college to compare.</div>`;
                 } else {
@@ -14233,7 +14274,7 @@ function populateProgressDashboard() {
 
             if (rankingList) {
                 if (!rankings.length) {
-                    rankingList.innerHTML = '<div class="dm-empty"><i class="fas fa-trophy"></i>Add criteria and colleges to compute rankings.</div>';
+                    rankingList.innerHTML = '<div class="dm-empty"><i class="fas fa-trophy"></i>Rate colleges on weighted criteria to see rankings. Unrated and all-zero entries are excluded.</div>';
                 } else {
                     rankingList.innerHTML = rankings.map((entry, index) => {
                         const pct = maxNorm > 0 ? ((entry.normalizedScore / 10) * 100).toFixed(1) : 0;
@@ -14273,6 +14314,7 @@ function populateProgressDashboard() {
             const majors = getCollegeAppRows('majorDecisionMajors');
             const totalWeight = criteria.reduce((sum, c) => sum + Math.max(0, normalizeFiniteNumber(c.weight, 0)), 0);
             return majors
+                .filter(major => criteria.some(criterion => Number(criterion.weight) > 0 && Number(major.scores && major.scores[criterion.id]) > 0))
                 .map(major => {
                     const weighted = criteria.reduce((sum, c) => {
                         const score = Math.max(0, Math.min(10, normalizeFiniteNumber(major.scores && major.scores[c.id], 0)));
@@ -14285,7 +14327,7 @@ function populateProgressDashboard() {
                 .sort((a, b) => b.normalizedScore - a.normalizedScore);
         }
 
-        function renderCollegeAppMajorDecisionMatrix() {
+        function renderCollegeAppMajorDecisionMatrix(preserveInputs = false) {
             const criteriaContainer = document.getElementById('majorDecisionCriteriaBody');
             const majorsBody = document.getElementById('majorDecisionMajorsBody');
             const rankingList = document.getElementById('majorDecisionRankingList');
@@ -14296,8 +14338,9 @@ function populateProgressDashboard() {
             const criteria = getCollegeAppRows('majorDecisionCriteria');
             const majors = getCollegeAppRows('majorDecisionMajors');
 
+            if (preserveInputs) refreshDecisionScoreCards(majorsBody, criteria, majors, 'mdm', 'data-collegeapp-major-score-criterion');
             /* ------ Criteria panel ------ */
-            if (criteriaContainer) {
+            if (criteriaContainer && !preserveInputs) {
                 if (!criteria.length) {
                     criteriaContainer.innerHTML = '<div class="mdm-empty"><i class="fas fa-sliders-h"></i>No criteria yet. Add weighted criteria to start ranking majors.</div>';
                 } else {
@@ -14319,7 +14362,7 @@ function populateProgressDashboard() {
             }
 
             /* ------ Major Score Cards ------ */
-            if (majorsBody) {
+            if (majorsBody && !preserveInputs) {
                 if (!majors.length) {
                     majorsBody.innerHTML = '<div class="mdm-empty"><i class="fas fa-graduation-cap"></i>No majors in matrix yet. Add at least one major to compare.</div>';
                 } else {
@@ -14368,7 +14411,7 @@ function populateProgressDashboard() {
 
             if (rankingList) {
                 if (!rankings.length) {
-                    rankingList.innerHTML = '<div class="mdm-empty"><i class="fas fa-trophy"></i>Add criteria and majors to compute rankings.</div>';
+                    rankingList.innerHTML = '<div class="mdm-empty"><i class="fas fa-trophy"></i>Rate majors on weighted criteria to see rankings. Unrated and all-zero entries are excluded.</div>';
                 } else {
                     rankingList.innerHTML = rankings.map((entry, index) => {
                         const pct = maxNorm > 0 ? ((entry.normalizedScore / 10) * 100).toFixed(1) : 0;
@@ -15576,6 +15619,7 @@ function populateProgressDashboard() {
         }
 
         function addLifeRow(collectionKey) {
+            if (['fitness', 'calories', 'journals', 'sleepEntries'].includes(collectionKey)) return;
             openAddItemModal(collectionKey, 'life');
         }
 
@@ -15849,54 +15893,6 @@ function populateProgressDashboard() {
             `).join('');
         }
 
-        function renderLifeFitnessRows() {
-            const body = document.getElementById('lifeFitnessTableBody');
-            if (!body) return;
-            const rows = getLifeRows('fitness');
-            if (!rows.length) {
-                body.innerHTML = '<tr class="college-empty-row"><td colspan="6">No fitness logs yet. Add workouts and activity sessions.</td></tr>';
-                return;
-            }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input type="date" class="college-input" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="date" value="${escapeHtml(String(row.date || ''))}"></td>
-                    <td><input class="college-input" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="activity" value="${escapeHtml(String(row.activity || ''))}" placeholder="Activity"></td>
-                    <td><input type="number" min="0" class="college-input" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="durationMinutes" value="${escapeHtml(String(row.durationMinutes || 0))}"></td>
-                    <td>
-                        <select class="college-select" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="intensity">
-                            <option value="light" ${row.intensity === 'light' ? 'selected' : ''}>Light</option>
-                            <option value="moderate" ${row.intensity === 'moderate' ? 'selected' : ''}>Moderate</option>
-                            <option value="high" ${row.intensity === 'high' ? 'selected' : ''}>High</option>
-                        </select>
-                    </td>
-                    <td><textarea class="college-textarea" rows="1" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="notes" placeholder="Notes">${escapeHtml(String(row.notes || ''))}</textarea></td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete fitness row"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
-        function renderLifeCalorieRows() {
-            const body = document.getElementById('lifeCaloriesTableBody');
-            if (!body) return;
-            const rows = getLifeRows('calories').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-            if (!rows.length) {
-                body.innerHTML = '<tr class="college-empty-row"><td colspan="8">No calorie entries yet. Add meals to track daily intake.</td></tr>';
-                return;
-            }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input type="date" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="date" value="${escapeHtml(String(row.date || ''))}"></td>
-                    <td><input class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="meal" value="${escapeHtml(String(row.meal || ''))}" placeholder="Meal"></td>
-                    <td><input type="number" min="0" step="1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="calories" value="${escapeHtml(String(Math.max(0, Math.round(normalizeFiniteNumber(row.calories, 0)))))}"></td>
-                    <td><input type="number" min="0" step="0.1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="protein" value="${escapeHtml(String(Math.max(0, normalizeFiniteNumber(row.protein, 0))))}"></td>
-                    <td><input type="number" min="0" step="0.1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="carbs" value="${escapeHtml(String(Math.max(0, normalizeFiniteNumber(row.carbs, 0))))}"></td>
-                    <td><input type="number" min="0" step="0.1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="fat" value="${escapeHtml(String(Math.max(0, normalizeFiniteNumber(row.fat, 0))))}"></td>
-                    <td><textarea class="college-textarea" rows="1" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="notes" placeholder="Notes">${escapeHtml(String(row.notes || ''))}</textarea></td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete calorie row"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
         function renderLifeBookRows() {
             const body = document.getElementById('lifeBooksTableBody');
             if (!body) return;
@@ -16014,31 +16010,6 @@ function populateProgressDashboard() {
             }
         }
 
-        function renderLifeJournalRows() {
-            const body = document.getElementById('lifeJournalTableBody');
-            if (!body) return;
-            const rows = getLifeRows('journals').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-            if (!rows.length) {
-                body.innerHTML = '<tr class="college-empty-row"><td colspan="5">No journal entries yet. Use Quick Create to add today\'s entry.</td></tr>';
-                return;
-            }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input type="date" class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="date" value="${escapeHtml(String(row.date || ''))}"></td>
-                    <td><input class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="title" value="${escapeHtml(String(row.title || ''))}" placeholder="Title"></td>
-                    <td>
-                        <input class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="mood" value="${escapeHtml(String(row.mood || ''))}" placeholder="Mood">
-                        <div class="life-journal-signals">
-                            <input type="number" min="0" max="10" class="college-input college-essay-meta-num" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="stress" value="${row.stress == null ? '' : escapeHtml(String(row.stress))}" placeholder="Stress" aria-label="Stress 0-10 (optional)">
-                        </div>
-                        <input class="college-input college-essay-next" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="tags" value="${escapeHtml((row.tags || []).join(', '))}" placeholder="Tags (comma-separated)" aria-label="Tags">
-                    </td>
-                    <td><textarea class="college-textarea" rows="2" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="content" placeholder="Entry">${escapeHtml(String(row.content || ''))}</textarea></td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete journal row"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
         // ---- Spending budgets + recurring expenses ----
         function renderLifeBudgets() {
             const el = document.getElementById('lifeBudgetsCard');
@@ -16138,31 +16109,6 @@ function populateProgressDashboard() {
         }
 
         // ---- Journal reflection prompts + non-medical disclaimer ----
-        const LIFE_JOURNAL_PROMPTS = [
-            'What went well today?',
-            'What felt heavy today?',
-            'One thing I am grateful for',
-            'What will I do differently tomorrow?',
-            'How did I take care of myself today?',
-            'What am I avoiding, and why?'
-        ];
-        function renderLifeJournalPrompts() {
-            const el = document.getElementById('lifeJournalPrompts');
-            if (!el) return;
-            el.innerHTML = `
-                <div class="life-journal-promptbar">
-                    ${LIFE_JOURNAL_PROMPTS.map((p, i) => `<button type="button" class="neumo-btn neumo-btn--ghost life-prompt-btn" data-life-action="journal-prompt" data-cc-target="${i}">${escapeHtml(p)}</button>`).join('')}
-                </div>
-                <div class="life-wellness-disclaimer"><i class="fas fa-circle-info" aria-hidden="true"></i><span>These reflection tools are for personal journaling only &mdash; not medical, psychological, or crisis advice. If you&rsquo;re struggling, please reach out to a qualified professional or a local crisis line.</span></div>`;
-        }
-        function createLifeJournalFromPrompt(idx) {
-            const prompt = LIFE_JOURNAL_PROMPTS[Number(idx)];
-            if (!prompt) return;
-            getLifeRows('journals').unshift(createLifeJournalRow({ date: today(), title: prompt, prompt, content: '' }));
-            persistAppData(); renderLifeWorkspace();
-            showToast('Journal prompt added.');
-        }
-
         function renderLifeSpendingSummary() {
             const summaryEl = document.getElementById('lifeSpendingSummary');
             const monthlyValueEl = document.getElementById('lifeMonthlySpendValue');
@@ -16192,468 +16138,8 @@ function populateProgressDashboard() {
             }
         }
 
-        function getLifeSleepTrackerState() {
-            if (!lifeWorkspace || typeof lifeWorkspace !== 'object') {
-                lifeWorkspace = getDefaultLifeWorkspace();
-            }
-            if (!lifeWorkspace.sleepTracker || typeof lifeWorkspace.sleepTracker !== 'object') {
-                lifeWorkspace.sleepTracker = getDefaultLifeSleepTracker();
-            }
-            lifeWorkspace.sleepTracker = normalizeLifeSleepTracker(lifeWorkspace.sleepTracker);
-            return lifeWorkspace.sleepTracker;
-        }
-
-        function getLifeSleepEntries() {
-            const tracker = getLifeSleepTrackerState();
-            if (!Array.isArray(tracker.entries)) tracker.entries = [];
-            return tracker.entries;
-        }
-
-        function formatLifeSleepDuration(totalMinutes) {
-            const mins = Math.max(0, Math.round(normalizeFiniteNumber(totalMinutes, 0)));
-            if (!mins) return '\u2014';
-            const hours = Math.floor(mins / 60);
-            const rem = mins % 60;
-            if (hours && rem) return `${hours}h ${rem}m`;
-            if (hours) return `${hours}h`;
-            return `${rem}m`;
-        }
-
-        function formatLifeSleepClock(minutesValue) {
-            if (!Number.isFinite(minutesValue)) return '\u2014';
-            return formatTimelineAxisLabelForMinutes(minutesValue);
-        }
-
-        function parseLifeDateKeyToDate(value) {
-            const key = String(value || '').trim();
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
-            const dateObj = parseDate(key);
-            if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return null;
-            dateObj.setHours(0, 0, 0, 0);
-            return dateObj;
-        }
-
-        function averageLifeSleepMinutes(entries) {
-            if (!Array.isArray(entries) || !entries.length) return null;
-            const values = entries
-                .map(entry => Math.max(0, Math.round(normalizeFiniteNumber(entry.totalSleepMinutes, 0))))
-                .filter(value => value > 0);
-            if (!values.length) return null;
-            return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
-        }
-
-        function averageLifeClockMinutes(values) {
-            if (!Array.isArray(values) || !values.length) return null;
-            let sin = 0;
-            let cos = 0;
-            values.forEach(value => {
-                if (!Number.isFinite(value)) return;
-                const normalized = ((value % (24 * 60)) + (24 * 60)) % (24 * 60);
-                const angle = (normalized / (24 * 60)) * (Math.PI * 2);
-                sin += Math.sin(angle);
-                cos += Math.cos(angle);
-            });
-            if (sin === 0 && cos === 0) return null;
-            let angle = Math.atan2(sin, cos);
-            if (angle < 0) angle += Math.PI * 2;
-            return Math.round((angle / (Math.PI * 2)) * (24 * 60)) % (24 * 60);
-        }
-
-        function getLifeCircularMinuteDistance(a, b) {
-            if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-            const fullDay = 24 * 60;
-            const diff = Math.abs(a - b) % fullDay;
-            return diff > (fullDay / 2) ? fullDay - diff : diff;
-        }
-
-        function getLifeSleepAnalytics() {
-            const tracker = getLifeSleepTrackerState();
-            const allEntries = getLifeSleepEntries().slice().sort((a, b) => {
-                const byDate = String(b.date || '').localeCompare(String(a.date || ''));
-                if (byDate !== 0) return byDate;
-                return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
-            });
-
-            const now = new Date();
-            now.setHours(0, 0, 0, 0);
-            const recentEntries = (days) => {
-                const start = new Date(now);
-                start.setDate(start.getDate() - Math.max(0, days - 1));
-                return allEntries.filter(entry => {
-                    const dateObj = parseLifeDateKeyToDate(entry.date);
-                    return !!(dateObj && dateObj >= start && dateObj <= now);
-                });
-            };
-
-            const entries7 = recentEntries(7);
-            const entries14 = recentEntries(14);
-            const entries30 = recentEntries(30);
-            const previous7Start = new Date(now);
-            previous7Start.setDate(previous7Start.getDate() - 13);
-            const previous7End = new Date(now);
-            previous7End.setDate(previous7End.getDate() - 7);
-            const previous7 = allEntries.filter(entry => {
-                const dateObj = parseLifeDateKeyToDate(entry.date);
-                return !!(dateObj && dateObj >= previous7Start && dateObj <= previous7End);
-            });
-
-            const avg7 = averageLifeSleepMinutes(entries7);
-            const avg30 = averageLifeSleepMinutes(entries30);
-            const previousAvg7 = averageLifeSleepMinutes(previous7);
-
-            let trendLabel = 'Not enough data';
-            let trendDetail = '';
-            if (Number.isFinite(avg7) && Number.isFinite(previousAvg7)) {
-                const delta = avg7 - previousAvg7;
-                if (Math.abs(delta) < 15) trendLabel = 'Stable';
-                else trendLabel = delta > 0 ? 'Improving' : 'Declining';
-                const magnitude = formatLifeSleepDuration(Math.abs(delta));
-                trendDetail = `${delta >= 0 ? '+' : '-'}${magnitude} vs prior week`;
-            }
-
-            const bedtimeValues = entries14
-                .map(entry => parseTimeToMinutes(normalizeLifeSleepTimeValue(entry.bedtime)))
-                .filter(value => Number.isFinite(value));
-            const wakeValues = entries14
-                .map(entry => parseTimeToMinutes(normalizeLifeSleepTimeValue(entry.wakeTime)))
-                .filter(value => Number.isFinite(value));
-            const avgBedtime = averageLifeClockMinutes(bedtimeValues);
-            const avgWake = averageLifeClockMinutes(wakeValues);
-
-            let consistencyScore = 0;
-            if (bedtimeValues.length) {
-                const averageBedtime = Number.isFinite(avgBedtime) ? avgBedtime : bedtimeValues[0];
-                const variance = bedtimeValues.reduce((sum, value) => {
-                    const distance = getLifeCircularMinuteDistance(value, averageBedtime) || 0;
-                    return sum + (distance * distance);
-                }, 0) / bedtimeValues.length;
-                const deviation = Math.sqrt(variance);
-                consistencyScore = Math.max(0, Math.min(100, Math.round(100 - (deviation / 180) * 100)));
-            }
-
-            const targetMinutes = Math.max(120, Math.min(16 * 60, Math.round(normalizeFiniteNumber(tracker.targetSleepMinutes, LIFE_SLEEP_DEFAULT_TARGET_MINUTES))));
-            const goalHits7 = entries7.filter(entry => Math.max(0, normalizeFiniteNumber(entry.totalSleepMinutes, 0)) >= targetMinutes).length;
-            const goalProgressPercent = entries7.length ? Math.round((goalHits7 / entries7.length) * 100) : 0;
-
-            const byDate = new Map();
-            allEntries.forEach(entry => {
-                const key = String(entry.date || '');
-                if (!key || byDate.has(key)) return;
-                byDate.set(key, entry);
-            });
-            let goalStreak = 0;
-            const latestEntry = allEntries[0] || null;
-            if (latestEntry) {
-                let cursor = parseLifeDateKeyToDate(latestEntry.date);
-                while (cursor) {
-                    const key = dateKey(cursor);
-                    const current = byDate.get(key);
-                    if (!current) break;
-                    const minutes = Math.max(0, normalizeFiniteNumber(current.totalSleepMinutes, 0));
-                    if (minutes < targetMinutes) break;
-                    goalStreak += 1;
-                    cursor = new Date(cursor);
-                    cursor.setDate(cursor.getDate() - 1);
-                }
-            }
-
-            const avgSleepQuality = entries30.length
-                ? (entries30.reduce((sum, entry) => sum + Math.max(1, Math.min(5, normalizeFiniteNumber(entry.sleepQuality, 3))), 0) / entries30.length)
-                : null;
-            const underGoalNights = entries30.filter(entry => Math.max(0, normalizeFiniteNumber(entry.totalSleepMinutes, 0)) < targetMinutes).length;
-
-            return {
-                entries: allEntries,
-                latestEntry,
-                avg7,
-                avg30,
-                avgBedtime,
-                avgWake,
-                trendLabel,
-                trendDetail,
-                consistencyScore,
-                targetMinutes,
-                goalProgressPercent,
-                goalStreak,
-                avgSleepQuality,
-                underGoalNights
-            };
-        }
-
-        function renderLifeSleepSummary() {
-            const analytics = getLifeSleepAnalytics();
-            const latestValueEl = document.getElementById('lifeSleepLastNightValue');
-            const latestMetaEl = document.getElementById('lifeSleepLastNightMeta');
-            const avg7El = document.getElementById('lifeSleepAvg7Value');
-            const avg30El = document.getElementById('lifeSleepAvg30Value');
-            const goalProgressEl = document.getElementById('lifeSleepGoalProgressValue');
-            const trendEl = document.getElementById('lifeSleepTrendValue');
-            const trendMetaEl = document.getElementById('lifeSleepTrendMeta');
-            const consistencyEl = document.getElementById('lifeSleepConsistencyValue');
-            const consistencyMetaEl = document.getElementById('lifeSleepConsistencyMeta');
-            const qualityEl = document.getElementById('lifeSleepQualityValue');
-            const qualityMetaEl = document.getElementById('lifeSleepQualityMeta');
-            const bedtimeWakeEl = document.getElementById('lifeSleepBedtimeWakeValue');
-            const bedtimeWakeMetaEl = document.getElementById('lifeSleepBedtimeWakeMeta');
-            const goalTargetInput = document.getElementById('lifeSleepTargetMinutesInput');
-            const goalTargetLabel = document.getElementById('lifeSleepTargetMinutesLabel');
-
-            if (goalTargetInput) {
-                goalTargetInput.value = String(Math.max(120, Math.min(16 * 60, analytics.targetMinutes)));
-            }
-            if (goalTargetLabel) {
-                goalTargetLabel.textContent = formatLifeSleepDuration(analytics.targetMinutes);
-            }
-
-            if (latestValueEl) {
-                latestValueEl.textContent = analytics.latestEntry
-                    ? formatLifeSleepDuration(analytics.latestEntry.totalSleepMinutes)
-                    : '\u2014';
-            }
-            if (latestMetaEl) {
-                latestMetaEl.textContent = analytics.latestEntry
-                    ? `${analytics.latestEntry.date} \u2022 ${formatLifeSleepClock(parseTimeToMinutes(analytics.latestEntry.bedtime))} to ${formatLifeSleepClock(parseTimeToMinutes(analytics.latestEntry.wakeTime))}`
-                    : 'Add your first entry to see last-night sleep.';
-            }
-            if (avg7El) avg7El.textContent = Number.isFinite(analytics.avg7) ? formatLifeSleepDuration(analytics.avg7) : '\u2014';
-            if (avg30El) avg30El.textContent = Number.isFinite(analytics.avg30) ? formatLifeSleepDuration(analytics.avg30) : '\u2014';
-            if (goalProgressEl) {
-                goalProgressEl.textContent = `${analytics.goalProgressPercent}%`;
-                goalProgressEl.setAttribute('title', `Goal streak: ${analytics.goalStreak} night${analytics.goalStreak === 1 ? '' : 's'}`);
-            }
-            if (trendEl) trendEl.textContent = analytics.trendLabel;
-            if (trendMetaEl) trendMetaEl.textContent = analytics.trendDetail || 'Trend compares last 7 days with the prior 7 days.';
-            if (consistencyEl) consistencyEl.textContent = `${analytics.consistencyScore}%`;
-            if (consistencyMetaEl) consistencyMetaEl.textContent = `Goal streak: ${analytics.goalStreak} night${analytics.goalStreak === 1 ? '' : 's'}`;
-            if (qualityEl) {
-                if (Number.isFinite(analytics.avgSleepQuality)) {
-                    qualityEl.textContent = `${analytics.avgSleepQuality.toFixed(1)} / 5`;
-                } else {
-                    qualityEl.textContent = '\u2014';
-                }
-            }
-            if (qualityMetaEl) {
-                qualityMetaEl.textContent = `${analytics.underGoalNights} under-goal night${analytics.underGoalNights === 1 ? '' : 's'} in the last 30 days.`;
-            }
-            if (bedtimeWakeEl) {
-                bedtimeWakeEl.textContent = `${formatLifeSleepClock(analytics.avgBedtime)} \u2192 ${formatLifeSleepClock(analytics.avgWake)}`;
-            }
-            if (bedtimeWakeMetaEl) {
-                bedtimeWakeMetaEl.textContent = 'Average bedtime and wake time over the last 14 days.';
-            }
-        }
-
-        function renderLifeSleepRows() {
-            const body = document.getElementById('lifeSleepTableBody');
-            if (!body) return;
-            const entries = getLifeSleepEntries().slice().sort((a, b) => {
-                const byDate = String(b.date || '').localeCompare(String(a.date || ''));
-                if (byDate !== 0) return byDate;
-                return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
-            });
-
-            if (!entries.length) {
-                body.innerHTML = `
-                    <tr class="college-empty-row">
-                        <td colspan="10">
-                            <div class="empty-state">
-                                <div class="empty-title">No sleep entries yet</div>
-                                <div class="empty-subtitle">Track bedtime, wake time, and sleep quality to build better routines.</div>
-                                <button class="neumo-btn life-empty-cta-btn" id="lifeSleepEmptyAddBtn" type="button"><i class="fas fa-plus"></i> Add First Entry</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-
-            const ratingOptions = (selected) => [1, 2, 3, 4, 5]
-                .map(value => `<option value="${value}" ${Number(selected) === value ? 'selected' : ''}>${value}</option>`)
-                .join('');
-
-            body.innerHTML = entries.map(entry => {
-                const durationLabel = formatLifeSleepDuration(entry.totalSleepMinutes);
-                const tagsText = Array.isArray(entry.tags) ? entry.tags.join(', ') : '';
-                return `
-                    <tr>
-                        <td data-label="Date"><input type="date" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="date" value="${escapeHtml(String(entry.date || ''))}"></td>
-                        <td data-label="Bedtime"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="bedtime" value="${escapeHtml(String(entry.bedtime || ''))}"></td>
-                        <td data-label="Fell Asleep"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="timeFellAsleep" value="${escapeHtml(String(entry.timeFellAsleep || ''))}"></td>
-                        <td data-label="Wake"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeTime" value="${escapeHtml(String(entry.wakeTime || ''))}"></td>
-                        <td data-label="Duration"><span class="life-sleep-duration-badge">${escapeHtml(durationLabel)}</span></td>
-                        <td data-label="Quality"><select class="college-select" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="sleepQuality">${ratingOptions(entry.sleepQuality)}</select></td>
-                        <td data-label="Wake-Ups"><input type="number" min="0" max="20" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeUpsCount" value="${escapeHtml(String(entry.wakeUpsCount || 0))}"></td>
-                        <td data-label="Tags"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="tagsInput" value="${escapeHtml(String(tagsText))}" placeholder="caffeine, stress"></td>
-                        <td data-label="Notes"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="notes" value="${escapeHtml(String(entry.notes || ''))}" placeholder="Notes"></td>
-                        <td class="college-row-actions">
-                            <button type="button" class="icon-btn life-delete-sleep-btn" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" aria-label="Delete sleep entry"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function updateLifeSleepField(target) {
-            if (!target || !target.dataset) return;
-            const rowId = target.dataset.lifeSleepRowId;
-            const field = target.dataset.lifeSleepField;
-            if (!rowId || !field) return;
-            const tracker = getLifeSleepTrackerState();
-            const row = tracker.entries.find(item => String(item.id) === String(rowId));
-            if (!row) return;
-            const nextRow = { ...row };
-
-            if (field === 'date') {
-                const normalizedDate = String(target.value || '').trim();
-                nextRow.date = /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) ? normalizedDate : row.date || today();
-            } else if (field === 'bedtime' || field === 'timeFellAsleep' || field === 'wakeTime') {
-                const normalizedTime = normalizeLifeSleepTimeValue(target.value);
-                nextRow[field] = normalizedTime;
-                if (target.value !== normalizedTime) target.value = normalizedTime;
-            } else if (field === 'sleepQuality') {
-                nextRow[field] = Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(target.value, row[field] || 3))));
-            } else if (field === 'wakeUpsCount') {
-                nextRow.wakeUpsCount = Math.max(0, Math.min(20, Math.round(normalizeFiniteNumber(target.value, row.wakeUpsCount || 0))));
-            } else if (field === 'tagsInput') {
-                nextRow.tags = normalizeLifeSleepTagList(
-                    String(target.value || '')
-                        .split(',')
-                        .map(tag => String(tag || '').trim())
-                        .filter(Boolean)
-                );
-            } else if (field === 'notes') {
-                nextRow.notes = String(target.value || '');
-            }
-
-            const duration = computeLifeSleepDurationMinutes(nextRow.timeFellAsleep || nextRow.bedtime, nextRow.wakeTime);
-            if (!Number.isFinite(duration)) {
-                showToast('Sleep entry needs a valid bedtime and wake time.');
-                renderLifeWorkspace();
-                return;
-            }
-            nextRow.totalSleepMinutes = duration;
-            nextRow.updatedAt = new Date().toISOString();
-            Object.assign(row, nextRow);
-            persistAppData();
-            renderLifeWorkspace();
-        }
-
-        function updateLifeSleepTargetMinutes(value) {
-            const tracker = getLifeSleepTrackerState();
-            tracker.targetSleepMinutes = Math.max(120, Math.min(16 * 60, Math.round(normalizeFiniteNumber(value, LIFE_SLEEP_DEFAULT_TARGET_MINUTES))));
-            persistAppData();
-            renderLifeWorkspace();
-        }
-
-        async function removeLifeSleepEntry(rowId) {
-            const tracker = getLifeSleepTrackerState();
-            const entry = tracker.entries.find(item => String(item.id) === String(rowId));
-            if (!entry) return;
-            const confirmed = await showCustomConfirmDialog({
-                title: 'Delete Sleep Entry',
-                message: `Delete the sleep entry for ${entry.date || 'this day'}?`,
-                confirmText: 'Delete Entry',
-                cancelText: 'Keep Entry',
-                confirmVariant: 'danger'
-            });
-            if (!confirmed) return;
-            tracker.entries = tracker.entries.filter(item => String(item.id) !== String(rowId));
-            persistAppData();
-            renderLifeWorkspace();
-            showToast('Sleep entry deleted.');
-        }
-
-        function quickCreateTodayJournal() {
-            const todayDate = today();
-            const existing = getLifeRows('journals').find(row => String(row.date || '') === todayDate);
-            if (existing) {
-                showToast('Today\'s journal already exists.');
-                return;
-            }
-            getLifeRows('journals').unshift(createLifeJournalRow({
-                date: todayDate,
-                title: `Journal ${todayDate}`,
-                mood: 'Neutral',
-                content: 'Highlights:\nWins:\nWhat I learned:\nTomorrow focus:'
-            }));
-            persistAppData();
-            renderLifeWorkspace();
-            showToast('Today\'s journal created.');
-        }
-
+        // Life cockpit — goals, habits, budget signals, and goal drawer.
         // =================================================================
-        // Life cockpit — daily check-in, synthesized signals, goal drawer.
-        // =================================================================
-
-        const LIFE_MOODS = [
-            { value: 'great', label: '😄 Great', score: 5 },
-            { value: 'good', label: '🙂 Good', score: 4 },
-            { value: 'okay', label: '😐 Okay', score: 3 },
-            { value: 'low', label: '😕 Low', score: 2 },
-            { value: 'rough', label: '😣 Rough', score: 1 }
-        ];
-        const LIFE_MOOD_SCORE = LIFE_MOODS.reduce((m, x) => { m[x.value] = x.score; return m; }, {});
-
-        function lifeCheckInLocalKey(c) {
-            try { return dateKey(new Date(c.createdAt)); } catch (_) { return ''; }
-        }
-        function getLifeCheckIns() {
-            return (lifeWorkspace.wellness && Array.isArray(lifeWorkspace.wellness.checkIns)) ? lifeWorkspace.wellness.checkIns : [];
-        }
-        function getLifeTodayCheckIn() {
-            const tk = today();
-            return getLifeCheckIns().find(c => lifeCheckInLocalKey(c) === tk) || null;
-        }
-        function getLifeRecentCheckIns(days) {
-            const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - (days - 1));
-            return getLifeCheckIns().filter(c => { const d = new Date(c.createdAt); return !isNaN(d.getTime()) && d >= cutoff; });
-        }
-        function saveLifeCheckIn(values) {
-            if (!lifeWorkspace.wellness || typeof lifeWorkspace.wellness !== 'object') lifeWorkspace.wellness = getDefaultWellnessData();
-            if (!Array.isArray(lifeWorkspace.wellness.checkIns)) lifeWorkspace.wellness.checkIns = [];
-            const existing = getLifeTodayCheckIn();
-            const payload = normalizeWellnessCheckIn({
-                id: existing ? existing.id : undefined,
-                createdAt: existing ? existing.createdAt : new Date().toISOString(),
-                mood: values.mood, stress: values.stress, sleep: values.sleep || '', note: values.note || ''
-            });
-            if (existing) Object.assign(existing, payload);
-            else lifeWorkspace.wellness.checkIns.push(payload);
-            if (lifeWorkspace.wellness.checkIns.length > 400) lifeWorkspace.wellness.checkIns = lifeWorkspace.wellness.checkIns.slice(-400);
-            persistAppData();
-            renderLifeWorkspace();
-            showToast('Check-in saved.');
-        }
-
-        function renderLifeCheckInCard() {
-            const el = document.getElementById('lifeCheckInCard');
-            if (!el) return;
-            const todayCI = getLifeTodayCheckIn();
-            const mood = todayCI ? todayCI.mood : 'good';
-            const stress = todayCI ? todayCI.stress : 5;
-            el.innerHTML = `
-                <div class="glass-card life-checkin">
-                    <div class="life-checkin-head">
-                        <div>
-                            <div class="life-checkin-eyebrow">Daily check-in</div>
-                            <h3>${todayCI ? "Today's check-in" : 'How are you today?'}</h3>
-                        </div>
-                        ${todayCI ? '<span class="cc-pill cc-tone-positive">Logged</span>' : ''}
-                    </div>
-                    <div class="life-checkin-grid">
-                        <label class="life-checkin-field"><span>Mood</span>
-                            <select class="cc-input" id="lifeCheckInMood">${LIFE_MOODS.map(m => `<option value="${m.value}" ${mood === m.value ? 'selected' : ''}>${m.label}</option>`).join('')}</select>
-                        </label>
-                        <label class="life-checkin-field"><span>Stress <b id="lifeCheckInStressVal">${stress}</b>/10</span>
-                            <input type="range" min="0" max="10" id="lifeCheckInStress" value="${stress}" class="cc-range">
-                        </label>
-                    </div>
-                    <div class="life-checkin-actions">
-                        <button type="button" class="neumo-btn neumo-btn--primary" data-life-action="save-checkin"><i class="fas fa-check" aria-hidden="true"></i> ${todayCI ? 'Update check-in' : 'Save check-in'}</button>
-                        <button type="button" class="neumo-btn neumo-btn--ghost" data-life-action="quick-journal"><i class="fas fa-feather" aria-hidden="true"></i> Journal a moment</button>
-                    </div>
-                </div>`;
-        }
 
         // ---- Cockpit compute helpers ----
         function getLifeActiveGoals() {
@@ -16741,7 +16227,6 @@ function populateProgressDashboard() {
         }
         // "One next life action" — a single, local heuristic suggestion.
         function getLifeNextAction() {
-            if (!getLifeTodayCheckIn()) return { text: "Log today's check-in", action: 'cc-life-checkin' };
             const habits = getLifeRows('habits');
             const todayKey = today();
             const doneToday = (lifeWorkspace.habitCompletions && Array.isArray(lifeWorkspace.habitCompletions[todayKey])) ? lifeWorkspace.habitCompletions[todayKey].map(String) : [];
@@ -16755,7 +16240,7 @@ function populateProgressDashboard() {
                 if (milestone && milestone.title) return { text: `Goal step: ${milestone.title}`, action: 'cc-life-open-goal', target: focus.id };
                 return { text: `Advance: ${focus.title || 'your goal'}`, action: 'cc-life-open-goal', target: focus.id };
             }
-            return { text: 'Reflect in your journal', action: 'cc-life-page', target: 'journal' };
+            return { text: 'Choose your next goal', action: 'cc-life-page', target: 'goals' };
         }
 
         function renderLifeCockpit() {
@@ -16763,33 +16248,16 @@ function populateProgressDashboard() {
             if (!container) return;
             const cc = commandCenter();
             if (!cc) { container.innerHTML = ''; return; }
-            const hasData = getLifeRows('goals').length || getLifeRows('habits').length || getLifeRows('spending').length || getLifeSleepEntries().length || getLifeCheckIns().length;
+            const hasData = getLifeRows('goals').length || getLifeRows('habits').length || getLifeRows('spending').length;
             if (!hasData) {
                 container.innerHTML = cc.emptyStateHtml({
                     icon: 'fa-compass', title: 'Your cockpit fills in as you track',
-                    message: 'Log a check-in, add a goal or habit, or record a night of sleep — this panel will synthesize it into one calm view.',
+                    message: 'Add a goal or habit, or record spending to see your next useful action.',
                     actionLabel: 'Add a goal', action: 'cc-life-page', target: 'goals'
                 });
                 return;
             }
             const signals = [];
-
-            // Check-in status
-            const todayCI = getLifeTodayCheckIn();
-            signals.push({ id: "checkin", icon: "fa-heart", label: "Daily check-in", value: todayCI ? "Logged" : "Not yet", meta: "Track mood, stress, and sleep", tone: todayCI ? "positive" : "neutral", action: "cc-life-checkin" });
-
-            // Sleep last night
-            const sleep = (typeof getLifeSleepAnalytics === 'function') ? getLifeSleepAnalytics() : null;
-            if (sleep && sleep.latestEntry) {
-                const mins = Math.max(0, normalizeFiniteNumber(sleep.latestEntry.totalSleepMinutes, 0));
-                signals.push({
-                    id: 'sleep', icon: 'fa-moon', label: 'Last night',
-                    value: formatLifeSleepDuration(mins),
-                    meta: `Goal hit ${sleep.goalProgressPercent}% of last 7 · ${sleep.trendLabel}`,
-                    tone: mins >= sleep.targetMinutes ? 'positive' : 'warn',
-                    action: 'cc-life-page', target: 'sleep'
-                });
-            }
 
             // Habit streak leader + weekly consistency
             const topStreak = getLifeTopHabitStreak();
@@ -17004,22 +16472,14 @@ function populateProgressDashboard() {
             const root = document.getElementById('view-life');
             if (!root) return;
             lifeWorkspace = normalizeLifeWorkspace(lifeWorkspace);
-            try { renderLifeCheckInCard(); } catch (err) { /* non-critical */ }
             try { renderLifeCockpit(); } catch (err) { /* non-critical */ }
             try { renderLifeBudgets(); } catch (err) { /* non-critical */ }
-            try { renderLifeJournalPrompts(); } catch (err) { /* non-critical */ }
             renderLifeGoalRows();
             renderLifeHabitRows();
             renderLifeSkillRows();
-            renderLifeFitnessRows();
-            renderLifeCalorieRows();
             renderLifeBookRows();
             renderLifeSpendingRows();
-            renderLifeJournalRows();
-            renderLifeSleepRows();
-            renderLifeSleepSummary();
             renderLifeSummary();
-            try { renderWellnessSection(); } catch (err) { /* non-critical */ }
             try { renderPinnedSection('life'); refreshPinStarStates('life'); } catch (err) { /* non-critical */ }
         }
 
@@ -17046,19 +16506,19 @@ function populateProgressDashboard() {
                 if (dashboard) dashboard.style.display = 'none';
                 root.querySelectorAll('.life-subpage').forEach(sp => sp.style.display = 'none');
                 page.style.display = '';
+                if (pageKey === 'calculator') page.focus({ preventScroll: true });
             }
 
             // Quick-add buttons on the dashboard should also navigate to the relevant page
             const lifeQuickAddPageMap = {
                 lifeQuickAddGoalBtn: 'goals',
                 lifeQuickAddHabitBtn: 'habits',
-                lifeQuickAddSleepBtn: 'sleep',
-                lifeQuickJournalTopBtn: 'journal'
             };
 
             let calcExpr = '';
             let calcJustEvaled = false;
             let calcPrevExpr = '';
+            let calcHasError = false;
 
             function calcFormatNumber(n) {
                 if (Object.is(n, -0)) n = 0;
@@ -17069,52 +16529,19 @@ function populateProgressDashboard() {
             }
 
             function calcTryEval(expr) {
-                try {
-                    const exec = expr
-                        .replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-')
-                        .replace(/%/g, '/100');
-                    if (!/^[0-9+\-*/().e\s]+$/.test(exec)) return null;
-                    // Safe recursive-descent parser — avoids Function/eval (blocked by CSP)
-                    const tokens = exec.match(/[\d.]+(?:e[+\-]?\d+)?|[+\-*/()]/g);
-                    if (!tokens) return null;
-                    let p = 0;
-                    const peek = () => tokens[p];
-                    const consume = () => tokens[p++];
-                    function parseExpr() {
-                        let v = parseTerm();
-                        while (peek() === '+' || peek() === '-') {
-                            const op = consume(); const r = parseTerm();
-                            v = op === '+' ? v + r : v - r;
-                        }
-                        return v;
-                    }
-                    function parseTerm() {
-                        let v = parseFactor();
-                        while (peek() === '*' || peek() === '/') {
-                            const op = consume(); const r = parseFactor();
-                            if (op === '/' && r === 0) throw new Error('div0');
-                            v = op === '*' ? v * r : v / r;
-                        }
-                        return v;
-                    }
-                    function parseFactor() {
-                        if (peek() === '(') { consume(); const v = parseExpr(); if (peek() === ')') consume(); return v; }
-                        if (peek() === '-') { consume(); return -parseFactor(); }
-                        if (peek() === '+') { consume(); return parseFactor(); }
-                        const n = parseFloat(consume());
-                        if (isNaN(n)) throw new Error('nan');
-                        return n;
-                    }
-                    const result = parseExpr();
-                    if (p !== tokens.length) throw new Error('trailing');
-                    return Number.isFinite(result) ? result : null;
-                } catch { return null; }
+                const calculator = window.SutraCustomTabs;
+                return calculator && typeof calculator.evaluateExpression === 'function' ? calculator.evaluateExpression(expr) : null;
             }
 
             function calcUpdateDisplay() {
                 const exprEl = document.getElementById('lifeCalcExpr');
                 const resultEl = document.getElementById('lifeCalcResult');
                 if (!resultEl) return;
+                if (calcHasError) {
+                    if (exprEl) exprEl.textContent = calcExpr + ' =';
+                    resultEl.textContent = 'Error';
+                    return;
+                }
                 if (!calcExpr) {
                     if (exprEl) exprEl.textContent = '';
                     resultEl.textContent = '0';
@@ -17132,6 +16559,7 @@ function populateProgressDashboard() {
             function calcHandleButton(action) {
                 const operators = ['+', '−', '×', '÷'];
                 if (action === 'clear') {
+                    calcHasError = false;
                     calcExpr = '';
                     calcJustEvaled = false;
                     calcPrevExpr = '';
@@ -17139,6 +16567,7 @@ function populateProgressDashboard() {
                     return;
                 }
                 if (action === 'backspace') {
+                    calcHasError = false;
                     if (calcJustEvaled) { calcExpr = ''; calcJustEvaled = false; }
                     else calcExpr = calcExpr.slice(0, -1);
                     calcUpdateDisplay();
@@ -17147,6 +16576,7 @@ function populateProgressDashboard() {
                 if (action === '=') {
                     if (!calcExpr) return;
                     const result = calcTryEval(calcExpr);
+                    calcHasError = result === null;
                     if (result !== null) {
                         calcPrevExpr = calcExpr;
                         calcExpr = calcFormatNumber(result);
@@ -17159,6 +16589,9 @@ function populateProgressDashboard() {
                     if (!operators.includes(action) && action !== '%') calcExpr = '';
                     calcJustEvaled = false;
                 }
+                if (calcExpr.length >= 512) return;
+                if (calcHasError && /^[0-9.(]$/.test(action)) calcExpr = '';
+                calcHasError = false;
                 calcExpr += action;
                 calcUpdateDisplay();
             }
@@ -17170,6 +16603,15 @@ function populateProgressDashboard() {
                     if (btn) calcHandleButton(btn.dataset.calc);
                 });
             }
+            const calculatorPage = document.getElementById('lifePage-calculator');
+            if (calculatorPage) calculatorPage.addEventListener('keydown', event => {
+                if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input, textarea, [contenteditable="true"]')) return;
+                if (event.key === 'Enter' && event.target.closest('button')) return;
+                const keys = { '*': '×', '/': '÷', '-': '−', Enter: '=', '=': '=', Backspace: 'backspace', Delete: 'clear', Escape: 'clear' };
+                const action = keys[event.key] || (/^[0-9.+()%]$/.test(event.key) ? event.key : '');
+                if (!action) return;
+                event.preventDefault(); event.stopPropagation(); calcHandleButton(action);
+            });
 
             calcUpdateDisplay();
 
@@ -17181,34 +16623,16 @@ function populateProgressDashboard() {
                     const ccTarget = ccActionBtn.dataset.ccTarget || '';
                     if (action === 'cc-life-page') { lifeShowPage(ccTarget || 'goals'); return; }
                     if (action === 'cc-life-open-goal') { openLifeGoalDrawer(ccTarget); return; }
-                    if (action === 'cc-life-checkin') {
-                        const card = document.getElementById('lifeCheckInCard');
-                        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const moodSel = document.getElementById('lifeCheckInMood');
-                        if (moodSel) moodSel.focus();
-                        return;
-                    }
                 }
 
                 const lifeActionBtn = event.target.closest('[data-life-action]');
                 if (lifeActionBtn) {
                     const act = lifeActionBtn.dataset.lifeAction;
-                    if (act === 'save-checkin') {
-                        const moodEl = document.getElementById('lifeCheckInMood');
-                        const stressEl = document.getElementById('lifeCheckInStress');
-                        saveLifeCheckIn({
-                            mood: moodEl ? moodEl.value : '',
-                            stress: stressEl ? stressEl.value : 5
-                        });
-                        return;
-                    }
-                    if (act === 'quick-journal') { quickCreateTodayJournal(); lifeShowPage('journal'); return; }
                     if (act === 'add-budget') { addLifeBudgetCap(); return; }
                     if (act === 'del-budget') { deleteLifeBudgetCap(lifeActionBtn.dataset.ccTarget); return; }
                     if (act === 'add-recurring') { addLifeRecurring(); return; }
                     if (act === 'del-recurring') { deleteLifeRecurring(lifeActionBtn.dataset.ccTarget); return; }
                     if (act === 'toggle-excuse') { toggleLifeHabitExcusedToday(lifeActionBtn.dataset.ccTarget); return; }
-                    if (act === 'journal-prompt') { createLifeJournalFromPrompt(lifeActionBtn.dataset.ccTarget); return; }
                 }
 
                 // Nav grid buttons
@@ -17225,19 +16649,14 @@ function populateProgressDashboard() {
                     return;
                 }
 
-                const addButton = event.target.closest('#lifeAddGoalBtn, #lifeAddHabitBtn, #lifeAddSkillBtn, #lifeAddFitnessBtn, #lifeAddCalorieBtn, #lifeAddBookBtn, #lifeAddSpendingBtn, #lifeAddSleepBtn, #lifeSleepEmptyAddBtn, #lifeQuickAddGoalBtn, #lifeQuickAddHabitBtn, #lifeQuickAddSleepBtn');
+                const addButton = event.target.closest('#lifeAddGoalBtn, #lifeAddHabitBtn, #lifeAddSkillBtn, #lifeAddBookBtn, #lifeAddSpendingBtn, #lifeQuickAddGoalBtn, #lifeQuickAddHabitBtn');
                 if (addButton) {
                     const map = {
                         lifeAddGoalBtn: 'goals',
                         lifeQuickAddGoalBtn: 'goals',
                         lifeAddHabitBtn: 'habits',
                         lifeQuickAddHabitBtn: 'habits',
-                        lifeAddSleepBtn: 'sleepEntries',
-                        lifeSleepEmptyAddBtn: 'sleepEntries',
-                        lifeQuickAddSleepBtn: 'sleepEntries',
                         lifeAddSkillBtn: 'skills',
-                        lifeAddFitnessBtn: 'fitness',
-                        lifeAddCalorieBtn: 'calories',
                         lifeAddBookBtn: 'books',
                         lifeAddSpendingBtn: 'spending'
                     };
@@ -17249,39 +16668,15 @@ function populateProgressDashboard() {
                     return;
                 }
 
-                const sleepDeleteBtn = event.target.closest('.life-delete-sleep-btn');
-                if (sleepDeleteBtn) {
-                    removeLifeSleepEntry(sleepDeleteBtn.dataset.lifeSleepRowId);
-                    return;
-                }
-
                 const deleteBtn = event.target.closest('.life-delete-row-btn');
                 if (deleteBtn) {
                     removeLifeRow(deleteBtn.dataset.lifeCollection, deleteBtn.dataset.lifeRowId);
                     return;
                 }
 
-                const quickJournalBtn = event.target.closest('#lifeQuickJournalBtn, #lifeQuickJournalTopBtn');
-                if (quickJournalBtn) {
-                    quickCreateTodayJournal();
-                    // Navigate to journal page if triggered from dashboard
-                    if (quickJournalBtn.id === 'lifeQuickJournalTopBtn') lifeShowPage('journal');
-                }
             });
 
             root.addEventListener('change', (event) => {
-                const sleepTargetInput = event.target && event.target.id === 'lifeSleepTargetMinutesInput'
-                    ? event.target
-                    : null;
-                if (sleepTargetInput) {
-                    updateLifeSleepTargetMinutes(sleepTargetInput.value);
-                    return;
-                }
-                const sleepFieldEl = event.target.closest('[data-life-sleep-field]');
-                if (sleepFieldEl) {
-                    updateLifeSleepField(sleepFieldEl);
-                    return;
-                }
                 const habitCheckbox = event.target.closest('[data-life-habit-row-id]');
                 if (habitCheckbox) {
                     toggleLifeHabitForToday(habitCheckbox.dataset.lifeHabitRowId, !!habitCheckbox.checked);
@@ -17297,1390 +16692,22 @@ function populateProgressDashboard() {
                     updateLifeField(fieldEl);
                 }
             });
-
-            // Live value label for the daily check-in slider.
-            root.addEventListener('input', (event) => {
-                if (event.target.id === 'lifeCheckInStress') { const v = document.getElementById('lifeCheckInStressVal'); if (v) v.textContent = event.target.value; }
-            });
-
             // Ensure dashboard is visible on init
             lifeShowDashboard();
-
-            initWellnessUI();
             initLifePinnedUI();
             renderLifeWorkspace();
         }
         // ------------------ end Life Workspace ------------------
-
-        // ------------------ Wellness section ------------------
-        const WELLNESS_MOOD_OPTIONS = [
-            { value: 'calm',     emoji: '🌿', label: 'Calm' },
-            { value: 'okay',     emoji: '🙂', label: 'Okay' },
-            { value: 'tired',    emoji: '😴', label: 'Tired' },
-            { value: 'stressed', emoji: '😣', label: 'Stressed' },
-            { value: 'low',      emoji: '☁️', label: 'Low' },
-            { value: 'great',    emoji: '✨', label: 'Great' }
-        ];
-        const WELLNESS_SLEEP_OPTIONS = [
-            { value: 'restful',  label: 'Restful' },
-            { value: 'okay',     label: 'Okay' },
-            { value: 'broken',   label: 'Broken' },
-            { value: 'short',    label: 'Short' }
-        ];
-        const WELLNESS_PROMPT_OPTIONS = [
-            { value: 'overwhelm',  label: 'What is overwhelming me?' },
-            { value: 'next',       label: 'What is one next action?' },
-            { value: 'release',    label: 'What can I let go of right now?' },
-            { value: 'gratitude',  label: 'One thing I appreciate today.' },
-            { value: 'free',       label: 'Free reflection' }
-        ];
-        const WELLNESS_DURATION_OPTIONS = [
-            { value: 60,  label: '1 min' },
-            { value: 120, label: '2 min' },
-            { value: 300, label: '5 min' }
-        ];
-        const WELLNESS_BREATH_PATTERNS = [
-            { id: 'calm-focus',  label: 'Calm Focus',   phases: [{ name: 'inhale', sec: 4 }, { name: 'hold', sec: 4 }, { name: 'exhale', sec: 6 }] },
-            { id: 'box',         label: 'Box',          phases: [{ name: 'inhale', sec: 4 }, { name: 'hold', sec: 4 }, { name: 'exhale', sec: 4 }, { name: 'rest', sec: 4 }] },
-            { id: 'deep-exhale', label: 'Deep Exhale',  phases: [{ name: 'inhale', sec: 4 }, { name: 'exhale', sec: 6 }] },
-            { id: '4-7-8',       label: '4-7-8',        phases: [{ name: 'inhale', sec: 4 }, { name: 'hold', sec: 7 }, { name: 'exhale', sec: 8 }] }
-        ];
-        const WELLNESS_PHASE_LABEL = {
-            idle: 'Ready',
-            inhale: 'Breathe In',
-            hold: 'Hold',
-            exhale: 'Breathe Out',
-            rest: 'Rest',
-            complete: 'Complete'
-        };
-
-        const wellnessBreathState = {
-            running: false,
-            paused: false,
-            patternId: 'calm-focus',
-            durationSec: 120,
-            elapsedSec: 0,
-            phase: 'idle',
-            phaseIndex: 0,
-            phaseElapsedSec: 0,
-            timerHandle: null,
-            lastTickAt: 0,
-            reducedMotion: false,
-            promptValue: 'overwhelm',
-            soundEnabled: false,
-            ambientSound: 'off',
-            breathingCuesEnabled: false,
-            volume: 0.35,
-            muted: false
-        };
-
-        const WELLNESS_AMBIENT_OPTIONS = [
-            { value: 'off',            label: 'Off' },
-            { value: 'soft-ambient',   label: 'Soft Ambient' },
-            { value: 'rain',           label: 'Rain' },
-            { value: 'ocean',          label: 'Ocean' },
-            { value: 'white-noise',    label: 'White Noise' },
-            { value: 'gentle-chimes',  label: 'Gentle Chimes' }
-        ];
-
-        // ----- Wellness Audio Engine (Web Audio API, generated only) -----
-        // Audio is created lazily on the first user interaction (Start/Play or
-        // ambient toggle) so we comply with browser autoplay rules. Nothing
-        // is fetched from the network — every sound is synthesized.
-        const wellnessAudio = {
-            ctx: null,
-            masterGain: null,
-            ambient: null,         // active ambient handle, see makers below
-            ambientId: 'off',
-            noiseBuffer: null,     // shared white-noise loop buffer
-            chimeTimer: null,
-            blockedHintShown: false
-        };
-
-        function wellnessAudioSupported() {
-            return !!(typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext));
-        }
-
-        function wellnessAudioEffectiveGain() {
-            const w = getWellnessData();
-            if (!w.breathing.soundEnabled || w.breathing.muted) return 0;
-            const v = Number(w.breathing.volume);
-            return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.35;
-        }
-
-        function wellnessAudioEnsureContext() {
-            if (wellnessAudio.ctx) return wellnessAudio.ctx;
-            if (!wellnessAudioSupported()) return null;
-            try {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                const ctx = new AC();
-                const masterGain = ctx.createGain();
-                masterGain.gain.value = wellnessAudioEffectiveGain();
-                masterGain.connect(ctx.destination);
-                wellnessAudio.ctx = ctx;
-                wellnessAudio.masterGain = masterGain;
-                return ctx;
-            } catch (err) {
-                return null;
-            }
-        }
-
-        function wellnessAudioResume() {
-            const ctx = wellnessAudio.ctx;
-            if (!ctx) return Promise.resolve(false);
-            if (ctx.state !== 'suspended') return Promise.resolve(true);
-            try {
-                const p = ctx.resume();
-                return (p && typeof p.then === 'function') ? p.then(() => true).catch(() => false) : Promise.resolve(true);
-            } catch (err) { return Promise.resolve(false); }
-        }
-
-        function wellnessAudioApplyVolume(transitionSec = 0.18) {
-            const ctx = wellnessAudio.ctx;
-            const gain = wellnessAudio.masterGain;
-            if (!ctx || !gain) return;
-            const target = wellnessAudioEffectiveGain();
-            try {
-                const now = ctx.currentTime;
-                gain.gain.cancelScheduledValues(now);
-                gain.gain.setValueAtTime(gain.gain.value, now);
-                gain.gain.linearRampToValueAtTime(Math.max(0.0001, target || 0.0001), now + transitionSec);
-                if (target <= 0) {
-                    gain.gain.linearRampToValueAtTime(0, now + transitionSec + 0.01);
-                }
-            } catch (err) {}
-        }
-
-        function wellnessAudioGetNoiseBuffer() {
-            if (wellnessAudio.noiseBuffer) return wellnessAudio.noiseBuffer;
-            const ctx = wellnessAudio.ctx;
-            if (!ctx) return null;
-            const len = Math.floor(ctx.sampleRate * 2.0);
-            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-            const data = buf.getChannelData(0);
-            for (let i = 0; i < len; i += 1) data[i] = (Math.random() * 2 - 1) * 0.7;
-            wellnessAudio.noiseBuffer = buf;
-            return buf;
-        }
-
-        function wellnessAudioMakeFadeGain(ctx, peak, attackSec) {
-            const g = ctx.createGain();
-            const t0 = ctx.currentTime;
-            g.gain.setValueAtTime(0.0001, t0);
-            g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t0 + Math.max(0.05, attackSec));
-            return g;
-        }
-
-        function wellnessAudioMakeSoftAmbient(ctx) {
-            // Layered sine/triangle pad with slow LFO modulation. Warm and quiet.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.35, 2.4);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 900;
-            lp.Q.value = 0.5;
-            lp.connect(fade);
-            const tones = [
-                { type: 'sine',     freq: 110,    gain: 0.18 },
-                { type: 'sine',     freq: 165,    gain: 0.12 },
-                { type: 'triangle', freq: 220,    gain: 0.07 },
-                { type: 'sine',     freq: 277.18, gain: 0.05 }
-            ];
-            const oscs = [];
-            tones.forEach(spec => {
-                const osc = ctx.createOscillator();
-                osc.type = spec.type;
-                osc.frequency.value = spec.freq;
-                const g = ctx.createGain();
-                g.gain.value = spec.gain;
-                // Slow gain LFO for breathing pad feel.
-                const lfo = ctx.createOscillator();
-                lfo.type = 'sine';
-                lfo.frequency.value = 0.05 + Math.random() * 0.04;
-                const lfoGain = ctx.createGain();
-                lfoGain.gain.value = spec.gain * 0.35;
-                lfo.connect(lfoGain);
-                lfoGain.connect(g.gain);
-                osc.connect(g);
-                g.connect(lp);
-                osc.start();
-                lfo.start();
-                oscs.push({ osc, lfo, g, lfoGain });
-            });
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    oscs.forEach(({ osc, lfo, g, lfoGain }) => {
-                        try { osc.stop(); } catch (e) {}
-                        try { lfo.stop(); } catch (e) {}
-                        try { osc.disconnect(); } catch (e) {}
-                        try { lfo.disconnect(); } catch (e) {}
-                        try { g.disconnect(); } catch (e) {}
-                        try { lfoGain.disconnect(); } catch (e) {}
-                    });
-                    try { lp.disconnect(); } catch (e) {}
-                    try { fade.disconnect(); } catch (e) {}
-                }
-            };
-        }
-
-        function wellnessAudioMakeNoiseSource(ctx) {
-            const buf = wellnessAudioGetNoiseBuffer();
-            if (!buf) return null;
-            const src = ctx.createBufferSource();
-            src.buffer = buf;
-            src.loop = true;
-            return src;
-        }
-
-        function wellnessAudioMakeRain(ctx) {
-            // Filtered noise with tiny randomized amplitude wobble.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.22, 1.4);
-            fade.connect(out);
-            const hp = ctx.createBiquadFilter();
-            hp.type = 'highpass';
-            hp.frequency.value = 900;
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 4500;
-            lp.connect(fade);
-            hp.connect(lp);
-            const src = wellnessAudioMakeNoiseSource(ctx);
-            if (!src) return null;
-            src.connect(hp);
-            src.start();
-            // Slow random gain modulation for natural rain.
-            const wobble = ctx.createGain();
-            wobble.gain.value = 1;
-            // Reroute: hp -> wobble -> lp
-            try { hp.disconnect(); } catch (e) {}
-            hp.connect(wobble);
-            wobble.connect(lp);
-            const lfo = ctx.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.15;
-            const lfoGain = ctx.createGain();
-            lfoGain.gain.value = 0.18;
-            lfo.connect(lfoGain);
-            lfoGain.connect(wobble.gain);
-            lfo.start();
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    try { src.stop(); } catch (e) {}
-                    try { lfo.stop(); } catch (e) {}
-                    [src, hp, lp, wobble, lfo, lfoGain, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                }
-            };
-        }
-
-        function wellnessAudioMakeOcean(ctx) {
-            // Filtered noise with slow pulsing volume — smooth rise and fall.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.28, 2.0);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 800;
-            lp.Q.value = 0.4;
-            const wobble = ctx.createGain();
-            wobble.gain.value = 0.5;
-            lp.connect(wobble);
-            wobble.connect(fade);
-            const src = wellnessAudioMakeNoiseSource(ctx);
-            if (!src) return null;
-            src.connect(lp);
-            src.start();
-            const lfo = ctx.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.11;
-            const lfoGain = ctx.createGain();
-            lfoGain.gain.value = 0.45;
-            lfo.connect(lfoGain);
-            lfoGain.connect(wobble.gain);
-            lfo.start();
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    try { src.stop(); } catch (e) {}
-                    try { lfo.stop(); } catch (e) {}
-                    [src, lp, wobble, lfo, lfoGain, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                }
-            };
-        }
-
-        function wellnessAudioMakeWhiteNoise(ctx) {
-            // Quiet filtered noise — keep volume low by default.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.16, 1.0);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 6000;
-            const hp = ctx.createBiquadFilter();
-            hp.type = 'highpass';
-            hp.frequency.value = 120;
-            const src = wellnessAudioMakeNoiseSource(ctx);
-            if (!src) return null;
-            src.connect(hp);
-            hp.connect(lp);
-            lp.connect(fade);
-            src.start();
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    try { src.stop(); } catch (e) {}
-                    [src, hp, lp, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                }
-            };
-        }
-
-        function wellnessAudioMakeGentleChimes(ctx) {
-            // Warm low pad + occasional very soft bell-like tones at random.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.28, 2.4);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 1200;
-            lp.connect(fade);
-            const padOsc = ctx.createOscillator();
-            padOsc.type = 'sine';
-            padOsc.frequency.value = 196; // G3
-            const padGain = ctx.createGain();
-            padGain.gain.value = 0.16;
-            padOsc.connect(padGain);
-            padGain.connect(lp);
-            padOsc.start();
-            const chimeNotes = [523.25, 659.25, 783.99, 880.0, 987.77]; // C5, E5, G5, A5, B5
-            let stopped = false;
-            const scheduledNodes = [];
-            const scheduleChime = () => {
-                if (stopped) return;
-                const t = ctx.currentTime + 0.05;
-                const freq = chimeNotes[Math.floor(Math.random() * chimeNotes.length)];
-                const osc = ctx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, t);
-                const g = ctx.createGain();
-                g.gain.setValueAtTime(0.0001, t);
-                g.gain.linearRampToValueAtTime(0.12, t + 0.05);
-                g.gain.exponentialRampToValueAtTime(0.0002, t + 3.2);
-                osc.connect(g);
-                g.connect(lp);
-                osc.start(t);
-                osc.stop(t + 3.4);
-                scheduledNodes.push({ osc, g });
-                osc.onended = () => {
-                    try { osc.disconnect(); } catch (e) {}
-                    try { g.disconnect(); } catch (e) {}
-                };
-                const nextDelayMs = 8000 + Math.random() * 7000;
-                wellnessAudio.chimeTimer = setTimeout(scheduleChime, nextDelayMs);
-            };
-            wellnessAudio.chimeTimer = setTimeout(scheduleChime, 2200 + Math.random() * 2500);
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    stopped = true;
-                    if (wellnessAudio.chimeTimer) {
-                        clearTimeout(wellnessAudio.chimeTimer);
-                        wellnessAudio.chimeTimer = null;
-                    }
-                    try { padOsc.stop(); } catch (e) {}
-                    [padOsc, padGain, lp, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                    scheduledNodes.forEach(({ osc, g }) => {
-                        try { osc.stop(); } catch (e) {}
-                        try { osc.disconnect(); } catch (e) {}
-                        try { g.disconnect(); } catch (e) {}
-                    });
-                }
-            };
-        }
-
-        function wellnessAudioStopAmbient(fadeSec = 0.6) {
-            const ctx = wellnessAudio.ctx;
-            const handle = wellnessAudio.ambient;
-            wellnessAudio.ambient = null;
-            wellnessAudio.ambientId = 'off';
-            if (!handle) return;
-            const cleanup = () => {
-                try { handle.stop && handle.stop(); } catch (e) {}
-                try { handle.output && handle.output.disconnect(); } catch (e) {}
-            };
-            if (!ctx) { cleanup(); return; }
-            const t0 = ctx.currentTime;
-            try {
-                const fade = handle.fadeGain;
-                if (fade) {
-                    const cur = fade.gain.value;
-                    fade.gain.cancelScheduledValues(t0);
-                    fade.gain.setValueAtTime(Math.max(0.0001, cur), t0);
-                    fade.gain.linearRampToValueAtTime(0.0001, t0 + Math.max(0.05, fadeSec));
-                }
-            } catch (err) {}
-            setTimeout(cleanup, Math.max(80, fadeSec * 1000 + 80));
-        }
-
-        function wellnessAudioStartAmbient(id) {
-            if (!wellnessAudioSupported()) return;
-            const w = getWellnessData();
-            if (!w.breathing.soundEnabled) { wellnessAudioStopAmbient(0.4); return; }
-            const wantId = String(id || 'off');
-            if (wantId === 'off') { wellnessAudioStopAmbient(0.5); return; }
-            const ctx = wellnessAudioEnsureContext();
-            if (!ctx) return;
-            if (wellnessAudio.ambientId === wantId && wellnessAudio.ambient) return;
-            wellnessAudioStopAmbient(0.35);
-            let handle = null;
-            if (wantId === 'soft-ambient') handle = wellnessAudioMakeSoftAmbient(ctx);
-            else if (wantId === 'rain') handle = wellnessAudioMakeRain(ctx);
-            else if (wantId === 'ocean') handle = wellnessAudioMakeOcean(ctx);
-            else if (wantId === 'white-noise') handle = wellnessAudioMakeWhiteNoise(ctx);
-            else if (wantId === 'gentle-chimes') handle = wellnessAudioMakeGentleChimes(ctx);
-            if (!handle) return;
-            try { handle.output.connect(wellnessAudio.masterGain); } catch (e) {}
-            wellnessAudio.ambient = handle;
-            wellnessAudio.ambientId = wantId;
-        }
-
-        function wellnessAudioPlayCue(name) {
-            if (!wellnessAudioSupported()) return;
-            const w = getWellnessData();
-            if (!w.breathing.soundEnabled || !w.breathing.breathingCuesEnabled) return;
-            const ctx = wellnessAudioEnsureContext();
-            if (!ctx || !wellnessAudio.masterGain) return;
-            const t0 = ctx.currentTime + 0.01;
-            const fade = ctx.createGain();
-            fade.gain.setValueAtTime(0.0001, t0);
-            fade.connect(wellnessAudio.masterGain);
-            const osc = ctx.createOscillator();
-            osc.type = 'sine';
-            let stopAt = t0 + 1.5;
-            if (name === 'inhale') {
-                osc.frequency.setValueAtTime(220, t0);
-                osc.frequency.linearRampToValueAtTime(330, t0 + 1.4);
-                fade.gain.linearRampToValueAtTime(0.18, t0 + 0.25);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 1.6);
-                stopAt = t0 + 1.7;
-            } else if (name === 'exhale') {
-                osc.frequency.setValueAtTime(330, t0);
-                osc.frequency.linearRampToValueAtTime(220, t0 + 1.6);
-                fade.gain.linearRampToValueAtTime(0.18, t0 + 0.3);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 1.8);
-                stopAt = t0 + 1.9;
-            } else if (name === 'hold') {
-                osc.frequency.setValueAtTime(280, t0);
-                fade.gain.linearRampToValueAtTime(0.06, t0 + 0.4);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 1.2);
-                stopAt = t0 + 1.3;
-            } else if (name === 'rest') {
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 0.2);
-                stopAt = t0 + 0.3;
-            } else if (name === 'complete') {
-                osc.frequency.setValueAtTime(523.25, t0);
-                fade.gain.linearRampToValueAtTime(0.2, t0 + 0.25);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 2.2);
-                stopAt = t0 + 2.4;
-            } else {
-                return;
-            }
-            osc.connect(fade);
-            try { osc.start(t0); } catch (e) {}
-            try { osc.stop(stopAt); } catch (e) {}
-            osc.onended = () => {
-                try { osc.disconnect(); } catch (e) {}
-                try { fade.disconnect(); } catch (e) {}
-            };
-        }
-
-        function wellnessAudioFadeForPause() {
-            const ctx = wellnessAudio.ctx;
-            const gain = wellnessAudio.masterGain;
-            if (!ctx || !gain) return;
-            try {
-                const now = ctx.currentTime;
-                gain.gain.cancelScheduledValues(now);
-                gain.gain.setValueAtTime(gain.gain.value, now);
-                gain.gain.linearRampToValueAtTime(0.0001, now + 0.45);
-            } catch (err) {}
-        }
-
-        function wellnessAudioFullStop(fadeSec = 0.45) {
-            wellnessAudioStopAmbient(fadeSec);
-            const ctx = wellnessAudio.ctx;
-            const gain = wellnessAudio.masterGain;
-            if (ctx && gain) {
-                try {
-                    const now = ctx.currentTime;
-                    gain.gain.cancelScheduledValues(now);
-                    gain.gain.setValueAtTime(gain.gain.value, now);
-                    gain.gain.linearRampToValueAtTime(0.0001, now + fadeSec);
-                } catch (err) {}
-            }
-        }
-
-        function wellnessAudioOnSoundEnabledChange(enabled) {
-            if (!enabled) {
-                wellnessAudioFullStop(0.5);
-                return;
-            }
-            // Defer ambient start until user explicitly activates ambient or
-            // starts a session, to keep "audio off by default" honest.
-        }
-
-        function wellnessAudioApplyHintVisibility() {
-            const hint = document.getElementById('wellnessAudioBlockedHint');
-            if (!hint) return;
-            const w = getWellnessData();
-            const ctx = wellnessAudio.ctx;
-            const blocked = w.breathing.soundEnabled && (!ctx || ctx.state === 'suspended');
-            const wantsSound = w.breathing.ambientSound !== 'off' || w.breathing.breathingCuesEnabled;
-            hint.hidden = !(blocked && wantsSound);
-        }
-        // ----- end Wellness Audio Engine -----
-
-        function getWellnessData() {
-            if (!lifeWorkspace || typeof lifeWorkspace !== 'object') return getDefaultWellnessData();
-            if (!lifeWorkspace.wellness || typeof lifeWorkspace.wellness !== 'object') {
-                lifeWorkspace.wellness = getDefaultWellnessData();
-            }
-            const w = lifeWorkspace.wellness;
-            if (!Array.isArray(w.checkIns)) w.checkIns = [];
-            if (!Array.isArray(w.journalEntries)) w.journalEntries = [];
-            if (!w.breathing || typeof w.breathing !== 'object') w.breathing = getDefaultWellnessBreathingPrefs();
-            return w;
-        }
-
-        function persistWellness() {
-            try { persistAppData(); } catch (err) { /* non-critical */ }
-        }
-
-        function prefersReducedMotionMedia() {
-            try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-            catch (err) { return false; }
-        }
-
-        function isWellnessReducedMotion() {
-            const w = getWellnessData();
-            return !!w.breathing.reducedMotion || prefersReducedMotionMedia();
-        }
-
-        function escapeWellnessText(value) {
-            return String(value || '').replace(/[&<>"']/g, ch => (
-                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
-            ));
-        }
-
-        function formatWellnessTimer(seconds) {
-            const total = Math.max(0, Math.round(seconds));
-            const m = Math.floor(total / 60);
-            const s = total % 60;
-            return `${m}:${String(s).padStart(2, '0')}`;
-        }
-
-        function renderWellnessMoodChips() {
-            const row = document.getElementById('wellnessMoodRow');
-            if (!row) return;
-            const selected = row.dataset.selectedMood || '';
-            row.innerHTML = WELLNESS_MOOD_OPTIONS.map(opt => `
-                <button type="button" class="wellness-mood-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-mood="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}"
-                    aria-label="Mood: ${escapeWellnessText(opt.label)}">
-                    <span class="wellness-mood-emoji" aria-hidden="true">${opt.emoji}</span>
-                    <span class="wellness-mood-label">${escapeWellnessText(opt.label)}</span>
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessSleepChips() {
-            const row = document.getElementById('wellnessSleepRow');
-            if (!row) return;
-            const selected = row.dataset.selectedSleep || '';
-            row.innerHTML = WELLNESS_SLEEP_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-sleep="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessPromptChips() {
-            const row = document.getElementById('wellnessPromptChips');
-            if (!row) return;
-            const selected = wellnessBreathState.promptValue;
-            row.innerHTML = WELLNESS_PROMPT_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-prompt="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessPatternChips() {
-            const row = document.getElementById('wellnessPatternChips');
-            if (!row) return;
-            const selected = wellnessBreathState.patternId;
-            row.innerHTML = WELLNESS_BREATH_PATTERNS.map(pat => `
-                <button type="button" class="wellness-pill-chip${selected === pat.id ? ' is-selected' : ''}"
-                    data-wellness-pattern="${pat.id}"
-                    role="radio" aria-checked="${selected === pat.id ? 'true' : 'false'}">
-                    ${escapeWellnessText(pat.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessDurationChips() {
-            const row = document.getElementById('wellnessDurationChips');
-            if (!row) return;
-            const selected = wellnessBreathState.durationSec;
-            row.innerHTML = WELLNESS_DURATION_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-duration="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessAmbientChips() {
-            const row = document.getElementById('wellnessAmbientChips');
-            if (!row) return;
-            const w = getWellnessData();
-            const selected = w.breathing.ambientSound || 'off';
-            row.innerHTML = WELLNESS_AMBIENT_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-ambient="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessAudioPanel() {
-            const panel = document.getElementById('wellnessAudioPanel');
-            if (!panel) return;
-            const w = getWellnessData();
-            const enabled = !!w.breathing.soundEnabled;
-            const supported = wellnessAudioSupported();
-            panel.classList.toggle('is-disabled', !enabled || !supported);
-            panel.setAttribute('aria-hidden', enabled && supported ? 'false' : 'true');
-            const cuesToggle = document.getElementById('wellnessBreathingCuesToggle');
-            if (cuesToggle) {
-                cuesToggle.checked = !!w.breathing.breathingCuesEnabled;
-                cuesToggle.disabled = !enabled || !supported;
-            }
-            const muteBtn = document.getElementById('wellnessMuteBtn');
-            if (muteBtn) {
-                const isMuted = !!w.breathing.muted;
-                muteBtn.dataset.muted = isMuted ? 'true' : 'false';
-                muteBtn.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
-                muteBtn.disabled = !enabled || !supported;
-                muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
-            }
-            const volumeInput = document.getElementById('wellnessVolumeInput');
-            if (volumeInput) {
-                const v = Number(w.breathing.volume);
-                volumeInput.value = String(Number.isFinite(v) ? v : 0.35);
-                volumeInput.disabled = !enabled || !supported;
-            }
-            const volumeOut = document.getElementById('wellnessVolumeValue');
-            if (volumeOut) {
-                const v = Number(w.breathing.volume);
-                const pct = Math.round((Number.isFinite(v) ? v : 0.35) * 100);
-                volumeOut.textContent = `${pct}%`;
-            }
-            const unsupportedHint = document.getElementById('wellnessAudioUnsupportedHint');
-            if (unsupportedHint) unsupportedHint.hidden = supported;
-            renderWellnessAmbientChips();
-            wellnessAudioApplyHintVisibility();
-        }
-
-        function renderWellnessRecentCheckIns() {
-            const host = document.getElementById('wellnessRecentCheckIns');
-            if (!host) return;
-            const w = getWellnessData();
-            const recent = w.checkIns.slice(-5).reverse();
-            if (!recent.length) {
-                host.innerHTML = '<p class="wellness-empty wellness-empty--inline">No check-ins yet. Save your first one above.</p>';
-                return;
-            }
-            host.innerHTML = `
-                <div class="wellness-recent-head">Recent check-ins</div>
-                <ul class="wellness-recent-list">
-                    ${recent.map(entry => {
-                        const date = new Date(entry.createdAt);
-                        const stamp = isNaN(date) ? '' : date.toLocaleString();
-                        const mood = WELLNESS_MOOD_OPTIONS.find(m => m.value === entry.mood);
-                        const sleep = WELLNESS_SLEEP_OPTIONS.find(s => s.value === entry.sleep);
-                        return `
-                            <li class="wellness-recent-item">
-                                <span class="wellness-recent-stamp">${escapeWellnessText(stamp)}</span>
-                                <span class="wellness-recent-meta">
-                                    ${mood ? `<span class="wellness-recent-emoji" aria-hidden="true">${mood.emoji}</span>` : ''}
-                                    Stress ${entry.stress}${sleep ? ` · ${escapeWellnessText(sleep.label)}` : ""}
-                                </span>
-                                ${entry.note ? `<p class="wellness-recent-note">${escapeWellnessText(entry.note)}</p>` : ''}
-                            </li>`;
-                    }).join('')}
-                </ul>`;
-        }
-
-        function renderWellnessCheckInMeta() {
-            const meta = document.getElementById('wellnessCheckInMeta');
-            if (!meta) return;
-            const w = getWellnessData();
-            const today = new Date().toDateString();
-            const todayCount = w.checkIns.filter(c => {
-                const d = new Date(c.createdAt);
-                return !isNaN(d) && d.toDateString() === today;
-            }).length;
-            meta.textContent = todayCount > 0
-                ? `${todayCount} check-in${todayCount === 1 ? '' : 's'} today.`
-                : 'No entries yet today.';
-        }
-
-        function renderWellnessJournalList() {
-            const host = document.getElementById('wellnessJournalList');
-            if (!host) return;
-            const w = getWellnessData();
-            const recent = w.journalEntries.slice(-10).reverse();
-            if (!recent.length) {
-                host.innerHTML = '<p class="wellness-empty wellness-empty--inline">No reflections yet.</p>';
-                return;
-            }
-            host.innerHTML = `
-                <div class="wellness-recent-head">Recent reflections</div>
-                <ul class="wellness-journal-entries">
-                    ${recent.map(entry => {
-                        const date = new Date(entry.createdAt);
-                        const stamp = isNaN(date) ? '' : date.toLocaleString();
-                        const promptOpt = WELLNESS_PROMPT_OPTIONS.find(p => p.value === entry.prompt);
-                        const promptLabel = promptOpt ? promptOpt.label : 'Reflection';
-                        return `
-                            <li class="wellness-journal-entry" data-wellness-journal-id="${escapeWellnessText(entry.id)}">
-                                <div class="wellness-journal-entry-head">
-                                    <span class="wellness-journal-entry-prompt">${escapeWellnessText(promptLabel)}</span>
-                                    <span class="wellness-journal-entry-stamp">${escapeWellnessText(stamp)}</span>
-                                    <button type="button" class="wellness-journal-delete" data-wellness-journal-delete="${escapeWellnessText(entry.id)}" aria-label="Delete reflection">×</button>
-                                </div>
-                                <p class="wellness-journal-entry-body">${escapeWellnessText(entry.body)}</p>
-                            </li>`;
-                    }).join('')}
-                </ul>`;
-        }
-
-        function computeWellnessPatterns() {
-            const w = getWellnessData();
-            const checkIns = w.checkIns.slice();
-            const total = checkIns.length;
-            if (total === 0) return null;
-            const now = Date.now();
-            const lastWeek = checkIns.filter(c => {
-                const d = new Date(c.createdAt).getTime();
-                return Number.isFinite(d) && (now - d) <= 7 * 24 * 3600 * 1000;
-            });
-            const avg = (arr, key) => arr.length
-                ? (arr.reduce((s, c) => s + (Number(c[key]) || 0), 0) / arr.length).toFixed(1)
-                : '—';
-            const moodCounts = {};
-            checkIns.forEach(c => { if (c.mood) moodCounts[c.mood] = (moodCounts[c.mood] || 0) + 1; });
-            const topMoodValue = Object.keys(moodCounts).sort((a, b) => moodCounts[b] - moodCounts[a])[0] || '';
-            const topMood = WELLNESS_MOOD_OPTIONS.find(m => m.value === topMoodValue) || null;
-            const sleepCounts = {};
-            checkIns.forEach(c => { if (c.sleep) sleepCounts[c.sleep] = (sleepCounts[c.sleep] || 0) + 1; });
-            const topSleepValue = Object.keys(sleepCounts).sort((a, b) => sleepCounts[b] - sleepCounts[a])[0] || '';
-            const topSleep = WELLNESS_SLEEP_OPTIONS.find(s => s.value === topSleepValue) || null;
-            return {
-                total,
-                lastWeekCount: lastWeek.length,
-                avgStressWeek: avg(lastWeek, 'stress'),
-                avgStressAll: avg(checkIns, 'stress'),
-                topMood,
-                topSleep
-            };
-        }
-
-        function renderWellnessPatterns() {
-            const host = document.getElementById('wellnessPatternGrid');
-            const empty = document.getElementById('wellnessPatternsEmpty');
-            if (!host || !empty) return;
-            const p = computeWellnessPatterns();
-            if (!p || p.total < 1) {
-                host.innerHTML = '';
-                empty.hidden = false;
-                return;
-            }
-            empty.hidden = p.total >= 3 ? true : false;
-            const cells = [
-                { label: 'Check-ins logged', value: String(p.total), sub: `${p.lastWeekCount} in last 7 days` },
-                { label: 'Avg stress (7d)', value: p.avgStressWeek, sub: `Overall ${p.avgStressAll}` },
-                {
-                    label: 'Most common mood',
-                    value: p.topMood ? `${p.topMood.emoji} ${p.topMood.label}` : '—',
-                    sub: p.topSleep ? `Sleep often ${p.topSleep.label.toLowerCase()}` : ''
-                }
-            ];
-            host.innerHTML = cells.map(cell => `
-                <div class="wellness-pattern-cell">
-                    <div class="wellness-pattern-label">${escapeWellnessText(cell.label)}</div>
-                    <div class="wellness-pattern-value">${escapeWellnessText(cell.value)}</div>
-                    ${cell.sub ? `<div class="wellness-pattern-sub">${escapeWellnessText(cell.sub)}</div>` : ''}
-                </div>
-            `).join('');
-        }
-
-        function renderWellnessBreathSessionsMeta() {
-            const meta = document.getElementById('wellnessBreathSessionsMeta');
-            if (!meta) return;
-            const w = getWellnessData();
-            meta.textContent = `Sessions: ${w.breathing.sessionsCompleted || 0}`;
-        }
-
-        function syncWellnessBreathPrefsFromState() {
-            const w = getWellnessData();
-            wellnessBreathState.patternId = w.breathing.preferredPattern || 'calm-focus';
-            wellnessBreathState.durationSec = w.breathing.preferredDuration || 120;
-            wellnessBreathState.reducedMotion = !!w.breathing.reducedMotion;
-            wellnessBreathState.soundEnabled = !!w.breathing.soundEnabled;
-            wellnessBreathState.ambientSound = w.breathing.ambientSound || 'off';
-            wellnessBreathState.breathingCuesEnabled = !!w.breathing.breathingCuesEnabled;
-            wellnessBreathState.volume = Number.isFinite(w.breathing.volume) ? w.breathing.volume : 0.35;
-            wellnessBreathState.muted = !!w.breathing.muted;
-        }
-
-        function renderWellnessBreathToggles() {
-            const reduced = document.getElementById('wellnessReducedMotionToggle');
-            if (reduced) reduced.checked = wellnessBreathState.reducedMotion;
-            const stage = document.getElementById('wellnessOrbStage');
-            if (stage) stage.classList.toggle('is-reduced', isWellnessReducedMotion());
-            const sound = document.getElementById('wellnessSoundToggle');
-            if (sound) {
-                const supported = wellnessAudioSupported();
-                sound.checked = !!wellnessBreathState.soundEnabled && supported;
-                sound.disabled = !supported;
-            }
-        }
-
-        function renderWellnessSection() {
-            const root = document.getElementById('lifePage-wellness');
-            if (!root) return;
-            const w = getWellnessData();
-            renderWellnessMoodChips();
-            renderWellnessSleepChips();
-            renderWellnessPromptChips();
-            syncWellnessBreathPrefsFromState();
-            renderWellnessPatternChips();
-            renderWellnessDurationChips();
-            renderWellnessBreathToggles();
-            renderWellnessAudioPanel();
-            renderWellnessCheckInMeta();
-            renderWellnessRecentCheckIns();
-            renderWellnessJournalList();
-            renderWellnessPatterns();
-            renderWellnessBreathSessionsMeta();
-            updateWellnessOrbVisualState();
-        }
-
-        function setWellnessActiveTab(tabKey) {
-            const root = document.getElementById('lifePage-wellness');
-            if (!root) return;
-            root.querySelectorAll('.wellness-tab').forEach(btn => {
-                const isActive = btn.dataset.wellnessTab === tabKey;
-                btn.classList.toggle('is-active', isActive);
-                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            });
-            root.querySelectorAll('.wellness-panel').forEach(panel => {
-                panel.classList.toggle('is-active', panel.dataset.wellnessPanel === tabKey);
-            });
-            if (tabKey !== 'breathing') {
-                if (wellnessBreathState.running) wellnessBreathPause();
-                wellnessAudioFullStop(0.4);
-            }
-        }
-
-        function saveWellnessCheckIn() {
-            const moodRow = document.getElementById('wellnessMoodRow');
-            const sleepRow = document.getElementById('wellnessSleepRow');
-            const stressInput = document.getElementById('wellnessStressInput');
-            const noteInput = document.getElementById('wellnessNoteInput');
-            const w = getWellnessData();
-            const entry = normalizeWellnessCheckIn({
-                id: `wci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                createdAt: new Date().toISOString(),
-                mood: moodRow ? (moodRow.dataset.selectedMood || '') : '',
-                stress: stressInput ? Number(stressInput.value) : 5,
-                sleep: sleepRow ? (sleepRow.dataset.selectedSleep || '') : '',
-                note: noteInput ? noteInput.value.trim() : ''
-            });
-            w.checkIns.push(entry);
-            persistWellness();
-            // Reset note + selections; keep sliders mid-range
-            if (noteInput) noteInput.value = '';
-            if (moodRow) { delete moodRow.dataset.selectedMood; }
-            if (sleepRow) { delete sleepRow.dataset.selectedSleep; }
-            renderWellnessSection();
-            try { showToast && showToast('Check-in saved.'); } catch (err) { /* non-critical */ }
-        }
-
-        function saveWellnessJournalEntry() {
-            const bodyEl = document.getElementById('wellnessJournalBody');
-            const body = bodyEl ? bodyEl.value.trim() : '';
-            if (!body) {
-                try { showToast && showToast('Add a few words first.'); } catch (err) { /* non-critical */ }
-                return;
-            }
-            const w = getWellnessData();
-            const promptOpt = WELLNESS_PROMPT_OPTIONS.find(p => p.value === wellnessBreathState.promptValue);
-            const entry = normalizeWellnessJournalEntry({
-                id: `wj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                createdAt: new Date().toISOString(),
-                prompt: promptOpt ? promptOpt.value : 'free',
-                body
-            });
-            w.journalEntries.push(entry);
-            persistWellness();
-            if (bodyEl) bodyEl.value = '';
-            renderWellnessJournalList();
-        }
-
-        function deleteWellnessJournalEntry(id) {
-            const w = getWellnessData();
-            const idx = w.journalEntries.findIndex(e => e.id === id);
-            if (idx === -1) return;
-            w.journalEntries.splice(idx, 1);
-            persistWellness();
-            renderWellnessJournalList();
-        }
-
-        // Breathing exercise engine
-        function getCurrentWellnessPattern() {
-            return WELLNESS_BREATH_PATTERNS.find(p => p.id === wellnessBreathState.patternId)
-                || WELLNESS_BREATH_PATTERNS[0];
-        }
-
-        function updateWellnessOrbVisualState() {
-            const orb = document.getElementById('wellnessOrb');
-            const cue = document.getElementById('wellnessOrbCue');
-            const stage = document.getElementById('wellnessOrbStage');
-            const timer = document.getElementById('wellnessOrbTimer');
-            if (!orb || !cue || !stage || !timer) return;
-            const phase = wellnessBreathState.phase;
-            const pattern = getCurrentWellnessPattern();
-            const phaseDef = pattern.phases[wellnessBreathState.phaseIndex] || null;
-            const phaseSec = phaseDef ? phaseDef.sec : 0;
-            const reduced = isWellnessReducedMotion();
-            stage.dataset.phase = phase;
-            stage.classList.toggle('is-reduced', reduced);
-            stage.classList.toggle('is-running', wellnessBreathState.running && !wellnessBreathState.paused);
-            cue.textContent = WELLNESS_PHASE_LABEL[phase] || 'Ready';
-            // Drive orb scale via inline transform when not reduced; otherwise keep at base size.
-            if (reduced || !wellnessBreathState.running) {
-                orb.style.transition = 'transform 600ms cubic-bezier(0.22,1,0.36,1)';
-                orb.style.transform = (phase === 'inhale' || phase === 'hold') ? 'scale(1.06)' : 'scale(0.94)';
-            } else if (phaseSec > 0) {
-                orb.style.transition = `transform ${phaseSec}s cubic-bezier(0.45, 0, 0.25, 1)`;
-                if (phase === 'inhale') orb.style.transform = 'scale(1.32)';
-                else if (phase === 'hold') orb.style.transform = 'scale(1.32)';
-                else if (phase === 'exhale') orb.style.transform = 'scale(0.78)';
-                else if (phase === 'rest') orb.style.transform = 'scale(0.78)';
-                else orb.style.transform = 'scale(1)';
-            } else {
-                orb.style.transition = 'transform 600ms cubic-bezier(0.22,1,0.36,1)';
-                orb.style.transform = 'scale(1)';
-            }
-            const remaining = Math.max(0, wellnessBreathState.durationSec - wellnessBreathState.elapsedSec);
-            timer.textContent = wellnessBreathState.running || wellnessBreathState.elapsedSec > 0
-                ? formatWellnessTimer(remaining)
-                : formatWellnessTimer(wellnessBreathState.durationSec);
-        }
-
-        function clearWellnessTimer() {
-            if (wellnessBreathState.timerHandle) {
-                clearInterval(wellnessBreathState.timerHandle);
-                wellnessBreathState.timerHandle = null;
-            }
-        }
-
-        function wellnessBreathStart() {
-            if (wellnessBreathState.running) return;
-            const w = getWellnessData();
-            wellnessBreathState.running = true;
-            wellnessBreathState.paused = false;
-            wellnessBreathState.elapsedSec = 0;
-            wellnessBreathState.phaseElapsedSec = 0;
-            wellnessBreathState.phaseIndex = 0;
-            const firstPhase = getCurrentWellnessPattern().phases[0].name;
-            wellnessBreathState.phase = firstPhase;
-            wellnessBreathState.lastTickAt = performance.now();
-            // Persist preferred pattern + duration
-            w.breathing.preferredPattern = wellnessBreathState.patternId;
-            w.breathing.preferredDuration = wellnessBreathState.durationSec;
-            persistWellness();
-            // The Start click is a user gesture — safe to create/resume the
-            // AudioContext now per browser autoplay policy. Audio still only
-            // plays if Sound is enabled and an ambient sound or cues are picked.
-            if (w.breathing.soundEnabled) {
-                wellnessAudioEnsureContext();
-                wellnessAudioResume().then(() => {
-                    wellnessAudioApplyVolume(0.25);
-                    if (w.breathing.ambientSound && w.breathing.ambientSound !== 'off') {
-                        wellnessAudioStartAmbient(w.breathing.ambientSound);
-                    }
-                    wellnessAudioApplyHintVisibility();
-                });
-                if (w.breathing.breathingCuesEnabled) {
-                    wellnessAudioPlayCue(firstPhase);
-                }
-            }
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-            wellnessBreathState.timerHandle = setInterval(wellnessBreathTick, 250);
-        }
-
-        function wellnessBreathPause() {
-            if (!wellnessBreathState.running || wellnessBreathState.paused) return;
-            wellnessBreathState.paused = true;
-            clearWellnessTimer();
-            wellnessAudioFadeForPause();
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-        }
-
-        function wellnessBreathResume() {
-            if (!wellnessBreathState.running || !wellnessBreathState.paused) return;
-            wellnessBreathState.paused = false;
-            wellnessBreathState.lastTickAt = performance.now();
-            wellnessBreathState.timerHandle = setInterval(wellnessBreathTick, 250);
-            const w = getWellnessData();
-            if (w.breathing.soundEnabled) {
-                wellnessAudioResume().then(() => wellnessAudioApplyVolume(0.4));
-            }
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-        }
-
-        function wellnessBreathEnd(completed) {
-            const wasRunning = wellnessBreathState.running;
-            wellnessBreathState.running = false;
-            wellnessBreathState.paused = false;
-            clearWellnessTimer();
-            if (completed && wasRunning) {
-                const w = getWellnessData();
-                w.breathing.sessionsCompleted = (w.breathing.sessionsCompleted || 0) + 1;
-                w.breathing.lastCompletedAt = new Date().toISOString();
-                persistWellness();
-                wellnessBreathState.phase = 'complete';
-                if (w.breathing.soundEnabled && w.breathing.breathingCuesEnabled) {
-                    wellnessAudioPlayCue('complete');
-                }
-            } else {
-                wellnessBreathState.phase = 'idle';
-            }
-            wellnessBreathState.phaseElapsedSec = 0;
-            wellnessBreathState.phaseIndex = 0;
-            wellnessBreathState.elapsedSec = wellnessBreathState.elapsedSec; // keep for display until next start
-            wellnessAudioFullStop(completed ? 1.4 : 0.6);
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-            renderWellnessBreathSessionsMeta();
-            if (completed) {
-                try { showToast && showToast('Session complete. Nicely done.'); } catch (err) { /* non-critical */ }
-            }
-        }
-
-        function wellnessBreathTick() {
-            if (!wellnessBreathState.running || wellnessBreathState.paused) return;
-            const now = performance.now();
-            const dt = Math.max(0, (now - wellnessBreathState.lastTickAt) / 1000);
-            wellnessBreathState.lastTickAt = now;
-            wellnessBreathState.elapsedSec += dt;
-            wellnessBreathState.phaseElapsedSec += dt;
-            const pattern = getCurrentWellnessPattern();
-            const currentPhase = pattern.phases[wellnessBreathState.phaseIndex];
-            if (currentPhase && wellnessBreathState.phaseElapsedSec >= currentPhase.sec) {
-                wellnessBreathState.phaseElapsedSec = 0;
-                wellnessBreathState.phaseIndex = (wellnessBreathState.phaseIndex + 1) % pattern.phases.length;
-                const nextPhaseName = pattern.phases[wellnessBreathState.phaseIndex].name;
-                wellnessBreathState.phase = nextPhaseName;
-                wellnessAudioPlayCue(nextPhaseName);
-                updateWellnessOrbVisualState();
-            } else {
-                // Update timer text without restarting transitions
-                const timer = document.getElementById('wellnessOrbTimer');
-                if (timer) {
-                    const remaining = Math.max(0, wellnessBreathState.durationSec - wellnessBreathState.elapsedSec);
-                    timer.textContent = formatWellnessTimer(remaining);
-                }
-            }
-            if (wellnessBreathState.elapsedSec >= wellnessBreathState.durationSec) {
-                wellnessBreathEnd(true);
-            }
-        }
-
-        function wellnessUpdateBreathButtons() {
-            const startBtn = document.getElementById('wellnessBreathStartBtn');
-            const pauseBtn = document.getElementById('wellnessBreathPauseBtn');
-            const resumeBtn = document.getElementById('wellnessBreathResumeBtn');
-            const endBtn = document.getElementById('wellnessBreathEndBtn');
-            if (!startBtn || !pauseBtn || !resumeBtn || !endBtn) return;
-            const running = wellnessBreathState.running;
-            const paused = wellnessBreathState.paused;
-            startBtn.disabled = running;
-            startBtn.hidden = running;
-            pauseBtn.disabled = !running || paused;
-            pauseBtn.hidden = !running || paused;
-            resumeBtn.disabled = !running || !paused;
-            resumeBtn.hidden = !(running && paused);
-            endBtn.disabled = !running;
-        }
-
-        function initWellnessUI() {
-            const root = document.getElementById('lifePage-wellness');
-            if (!root) return;
-            if (root.dataset.bound === 'true') {
-                renderWellnessSection();
-                return;
-            }
-            root.dataset.bound = 'true';
-
-            // Tab switching
-            root.addEventListener('click', (event) => {
-                const tabBtn = event.target.closest('[data-wellness-tab]');
-                if (tabBtn) {
-                    setWellnessActiveTab(tabBtn.dataset.wellnessTab);
-                    return;
-                }
-                const moodBtn = event.target.closest('[data-wellness-mood]');
-                if (moodBtn) {
-                    const row = document.getElementById('wellnessMoodRow');
-                    if (row) row.dataset.selectedMood = moodBtn.dataset.wellnessMood;
-                    renderWellnessMoodChips();
-                    return;
-                }
-                const sleepBtn = event.target.closest('[data-wellness-sleep]');
-                if (sleepBtn) {
-                    const row = document.getElementById('wellnessSleepRow');
-                    if (row) row.dataset.selectedSleep = sleepBtn.dataset.wellnessSleep;
-                    renderWellnessSleepChips();
-                    return;
-                }
-                const promptBtn = event.target.closest('[data-wellness-prompt]');
-                if (promptBtn) {
-                    wellnessBreathState.promptValue = promptBtn.dataset.wellnessPrompt;
-                    renderWellnessPromptChips();
-                    return;
-                }
-                const patternBtn = event.target.closest('[data-wellness-pattern]');
-                if (patternBtn && !wellnessBreathState.running) {
-                    wellnessBreathState.patternId = patternBtn.dataset.wellnessPattern;
-                    const w = getWellnessData();
-                    w.breathing.preferredPattern = wellnessBreathState.patternId;
-                    persistWellness();
-                    renderWellnessPatternChips();
-                    return;
-                }
-                const durBtn = event.target.closest('[data-wellness-duration]');
-                if (durBtn && !wellnessBreathState.running) {
-                    const v = Number(durBtn.dataset.wellnessDuration);
-                    if ([60, 120, 300].includes(v)) {
-                        wellnessBreathState.durationSec = v;
-                        const w = getWellnessData();
-                        w.breathing.preferredDuration = v;
-                        persistWellness();
-                        renderWellnessDurationChips();
-                        updateWellnessOrbVisualState();
-                    }
-                    return;
-                }
-                if (event.target.closest('#wellnessSaveCheckInBtn')) {
-                    saveWellnessCheckIn();
-                    return;
-                }
-                if (event.target.closest('#wellnessSaveJournalBtn')) {
-                    saveWellnessJournalEntry();
-                    return;
-                }
-                const delBtn = event.target.closest('[data-wellness-journal-delete]');
-                if (delBtn) {
-                    deleteWellnessJournalEntry(delBtn.dataset.wellnessJournalDelete);
-                    return;
-                }
-                if (event.target.closest('#wellnessBreathStartBtn')) { wellnessBreathStart(); return; }
-                if (event.target.closest('#wellnessBreathPauseBtn')) { wellnessBreathPause(); return; }
-                if (event.target.closest('#wellnessBreathResumeBtn')) { wellnessBreathResume(); return; }
-                if (event.target.closest('#wellnessBreathEndBtn')) { wellnessBreathEnd(false); return; }
-
-                const ambientBtn = event.target.closest('[data-wellness-ambient]');
-                if (ambientBtn) {
-                    const v = String(ambientBtn.dataset.wellnessAmbient || 'off');
-                    const w = getWellnessData();
-                    w.breathing.ambientSound = v;
-                    wellnessBreathState.ambientSound = v;
-                    persistWellness();
-                    renderWellnessAmbientChips();
-                    if (w.breathing.soundEnabled) {
-                        wellnessAudioEnsureContext();
-                        wellnessAudioResume().then(() => {
-                            wellnessAudioApplyVolume(0.25);
-                            wellnessAudioStartAmbient(v);
-                            wellnessAudioApplyHintVisibility();
-                        });
-                    }
-                    return;
-                }
-                const muteBtn = event.target.closest('#wellnessMuteBtn');
-                if (muteBtn) {
-                    const w = getWellnessData();
-                    w.breathing.muted = !w.breathing.muted;
-                    wellnessBreathState.muted = w.breathing.muted;
-                    persistWellness();
-                    wellnessAudioApplyVolume(0.18);
-                    renderWellnessAudioPanel();
-                    return;
-                }
-            });
-
-            root.addEventListener('input', (event) => {
-                const stress = event.target.closest('#wellnessStressInput');
-                if (stress) {
-                    const out = document.getElementById('wellnessStressValue');
-                    if (out) out.textContent = String(stress.value);
-                    return;
-                }
-                const volume = event.target.closest('#wellnessVolumeInput');
-                if (volume) {
-                    const v = Math.max(0, Math.min(1, Number(volume.value)));
-                    const w = getWellnessData();
-                    w.breathing.volume = v;
-                    wellnessBreathState.volume = v;
-                    const out = document.getElementById('wellnessVolumeValue');
-                    if (out) out.textContent = `${Math.round(v * 100)}%`;
-                    wellnessAudioApplyVolume(0.12);
-                    return;
-                }
-            });
-
-            root.addEventListener('change', (event) => {
-                const reduced = event.target.closest('#wellnessReducedMotionToggle');
-                if (reduced) {
-                    const w = getWellnessData();
-                    w.breathing.reducedMotion = !!reduced.checked;
-                    wellnessBreathState.reducedMotion = w.breathing.reducedMotion;
-                    persistWellness();
-                    renderWellnessBreathToggles();
-                    updateWellnessOrbVisualState();
-                    return;
-                }
-                const sound = event.target.closest('#wellnessSoundToggle');
-                if (sound) {
-                    const w = getWellnessData();
-                    const wantOn = !!sound.checked && wellnessAudioSupported();
-                    w.breathing.soundEnabled = wantOn;
-                    wellnessBreathState.soundEnabled = wantOn;
-                    persistWellness();
-                    if (wantOn) {
-                        // The toggle itself is a user gesture — set up the
-                        // context now so the AudioContext is unblocked.
-                        wellnessAudioEnsureContext();
-                        wellnessAudioResume().then(() => {
-                            wellnessAudioApplyVolume(0.18);
-                            if (w.breathing.ambientSound && w.breathing.ambientSound !== 'off') {
-                                wellnessAudioStartAmbient(w.breathing.ambientSound);
-                            }
-                            wellnessAudioApplyHintVisibility();
-                        });
-                    } else {
-                        wellnessAudioOnSoundEnabledChange(false);
-                    }
-                    renderWellnessAudioPanel();
-                    return;
-                }
-                const cues = event.target.closest('#wellnessBreathingCuesToggle');
-                if (cues) {
-                    const w = getWellnessData();
-                    w.breathing.breathingCuesEnabled = !!cues.checked;
-                    wellnessBreathState.breathingCuesEnabled = w.breathing.breathingCuesEnabled;
-                    persistWellness();
-                    return;
-                }
-                const volume = event.target.closest('#wellnessVolumeInput');
-                if (volume) {
-                    const v = Math.max(0, Math.min(1, Number(volume.value)));
-                    const w = getWellnessData();
-                    w.breathing.volume = v;
-                    wellnessBreathState.volume = v;
-                    persistWellness();
-                    wellnessAudioApplyVolume(0.12);
-                    return;
-                }
-            });
-
-            // Stop audio cleanly if user navigates away (tab hidden, switches
-            // browser tab, locks screen, etc.). Pause the running session too.
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    if (wellnessBreathState.running && !wellnessBreathState.paused) {
-                        wellnessBreathPause();
-                    }
-                    wellnessAudioFullStop(0.3);
-                }
-            });
-
-            // Stop audio when the wellness subpage is hidden (Back to dashboard
-            // or navigation to another life subpage). Watching display:none on
-            // the panel covers the existing back-button + nav-grid flow without
-            // patching every caller.
-            try {
-                const obs = new MutationObserver(() => {
-                    const hidden = root.style.display === 'none' || root.offsetParent === null;
-                    if (hidden) {
-                        if (wellnessBreathState.running && !wellnessBreathState.paused) {
-                            wellnessBreathPause();
-                        }
-                        wellnessAudioFullStop(0.4);
-                    }
-                });
-                obs.observe(root, { attributes: true, attributeFilter: ['style'] });
-            } catch (err) { /* non-critical */ }
-
-            // Belt-and-braces: stop audio if the page is being unloaded.
-            window.addEventListener('pagehide', () => { wellnessAudioFullStop(0.05); });
-
-            renderWellnessSection();
-            wellnessUpdateBreathButtons();
-        }
-        // ------------------ end Wellness section ------------------
 
         // ------------------ Pinned pages (Life + College) ------------------
         const PINNED_PAGE_META = {
             life: {
                 goals:      { label: 'SMART Goals',      icon: 'fa-bullseye' },
                 habits:     { label: 'Habit Tracker',    icon: 'fa-check-double' },
-                sleep:      { label: 'Sleep Tracker',    icon: 'fa-moon' },
                 spending:   { label: 'Spending Tracker', icon: 'fa-wallet' },
-                journal:    { label: 'Daily Journal',    icon: 'fa-journal-whills' },
                 skills:     { label: 'Skills Tracker',   icon: 'fa-brain' },
-                fitness:    { label: 'Fitness Tracker',  icon: 'fa-dumbbell' },
-                calories:   { label: 'Calorie Tracker',  icon: 'fa-fire' },
                 calculator: { label: 'Quick Calculator', icon: 'fa-calculator' },
                 books:      { label: 'Book Tracker',     icon: 'fa-book-open' },
-                wellness:   { label: 'Wellness & Reset', icon: 'fa-spa' }
             },
             collegeapp: {
                 tracker:        { label: 'College Tracker',         icon: 'fa-university' },
@@ -18705,7 +16732,7 @@ function populateProgressDashboard() {
                 <div class="pin-nav-card-wrap">
                     <button class="${cls} pin-nav-card" ${dataAttr}="${pageId}">
                         <i class="fas ${meta.icon}"></i>
-                        <span>${escapeWellnessText(meta.label)}</span>
+                        <span>${escapeHtml(meta.label)}</span>
                     </button>
                     <button type="button" class="pin-star-btn${isPinned ? ' is-pinned' : ''}"
                         data-pin-toggle="${tab}:${pageId}"
@@ -19852,12 +17879,13 @@ function populateProgressDashboard() {
              
             // Handle Enter key to break out of blockquotes and pre blocks
             editor.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                const historyKey = String(e.key || '').toLowerCase();
+                if ((e.ctrlKey || e.metaKey) && historyKey === 'z' && !e.shiftKey) {
                     e.preventDefault();
                     noteUndoManager.undo(editor);
                     return;
                 }
-                if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                if ((e.ctrlKey || e.metaKey) && (historyKey === 'y' || (historyKey === 'z' && e.shiftKey))) {
                     e.preventDefault();
                     noteUndoManager.redo(editor);
                     return;
@@ -20902,6 +18930,8 @@ function populateProgressDashboard() {
             if (!listEl || !emptyEl || !summaryEl) return;
 
             const hasPlan = !!(planData && Array.isArray(planData.items) && planData.items.length);
+            const planDisclosure = document.getElementById('todayPlanDisclosure');
+            if (planDisclosure) { planDisclosure.hidden = !hasPlan; if (hasPlan) planDisclosure.open = true; }
             if (!hasPlan) {
                 listEl.innerHTML = '';
                 emptyEl.style.display = 'block';
@@ -21391,10 +19421,11 @@ function populateProgressDashboard() {
             if (key === 'hwCourses:v2' || key === 'hwTasks:v2') {
                 try {
                     const store = window.SutraHomeworkStore;
-                    if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return;
+                    if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return false;
                     const snapshot = store.getSnapshot();
                     const update = key === 'hwCourses:v2' ? { courses: value } : { tasks: value };
                     store.replace({ ...snapshot, ...update }, { reason: 'compat-write-adapter' });
+                    return true;
                 } catch (error) {
                     // User-authored data failed to reach the canonical store:
                     // diagnosable via the error funnel, not just the console.
@@ -21403,16 +19434,18 @@ function populateProgressDashboard() {
                         window.SutraReportError(error, { where: 'writeLocalArraySafe', key }, 'warning');
                     }
                 }
-                return;
+                return false;
             }
             try {
                 localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+                return true;
             } catch (err) {
                 console.warn(`Failed to persist ${key}`, err);
                 if (window.SutraReportError && typeof window.SutraReportError === 'function') {
                     window.SutraReportError(err, { where: 'writeLocalArraySafe', key }, 'warning');
                 }
             }
+            return false;
         }
 
         function readHomeworkWorkspaceSnapshot() {
@@ -21456,6 +19489,8 @@ function populateProgressDashboard() {
                 snapshot.push({
                     source: 'v2',
                     sourceId,
+                    notes: String(item.notes || ''),
+                    referenceUrl: normalizeExternalUrl(item.sourceUrl || item.referenceUrl || ''),
                     title: courseName ? `${courseName}: ${label}` : label,
                     kind: item.kind === 'task' || item.kind === 'general' ? 'task' : 'assignment',
                     dueDate: dueParts.dueDate,
@@ -21481,6 +19516,8 @@ function populateProgressDashboard() {
                 snapshot.push({
                     source: 'v1',
                     sourceId,
+                    notes: String(item.notes || ''),
+                    referenceUrl: normalizeExternalUrl(item.sourceUrl || item.referenceUrl || ''),
                     title: courseName ? `${courseName}: ${label}` : label,
                     dueDate: dueParts.dueDate,
                     dueTime: dueParts.dueTime,
@@ -22189,12 +20226,10 @@ function populateProgressDashboard() {
 
             desiredMap.forEach((item, id) => {
                 const existing = existingTaskMap.get(id);
-                const dueSummary = [item.dueDate ? `Due ${item.dueDate}` : '', item.dueTime ? `at ${item.dueTime}` : '']
-                    .filter(Boolean)
-                    .join(' ');
                 const nextData = {
                     title: item.title,
-                    notes: dueSummary ? `From To-do - ${dueSummary}` : 'From To-do',
+                    notes: item.notes || '',
+                    referenceUrl: item.referenceUrl || null,
                     scheduleType: 'once',
                     weeklyDays: [],
                     category: item.kind === 'task' ? 'general' : 'school',
@@ -22370,7 +20405,7 @@ function populateProgressDashboard() {
 
             const normalizedPriority = normalizePriorityValue(updates.priority || task.priority);
             const normalizedDifficulty = normalizeDifficultyValue(updates.difficulty || task.difficulty);
-            const normalizedDueDate = parseHomeworkDueDate(updates.dueDate || task.dueDate || '') || null;
+            const normalizedDueDate = parseHomeworkDueDate(Object.prototype.hasOwnProperty.call(updates, 'dueDate') ? updates.dueDate || '' : task.dueDate || '') || null;
             const normalizedDueTime = parseHomeworkDueTime(
                 updates.dueTime || task.homeworkDueTime || task.dueTime || ''
             ) || null;
@@ -22384,20 +20419,31 @@ function populateProgressDashboard() {
                 const idx = list.findIndex(item => String(item.id) === sourceId);
                 if (idx !== -1) {
                     list[idx].priority = normalizedPriority;
+                    if (Object.prototype.hasOwnProperty.call(updates, 'notes')) list[idx].notes = String(updates.notes || '');
+                    if (Object.prototype.hasOwnProperty.call(updates, 'referenceUrl')) {
+                        list[idx].sourceUrl = normalizeExternalUrl(updates.referenceUrl || '') || '';
+                        if ('referenceUrl' in list[idx]) list[idx].referenceUrl = list[idx].sourceUrl;
+                    }
+                    list[idx].updatedAt = new Date().toISOString();
                     list[idx].difficulty = normalizedDifficulty;
                     list[idx].dueDate = normalizedDueDate || '';
                     list[idx].dueTime = normalizedDueTime || '';
                     list[idx].date = normalizedDueDate || '';
                     list[idx].time = normalizedDueTime || '';
                     list[idx].due = dueCompact;
-                    writeLocalArraySafe('hwTasks:v2', list);
-                    changed = true;
+                    changed = writeLocalArraySafe('hwTasks:v2', list) === true;
                 }
             } else if (source === 'v1') {
                 const list = readLocalArraySafe('homeworkTasks:v1');
                 const idx = list.findIndex(item => String(item.id) === sourceId);
                 if (idx !== -1) {
                     list[idx].priority = normalizedPriority;
+                    if (Object.prototype.hasOwnProperty.call(updates, 'notes')) list[idx].notes = String(updates.notes || '');
+                    if (Object.prototype.hasOwnProperty.call(updates, 'referenceUrl')) {
+                        list[idx].sourceUrl = normalizeExternalUrl(updates.referenceUrl || '') || '';
+                        if ('referenceUrl' in list[idx]) list[idx].referenceUrl = list[idx].sourceUrl;
+                    }
+                    list[idx].updatedAt = new Date().toISOString();
                     list[idx].difficulty = normalizedDifficulty;
                     list[idx].dueDate = normalizedDueDate || '';
                     list[idx].date = normalizedDueDate || '';
@@ -22405,8 +20451,7 @@ function populateProgressDashboard() {
                     list[idx].dueTime = normalizedDueTime || '';
                     list[idx].time = normalizedDueTime || '';
                     list[idx].due = dueCompact;
-                    writeLocalArraySafe('homeworkTasks:v1', list);
-                    changed = true;
+                    changed = writeLocalArraySafe('homeworkTasks:v1', list) === true;
                 }
             }
 
@@ -23727,7 +21772,6 @@ function populateProgressDashboard() {
         function setTaskModalHomeworkMode(isHomeworkTask) {
             const idsToDisableForHomework = [
                 'taskTitleInput',
-                'taskNotesInput',
                 'taskScheduleInput',
                 'taskCategoryInput',
                 'taskNoteInput'
@@ -23849,7 +21893,7 @@ function populateProgressDashboard() {
                 if (form.dataset.saving === 'true') return;
                 const submittedTitle = input.value.trim();
                 if (!submittedTitle) {
-                    if (status) status.textContent = 'Enter a task title.';
+                    if (status && !status.textContent.startsWith('Added ')) status.textContent = 'Enter a task title.';
                     input.focus();
                     return;
                 }
@@ -23934,6 +21978,8 @@ function populateProgressDashboard() {
                 const task = existingTask;
                 if (task && task.origin === 'homework') {
                     const updated = updateHomeworkTaskInStorage(task, {
+                        notes: taskData.notes,
+                        referenceUrl: taskData.referenceUrl,
                         priority: taskData.priority,
                         difficulty: taskData.difficulty,
                         dueDate: taskData.dueDate
@@ -24087,9 +22133,7 @@ function populateProgressDashboard() {
                         const lw = lifeWorkspace || {};
                         return !!(
                             (Array.isArray(lw.habits) && lw.habits.length) ||
-                            (lw.sleepTracker && Array.isArray(lw.sleepTracker.entries) && lw.sleepTracker.entries.length) ||
                             (Array.isArray(lw.goals) && lw.goals.length) ||
-                            (Array.isArray(lw.journals) && lw.journals.length) ||
                             (Array.isArray(lw.spending) && lw.spending.length) ||
                             (Array.isArray(lw.books) && lw.books.length)
                         );
@@ -24251,6 +22295,7 @@ function populateProgressDashboard() {
                 ].forEach(entry => {
                     const dueDate = String(row[entry.field] || '').trim();
                     if (!dueDate) return;
+                    if (row.completedDeadlineDates && row.completedDeadlineDates[entry.field] === dueDate) return;
                     pushCollegeDeadlineItem(out, current, {
                         id: `college:checklist:${row.id}:${entry.field}`,
                         sourceId: row.id,
@@ -24274,6 +22319,7 @@ function populateProgressDashboard() {
                 ].forEach(entry => {
                     const dueDate = String(row[entry.field] || '').trim();
                     if (!dueDate) return;
+                    if (row.completedDeadlineDates && row.completedDeadlineDates[entry.field] === dueDate) return;
                     pushCollegeDeadlineItem(out, current, {
                         id: `college:deadlines:${row.id}:${entry.field}`,
                         sourceId: row.id,
@@ -24341,7 +22387,7 @@ function populateProgressDashboard() {
             });
 
             (Array.isArray(appWorkspace.essayOrganizer) ? appWorkspace.essayOrganizer : []).forEach(row => {
-                if (!row || !String(row.dueDate || '').trim()) return;
+                if (!row || row.draftStatus === 'final' || !String(row.dueDate || '').trim()) return;
                 const school = trimCollegeDeadlineLabel(row.school, 'Essay');
                 const promptLabel = trimCollegeDeadlineLabel(row.prompt, 'Essay draft', 56);
                 pushCollegeDeadlineItem(out, current, {
@@ -24370,7 +22416,7 @@ function populateProgressDashboard() {
             (Array.isArray(appWorkspace.scholarships) ? appWorkspace.scholarships : []).forEach(row => {
                 if (!row) return;
                 const normalizedStatus = String(row.status || '').toLowerCase();
-                if (normalizedStatus === 'won' || normalizedStatus === 'not_awarded') return;
+                if (normalizedStatus === 'submitted' || normalizedStatus === 'won' || normalizedStatus === 'not_awarded') return;
                 const dueDate = String(row.deadline || '').trim();
                 if (!dueDate) return;
                 const name = trimCollegeDeadlineLabel(row.name, 'Scholarship');
@@ -24957,6 +23003,16 @@ function populateProgressDashboard() {
 
         function openDeadlineSource(item) {
             if (!item || !item.source) return;
+            if (item.workspaceTodo && item.source === 'task') {
+                setActiveView('homework');
+                openTaskModal(String(item.sourceId));
+                return;
+            }
+            if (item.workspaceTodo && item.source === 'milestone' && window.SutraAssignmentStudio) {
+                setActiveView('homework');
+                window.SutraAssignmentStudio.open(String(item.sourceId));
+                return;
+            }
             if (item.source === 'review') {
                 try {
                     setActiveView('apstudy');
@@ -24990,7 +23046,7 @@ function populateProgressDashboard() {
                         business: 'business',
                         life: 'life'
                     }[item.source] || 'today');
-                setActiveView(view, { allowDisabled: item.source === 'apexam' });
+                setActiveView(view, { allowDisabled: item.workspaceTodo === true || item.source === 'apexam' });
                 if (item.source === 'college') {
                     if (view === 'college' && item.sourceCollection && typeof setCollegeTab === 'function') {
                         setCollegeTab(item.sourceCollection, { persist: false });
@@ -25351,7 +23407,7 @@ function populateProgressDashboard() {
                         const title = btn.getAttribute('data-rn-title') || 'Focus Session';
                         const seconds = Math.max(60, Math.floor(Number(btn.getAttribute('data-rn-focus-seconds')) || 0));
                         const options = { plannedDurationSeconds: seconds, autostart: true, title };
-                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(sid, options);
+                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(src === 'homework' ? `hw_v2_${sid}` : sid, options);
                         else if (typeof startFocusSession === 'function') startFocusSession(null, options);
                     } else if (action === 'rightnow-open') {
                         const id = btn.getAttribute('data-rn-itemid');
@@ -25433,10 +23489,11 @@ function populateProgressDashboard() {
         function renderTodayDailyBrief() {
             const container = document.getElementById('todayDailyBrief');
             if (!container) return;
-            const items = collectWorkspaceDeadlines();
+            const items = window.SutraTodayCenter.getYourDayItems(collectWorkspaceDeadlines(), tasks, getDayState(today()).completedTaskIds);
             const groups = groupDeadlinesByTimeframe(items);
             const nba = pickNextBestAction(groups);
             const mode = getActiveWorkspaceMode();
+            const dayModel = window.SutraTodayCenter.getYourDayTasks(items, nba && nba.item, new Date(), 3);
 
             const count = (arr) => (Array.isArray(arr) ? arr.length : 0);
             const overdueN = count(groups.overdue);
@@ -25519,36 +23576,36 @@ function populateProgressDashboard() {
                 const isReviewItem = nba.item.source === 'review';
                 const isTestItem = /\b(test|quiz|exam|final|midterm)\b/i.test(`${nba.item.type || ''} ${nba.item.title || ''}`);
                 const linkedNoteId = String(nba.item.linkedNoteId || '');
-                const primaryLabel = (isReviewItem || isTestItem) ? 'Study now' : 'Start Focus';
+                const primaryLabel = isReviewItem ? 'Review now' : 'Start focus';
                 const primaryAction = isReviewItem
                     ? `<button type="button" class="neumo-btn active tnu-primary" data-donow-review="1"><i class="fas fa-play" aria-hidden="true"></i> ${primaryLabel}</button>`
                     : `<button type="button" class="neumo-btn active tnu-primary" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}"><i class="fas fa-play" aria-hidden="true"></i> ${primaryLabel}</button>`;
                 nbaHtml = `
                     <div class="today-brief-nba tnu-body" data-nextup-status="${escapeHtml(status.key)}">
-                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">${escapeHtml(nba.item.title)}</div>
                         <div class="today-brief-nba-meta tnu-meta">
-                            <i class="far fa-calendar" aria-hidden="true"></i>
-                            <span>${escapeHtml(dueLabel)}${relLabel ? ' · ' + escapeHtml(relLabel) : ''}${nba.item.subtitle ? ' · ' + escapeHtml(nba.item.subtitle) : ''}</span>
+
+                            <span>${nba.item.subtitle ? escapeHtml(nba.item.subtitle) + ' · ' : ''}${escapeHtml(status.label)}${dueLabel ? ' · ' + escapeHtml(dueLabel) : ''}</span>
                         </div>
-                        <div class="tnu-status-pill tnu-status-${escapeHtml(status.key)}">${escapeHtml(status.label)}</div>
-                        <p class="tnu-context">${escapeHtml(context)}</p>
-                        ${nba.reason ? `<p class="tnu-context"><strong>Why this first:</strong> ${escapeHtml(nba.reason)}</p>` : ''}
                         <div class="today-brief-actions tnu-actions">
                             ${primaryAction}
-                            <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Open Details →</button>
+                            <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Details →</button>
+                            <details class="your-day-options"><summary aria-label="More task actions">More</summary><div>
+                            ${nba.reason ? `<p>${escapeHtml(nba.reason)}</p>` : ''}
                             ${isWorkItem && !nba.item.scheduled ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-schedule="${escapeHtml(nba.item.id)}">Schedule</button>` : ''}
                             ${isWorkItem ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-done="${escapeHtml(nba.item.id)}">Mark Done</button>` : ''}
                             ${linkedNoteId ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-note="${escapeHtml(linkedNoteId)}">Open Notes</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-review-cards="${escapeHtml(nba.item.sourceId)}">Make review cards</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
                             ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn tnu-ghost" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
+                            </div></details>
                         </div>
                     </div>`;
             } else if (items.length === 0) {
                 nbaHtml = `
                     <div class="today-brief-nba today-brief-nba-empty tnu-body">
-                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">Nothing due — you're clear</div>
                         <p class="tnu-context">Capture an assignment with Quick Capture${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</p>
                         <div class="today-brief-actions tnu-actions">
@@ -25558,7 +23615,7 @@ function populateProgressDashboard() {
             } else {
                 nbaHtml = `
                     <div class="today-brief-nba today-brief-nba-empty tnu-body">
-                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-label tnu-eyebrow">Focus next</div>
                         <div class="today-brief-nba-title tnu-title">Nothing overdue or due today</div>
                         <p class="tnu-context">Get ahead on what's coming — scan the radar${reviewDue > 0 ? ` or clear your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''}.</p>
                         <div class="today-brief-actions tnu-actions">
@@ -25573,18 +23630,29 @@ function populateProgressDashboard() {
 
             const smartRow = `
                 <div class="today-brief-smartrow tnu-smartrow">
-                    ${overdueN > 0 ? `<button type="button" class="neumo-btn is-recover" data-donow-recover="1">Recover ${overdueN} overdue</button>` : ''}
+
                     ${nextClass && nextClassDue > 0 ? `<button type="button" class="neumo-btn is-quiz" data-quiz-class="${escapeHtml(nextClass.courseId)}" data-quiz-name="${escapeHtml(nextClass.name)}">Quiz me before ${escapeHtml(nextClass.name)} (${nextClassDue})</button>` : ''}
                     ${reviewDue > 0 ? `<button type="button" class="neumo-btn" data-donow-review="1">Review ${reviewDue} card${reviewDue === 1 ? '' : 's'}</button>` : ''}
-                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="All deadlines grouped by timeframe">All deadlines</button>
+                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="Open work across the workspace, including undated tasks">Workspace to-do list</button>
                     <button type="button" class="neumo-btn" data-donow-calendar="1">Add deadlines to calendar</button>
                     ${overloadChip}
                 </div>`;
 
             container.innerHTML = `
+                <header class="your-day-heading"><h3>Your day</h3><p>${dayModel.count} ${dayModel.count === 1 ? 'task' : 'tasks'} today</p></header>
                 ${nbaHtml}
-                ${smartRow}
+                <section class="your-day-also" aria-labelledby="yourDayAlsoHeading">
+                    <h4 id="yourDayAlsoHeading">Also today</h4>
+                    ${dayModel.remaining.map(item => `<div class="your-day-task-row">
+                        <input type="checkbox" data-donow-done="${escapeHtml(item.id)}" aria-label="Mark done: ${escapeHtml(item.title)}">
+                        <button type="button" data-brief-open-source="${escapeHtml(item.id)}"><span>${escapeHtml(item.title)}</span><small>${item.subtitle ? escapeHtml(item.subtitle) + ' · ' : ''}Due today</small></button>
+                    </div>`).join('') || '<p class="your-day-empty">No other tasks due today.</p>'}
+                    ${dayModel.hasMore ? '<button type="button" class="your-day-view-all" data-your-day-all>View all tasks →</button>' : ''}
+                </section>
+                <div class="your-day-overdue"><span>${overdueN} overdue</span><button type="button" data-donow-recover="1">Review →</button></div>
+                <details class="your-day-tools"><summary>Planning tools</summary>${smartRow}</details>
             `;
+            container.querySelector('[data-your-day-all]')?.addEventListener('click', () => setActiveView('tasks'));
 
             container.querySelectorAll('[data-brief-open-source]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -25613,8 +23681,7 @@ function populateProgressDashboard() {
                     if (scheduled) renderTodayDailyBrief();
                 } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-schedule', 'warning'); }
             });
-            const doneBtn = container.querySelector('[data-donow-done]');
-            if (doneBtn) doneBtn.addEventListener('click', () => {
+            container.querySelectorAll('[data-donow-done]').forEach(doneBtn => doneBtn.addEventListener('click', () => {
                 const hadFocus = document.activeElement === doneBtn;
                 const id = doneBtn.getAttribute('data-donow-done');
                 const target = items.find(i => i.id === id);
@@ -25645,8 +23712,9 @@ function populateProgressDashboard() {
                             if (nextControl) nextControl.focus({ preventScroll: true });
                         }
                     }
-                } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-done', 'warning'); }
-            });
+                    if (!changed) { if ('checked' in doneBtn) doneBtn.checked = false; showToast('Could not complete this task. Open Details to try again.'); }
+                } catch (err) { if ('checked' in doneBtn) doneBtn.checked = false; window.SutraReportError && window.SutraReportError(err, 'today:donow-done', 'warning'); }
+            }));
             const noteBtn = container.querySelector('[data-donow-note]');
             if (noteBtn) noteBtn.addEventListener('click', () => {
                 const noteId = noteBtn.getAttribute('data-donow-note');
@@ -25676,9 +23744,10 @@ function populateProgressDashboard() {
                 const src = focusBtn.getAttribute('data-donow-source');
                 const label = focusBtn.getAttribute('data-donow-title') || 'Focus';
                 try {
-                    if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') { startFocusSession(sid); return; }
-                    if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') { window.flowAtelier.startFocusSession({ label, taskTitle: label }); return; }
-                    if (typeof startFocusSession === 'function') { startFocusSession(); }
+                    const options = { title: label };
+                    if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') { startFocusSession(src === 'homework' ? `hw_v2_${sid}` : sid, options); return; }
+                    if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') { window.flowAtelier.startFocusSession(null, options); return; }
+                    if (typeof startFocusSession === 'function') { startFocusSession(null, options); }
                 } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-focus', 'warning'); }
             });
 
@@ -25733,11 +23802,43 @@ function populateProgressDashboard() {
             });
         }
 
+        function restoreCollegeDeadlineRecord(collection, id, field) {
+            const allowed = { checklist: ['earlyDeadline', 'regularDeadline', 'fafsaDeadline', 'cssDeadline'], deadlines: ['essaysDoneBy', 'submitBy', 'applicationDeadline'] };
+            if (!Object.prototype.hasOwnProperty.call(allowed, collection) || !allowed[collection].includes(field)) return false;
+            const rows = collegeTracker && collegeTracker[collection];
+            const row = Array.isArray(rows) && rows.find(value => value && String(value.id) === String(id));
+            if (!row || !row.completedDeadlineDates || typeof row.completedDeadlineDates !== 'object' || Array.isArray(row.completedDeadlineDates)
+                || row.completedDeadlineDates[field] !== String(row[field] || '').trim()) return false;
+            const previous = row.completedDeadlineDates;
+            row.completedDeadlineDates = { ...previous };
+            delete row.completedDeadlineDates[field];
+            try { persistAppData(); return true; }
+            catch (error) {
+                row.completedDeadlineDates = previous;
+                if (window.SutraReportError) window.SutraReportError(error, 'deadlineRadar:restore', 'warning');
+                return false;
+            }
+        }
+
+        // Modal-only projection: radar, notifications and deadline ranking keep
+        // their dated contracts; this list also includes undated actionable work.
+        function collectWorkspaceTodoItems() {
+            return window.SutraTodayCenter.collectWorkspaceTodos({
+                deadlines: collectWorkspaceDeadlines({ includeBusiness: true }),
+                tasks, completedTaskIds: getDayState(today()).completedTaskIds,
+                homework: readLocalArraySafe('hwTasks:v2'),
+                collegeApp: collegeAppWorkspace, collegeTracker,
+                completedCollegeStatuses: Array.from(COLLEGE_APP_COMPLETED_STATUSES),
+                business: businessWorkspace, life: lifeWorkspace
+            }, new Date());
+        }
+
         function openDeadlineRadar() {
             const modal = document.getElementById('deadlineRadarModal');
             if (!modal) return;
-            const items = collectWorkspaceDeadlines();
-            const groups = groupDeadlinesByTimeframe(items);
+            const items = collectWorkspaceTodoItems();
+            const groups = groupDeadlinesByTimeframe(items.filter(item => item.due));
+            const undated = items.filter(item => !item.due);
             const body = modal.querySelector('.deadline-radar-body');
             if (body) {
                 const renderGroup = (label, arr) => {
@@ -25748,7 +23849,7 @@ function populateProgressDashboard() {
                             <ul>
                                 ${arr.map(i => {
                                     const dueLabel = (() => {
-                                        try { return i.due.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+                                        try { if (!i.due) return 'No due date'; return i.due.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
                                         catch (e) { return ''; }
                                     })();
                                     const extraAction = i.source === 'homework' && i.sourceCourseId
@@ -25759,7 +23860,7 @@ function populateProgressDashboard() {
                                         : '';
                                     return `<li class="deadline-radar-item" data-deadline-id="${escapeHtml(i.id)}">
                                         <div class="deadline-radar-item-main">
-                                            <div class="deadline-radar-item-title">${escapeHtml(i.title)}</div>
+                                            <button type="button" class="deadline-radar-item-title deadline-radar-open-btn" aria-label="Open ${escapeHtml(i.title)}">${escapeHtml(i.title)}</button>
                                             <div class="deadline-radar-item-meta">${escapeHtml(i.source)} · ${escapeHtml(dueLabel)}${i.subtitle ? ' · ' + escapeHtml(i.subtitle) : ''}</div>
                                         </div>
                                         <div class="deadline-radar-item-actions">
@@ -25774,14 +23875,52 @@ function populateProgressDashboard() {
                 };
                 const totalCount = items.length;
                 body.innerHTML = totalCount === 0
-                    ? `<div class="empty-state"><div class="empty-title">No deadlines on file</div><div class="empty-subtitle">Add tasks, homework, AP exams, or college deadlines to see them here.</div></div>`
+                    ? `<div class="empty-state"><div class="empty-title">Nothing left to do</div><div class="empty-subtitle">Add work in To-do, College, Life, or Business to see it here.</div></div>`
                     : [
                         renderGroup('Overdue', groups.overdue),
                         renderGroup('Today', groups.today),
                         renderGroup('Tomorrow', groups.tomorrow),
                         renderGroup('This week', groups.thisWeek),
-                        renderGroup('Later', groups.later)
+                        renderGroup('Later', groups.later),
+                        renderGroup('No due date', undated)
                     ].filter(Boolean).join('');
+                // Keep individual completed deadlines recoverable without changing
+                // the submission status of the school or losing its dates.
+                const completedFields = {
+                    checklist: { earlyDeadline: 'Early deadline', regularDeadline: 'Regular deadline', fafsaDeadline: 'FAFSA deadline', cssDeadline: 'CSS deadline' },
+                    deadlines: { essaysDoneBy: 'Essays done', submitBy: 'Submit application', applicationDeadline: 'Application deadline' }
+                };
+                const completedRows = [];
+                Object.entries(completedFields).forEach(([collection, fields]) => {
+                    (Array.isArray(collegeTracker && collegeTracker[collection]) ? collegeTracker[collection] : []).forEach(row => {
+                        if (!row || !row.completedDeadlineDates || typeof row.completedDeadlineDates !== 'object') return;
+                        Object.entries(fields).forEach(([field, label]) => {
+                            const date = String(row[field] || '').trim();
+                            if (date && row.completedDeadlineDates[field] === date) completedRows.push({ collection, field, id: String(row.id), label: `${row.college || 'College'} · ${label}`, date });
+                        });
+                    });
+                });
+                if (completedRows.length) {
+                    const completedSection = document.createElement('div');
+                    window.SutraDOMSafety.setTrustedHTML(completedSection, `<details class="deadline-radar-group"><summary>Completed College deadlines (${completedRows.length})</summary><ul>${completedRows.map(row => `<li class="deadline-radar-item"><div class="deadline-radar-item-main"><div class="deadline-radar-item-title">${escapeHtml(row.label)}</div><div class="deadline-radar-item-meta">${escapeHtml(row.date)}</div></div><button type="button" class="neumo-btn" data-radar-restore-collection="${escapeHtml(row.collection)}" data-radar-restore-id="${escapeHtml(row.id)}" data-radar-restore-field="${escapeHtml(row.field)}">Restore</button></li>`).join('')}</ul></details>`);
+                    body.appendChild(completedSection);
+                }
+                body.querySelectorAll('[data-radar-restore-collection]').forEach(btn => {
+                    btn.addEventListener('click', event => {
+                        event.stopPropagation();
+                        const collection = btn.getAttribute('data-radar-restore-collection');
+                        const field = btn.getAttribute('data-radar-restore-field');
+                        if (!completedFields[collection] || !Object.prototype.hasOwnProperty.call(completedFields[collection], field)) return;
+                        if (!restoreCollegeDeadlineRecord(collection, btn.getAttribute('data-radar-restore-id'), field)) {
+                            if (typeof showToast === 'function') showToast('Could not restore this deadline; it may have changed or could not be saved.');
+                            return;
+                        }
+                        __workspaceDeadlineCache = null;
+                        if (typeof renderTodayDailyBrief === 'function') renderTodayDailyBrief();
+                        openDeadlineRadar();
+                        if (typeof showToast === 'function') showToast('Deadline restored.');
+                    });
+                });
                 body.querySelectorAll('.deadline-radar-item').forEach(li => {
                     li.addEventListener('click', (e) => {
                         // Action button clicks should not also route to source.
@@ -25818,6 +23957,8 @@ function populateProgressDashboard() {
                             __workspaceDeadlineCache = null;
                             try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (err) { /* non-critical */ }
                             try { openDeadlineRadar(); } catch (err) { /* non-critical */ }
+                        } else if (typeof showToast === 'function') {
+                            showToast('Could not mark this deadline done. Refresh and try again.');
                         }
                     });
                 });
@@ -25953,7 +24094,9 @@ function populateProgressDashboard() {
         }
 
         function recoveryCanMarkDone(item) {
-            return !!item && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline');
+            return !!item && !item.todoOpenOnly && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline' || item.source === 'apexam'
+                || (item.source === 'college' && (['essays', 'checklist', 'deadlines'].includes(item.sourceCollection) || (item.sourceView === 'collegeapp'
+                    && ['essayOrganizer', 'recommenders', 'collegeTracker', 'scholarships'].includes(item.sourceCollection)))));
         }
 
         function recoveryCanReschedule(item) {
@@ -25961,13 +24104,49 @@ function populateProgressDashboard() {
         }
 
         // Write a new due date and/or completion onto the underlying record.
-        // Returns true only on a persisted change so callers never report a phantom
-        // success. Homework rides hwTasks:v2; tasks ride appData (.completed).
+        // Returns true once the canonical store/save path accepts the change.
+        // IndexedDB durability remains tracked by the shared save-health surface.
         function mutateDeadlineRecord(item, change) {
             if (!item) return false;
             const sourceId = String(item.sourceId || '');
             if (!sourceId) return false;
+            function commitPatch(row, patch, save) {
+                const fields = Object.keys(patch);
+                const previous = fields.map(field => ({ field, present: Object.prototype.hasOwnProperty.call(row, field), value: row[field] }));
+                const restore = () => previous.forEach(({ field, present, value }) => { if (present) row[field] = value; else delete row[field]; });
+                Object.assign(row, patch);
+                try {
+                    if (save() === false) { restore(); return false; }
+                } catch (error) { restore(); throw error; }
+                return true;
+            }
             try {
+                if (item.source === 'apexam' && change.done === true && typeof _setExamTaken === 'function') {
+                    if (!apStudyWorkspace || !Array.isArray(apStudyWorkspace.subjects) || !apStudyWorkspace.subjects.some(subject => String(subject.id) === sourceId)) return false;
+                    return _setExamTaken(item.id, true) === true;
+                }
+                if (item.source === 'college' && change.done === true && recoveryCanMarkDone(item)) {
+                    const collection = item.sourceCollection;
+                    const workspace = item.sourceView === 'collegeapp' ? collegeAppWorkspace : collegeTracker;
+                    const row = workspace && Array.isArray(workspace[collection]) && workspace[collection].find(value => String(value.id) === sourceId);
+                    if (!row) return false;
+                    const patch = {};
+                    if (collection === 'checklist' || collection === 'deadlines') {
+                        const field = String(item.id).split(':').pop();
+                        const allowed = collection === 'checklist'
+                            ? ['earlyDeadline', 'regularDeadline', 'fafsaDeadline', 'cssDeadline']
+                            : ['essaysDoneBy', 'submitBy', 'applicationDeadline'];
+                        if (!allowed.includes(field) || !row[field] || String(row[field]).trim() !== String(item.dueDate || '').trim()) return false;
+                        if (row.completedDeadlineDates != null && (typeof row.completedDeadlineDates !== 'object' || Array.isArray(row.completedDeadlineDates))) return false;
+                        patch.completedDeadlineDates = { ...(row.completedDeadlineDates || {}), [field]: String(row[field]).trim() };
+                    } else if (collection === 'essays') {
+                        const field = { firstDraftBy: 'firstDraftDone', reviewBy: 'reviewSubmitted', revisionBy: 'revisionSubmitted', finalBy: 'finalDraft' }[String(item.id).split(':').pop()];
+                        if (!field) return false;
+                        patch[field] = true;
+                    } else if (collection === 'essayOrganizer') patch.draftStatus = 'final';
+                    else patch.status = 'submitted';
+                    return commitPatch(row, patch, () => persistAppData());
+                }
                 if (item.source === 'homework') {
                     const raw = readLocalArraySafe('hwTasks:v2');
                     const row = Array.isArray(raw) ? raw.find(t => String(t.id) === sourceId) : null;
@@ -25976,26 +24155,25 @@ function populateProgressDashboard() {
                     if (change.done) { row.done = true; row.completedAt = new Date().toISOString(); }
                     if (change.dueDate) row.dueDate = change.dueDate;
                     row.updatedAt = new Date().toISOString();
-                    writeLocalArraySafe('hwTasks:v2', raw);
+                    if (!writeLocalArraySafe('hwTasks:v2', raw)) return false;
                     try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
                     return true;
                 }
                 if (item.source === 'task' && typeof tasks !== 'undefined' && Array.isArray(tasks)) {
                     const row = tasks.find(t => String(t.id) === sourceId);
                     if (!row) return false;
-                    if (change.done) row.completed = true;
-                    if (change.dueDate) row.dueDate = change.dueDate;
-                    try { persistAppData && persistAppData(); } catch (e) { /* non-critical */ }
+                    const patch = {};
+                    if (change.done) patch.completed = true;
+                    if (change.dueDate) patch.dueDate = change.dueDate;
+                    if (!commitPatch(row, patch, () => persistAppData())) return false;
                     try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
                     return true;
                 }
                 if (item.source === 'timeline' && typeof timeBlocks !== 'undefined' && Array.isArray(timeBlocks)) {
                     const row = timeBlocks.find(block => String(block && block.id) === sourceId);
                     if (!row || change.done !== true) return false;
-                    row.completed = true;
-                    row.completedAt = new Date().toISOString();
-                    row.updatedAt = row.completedAt;
-                    try { saveTimeBlocks && saveTimeBlocks(); } catch (e) { return false; }
+                    const completedAt = new Date().toISOString();
+                    if (!commitPatch(row, { completed: true, completedAt, updatedAt: completedAt }, () => saveTimeBlocks())) return false;
                     try { renderTimeline && renderTimeline(); } catch (e) { /* non-critical */ }
                     return true;
                 }
@@ -26538,26 +24716,26 @@ function populateProgressDashboard() {
         // Core daily-loop surfaces introduced during onboarding so students
         // understand what each one does before they see the navigation.
         const ONBOARDING_CORE_SURFACES = [
-            { view: 'today',    title: 'Home',      icon: 'fa-house',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
-            { view: 'capture',  title: 'Capture',   icon: 'fa-bolt',          description: 'Quick Capture — the Home Capture button instantly adds assignments, notes, or tasks.' },
-            { view: 'homework', title: 'To-do',     icon: 'fa-book-open',     description: 'Homework, general tasks, and classes in one place.' },
-            { view: 'notes',    title: 'Create',    icon: 'fa-note-sticky',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
-            { view: 'timeline', title: 'Timeline',  icon: 'fa-calendar-days', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
-            { view: 'review',   title: 'Review',    icon: 'fa-layer-group',   description: 'Active recall with flashcards, learn, write, and test modes.' },
-            { view: 'focus',    title: 'Focus',     icon: 'fa-clock',         description: 'Pomodoro timer and distraction-free writing mode.' },
-            { view: 'data',     title: 'Data',      icon: 'fa-shield-halved', description: 'Your workspace is local-first. Export backups to keep it safe.' }
+            { view: 'today',    title: 'Home',      icon: 'fa-sutra-home',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
+            { view: 'capture',  title: 'Capture',   icon: 'fa-sutra-capture',          description: 'Quick Capture — the Home Capture button instantly adds assignments, notes, or tasks.' },
+            { view: 'homework', title: 'To-do',     icon: 'fa-sutra-todo',     description: 'Homework, general tasks, and classes in one place.' },
+            { view: 'notes',    title: 'Create',    icon: 'fa-sutra-create',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
+            { view: 'timeline', title: 'Timeline',  icon: 'fa-sutra-timeline', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
+            { view: 'review',   title: 'Review',    icon: 'fa-sutra-review',   description: 'Active recall with flashcards, learn, write, and test modes.' },
+            { view: 'focus',    title: 'Focus',     icon: 'fa-sutra-focus',         description: 'Pomodoro timer and distraction-free writing mode.' },
+            { view: 'data',     title: 'Data',      icon: 'fa-sutra-backup', description: 'Your workspace is local-first. Export backups to keep it safe.' }
         ];
 
         const ONBOARDING_FEATURE_VIEWS = [
-            { view: 'today',      title: 'Home',         icon: 'fa-house',         description: 'Daily Thread, streaks, and quick focus.' },
-            { view: 'timeline',   title: 'Timeline',     icon: 'fa-calendar-days', description: 'Plan blocks, track events, review by date.' },
-            { view: 'notes',      title: 'Create',       icon: 'fa-note-sticky',   description: 'Rich editor, pages, and workspace docs.' },
-            { view: 'homework',   title: 'To-do',        icon: 'fa-book-open',     description: 'Homework, general tasks, and class planning.' },
-            { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-graduation-cap', description: 'AP exam prep, units, practice logs.' },
+            { view: 'today',      title: 'Home',         icon: 'fa-sutra-home',         description: 'Daily Thread, streaks, and quick focus.' },
+            { view: 'timeline',   title: 'Timeline',     icon: 'fa-sutra-timeline', description: 'Plan blocks, track events, review by date.' },
+            { view: 'notes',      title: 'Create',       icon: 'fa-sutra-create',   description: 'Rich editor, pages, and workspace docs.' },
+            { view: 'homework',   title: 'To-do',        icon: 'fa-sutra-todo',     description: 'Homework, general tasks, and class planning.' },
+            { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-sutra-review', description: 'AP exam prep, units, practice logs.' },
             { view: 'collegeapp', title: 'College',      icon: 'fa-university',    description: 'Schools, deadlines, essays, scholarships.' },
-            { view: 'life',       title: 'Life',         icon: 'fa-seedling',      description: 'SMART goals, habits, journals, fitness.' },
+            { view: 'life',       title: 'Life',         icon: 'fa-seedling',      description: 'Goals, habits, spending, books, and practical tools.' },
             { view: 'business',   title: 'Business',     icon: 'fa-briefcase',     description: 'Projects, clients, invoices, meetings.' },
-            { view: 'review',     title: 'Review',       icon: 'fa-layer-group',   description: 'Flashcards, learn, write, test, match.' }
+            { view: 'review',     title: 'Review',       icon: 'fa-sutra-review',   description: 'Flashcards, learn, write, test, match.' }
         ];
 
         const ONBOARDING_THEMES = [
@@ -31831,11 +30009,12 @@ function buildOnboardingPlanPreview() {
         function cwFocusInboxItem(source, sourceId, milestoneId) {
             const item = cwFindInboxItem(source, sourceId, milestoneId);
             const title = item ? item.title : '';
+            const taskId = sourceId && (source === 'homework' ? `hw_v2_${sourceId}` : (source === 'planner' || source === 'task') ? sourceId : null);
             if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') {
-                try { window.flowAtelier.startFocusSession({ label: title, taskTitle: title }); showToast('Focus session started.'); return true; } catch (e) { /* fall through */ }
+                try { window.flowAtelier.startFocusSession(taskId || null, { title }); showToast('Focus session started.'); return true; } catch (e) { /* fall through */ }
             }
             if (typeof startFocusSession === 'function') {
-                try { startFocusSession(null, { label: title }); showToast('Focus session started.'); return true; } catch (e) { try { startFocusSession(); return true; } catch (e2) { /* fall through */ } }
+                try { startFocusSession(taskId || null, { title }); showToast('Focus session started.'); return true; } catch (e) { try { startFocusSession(); return true; } catch (e2) { /* fall through */ } }
             }
             setActiveView('today');
             return false;
@@ -33060,6 +31239,15 @@ function buildOnboardingPlanPreview() {
             }
             const type = String(control.type || '').toLowerCase();
             if (type === 'checkbox') return !!control.checked;
+            if (type === 'time' && control.hasAttribute('data-pref-hour-time')) {
+                if (!/^\d{2}:\d{2}$/.test(control.value) || !control.validity.valid) return null;
+                const [hour, minute] = control.value.split(':').map(Number);
+                let result = hour + minute / 60;
+                const path = control.getAttribute('data-pref-path');
+                if (path === 'studentPreferences.bedtimeHour' && result < 18) result += 24;
+                if (path === 'studentPreferences.latestStudyHour' && result === 0) result = 24;
+                return result;
+            }
             if (type === 'number' || type === 'range') {
                 const numeric = Number(control.value);
                 return Number.isFinite(numeric) ? numeric : control.value;
@@ -33081,6 +31269,11 @@ function buildOnboardingPlanPreview() {
             const type = String(control.type || '').toLowerCase();
             if (type === 'checkbox') {
                 control.checked = value === true;
+                return;
+            }
+            if (type === 'time' && control.hasAttribute('data-pref-hour-time')) {
+                const minutes = Math.round(Number(value) * 60) % 1440;
+                control.value = Number.isFinite(minutes) ? String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0') : '';
                 return;
             }
             control.value = value == null ? '' : String(value);
@@ -33143,12 +31336,13 @@ function buildOnboardingPlanPreview() {
         function updateSettingsDraftUi() {
             const settingsRoot = document.getElementById('view-settings');
             const hasUnsaved = settingsDraftValues.size > 0;
-            if (settingsRoot) settingsRoot.classList.toggle('has-unsaved-settings', hasUnsaved);
+            const hasPendingChanges = hasUnsaved || settingsSavePending || !!settingsSaveError;
+            if (settingsRoot) settingsRoot.classList.toggle('has-unsaved-settings', hasPendingChanges);
 
             // The redesigned page wraps everything in `.cc-page` and toggles
             // a `data-pending` attribute used to show/hide the sticky action bar.
             const ccPage = settingsRoot ? settingsRoot.querySelector('.cc-page') : null;
-            if (ccPage) ccPage.dataset.pending = hasUnsaved ? 'true' : 'false';
+            if (ccPage) ccPage.dataset.pending = hasPendingChanges ? 'true' : 'false';
 
             const statusPill = document.getElementById('settingsStatusPill');
             if (statusPill) {
@@ -33156,32 +31350,35 @@ function buildOnboardingPlanPreview() {
                 // Update the text node if present, otherwise fall back to textContent
                 // for backwards compat with older markup.
                 const statusText = statusPill.querySelector('.cc-status-text');
-                const message = hasUnsaved
-                    ? `${settingsDraftValues.size} unsaved ${settingsDraftValues.size === 1 ? 'change' : 'changes'}`
+                const message = settingsSavePending ? 'Saving...'
+                    : settingsSaveError ? 'Save failed'
+                    : hasUnsaved ? `${settingsDraftValues.size} unsaved ${settingsDraftValues.size === 1 ? 'change' : 'changes'}`
                     : 'Saved';
                 if (statusText) statusText.textContent = message;
                 else statusPill.textContent = message;
-                statusPill.dataset.state = hasUnsaved ? 'dirty' : 'saved';
+                statusPill.dataset.state = settingsSavePending ? 'saving'
+                    : settingsSaveError ? 'error' : hasUnsaved ? 'dirty' : 'saved';
             }
 
             const unsavedText = document.getElementById('settingsUnsavedText');
             if (unsavedText) {
-                unsavedText.textContent = hasUnsaved
-                    ? `${settingsDraftValues.size} staged ${settingsDraftValues.size === 1 ? 'change' : 'changes'} ready to apply`
-                    : 'No pending changes';
+                unsavedText.textContent = settingsSavePending ? 'Saving settings locally...'
+                    : settingsSaveError || (hasUnsaved
+                        ? `${settingsDraftValues.size} staged ${settingsDraftValues.size === 1 ? 'change' : 'changes'} ready to apply`
+                        : 'No pending changes');
             }
 
             const actionBar = document.getElementById('settingsActionBar');
-            if (actionBar) actionBar.dataset.pending = hasUnsaved ? 'true' : 'false';
+            if (actionBar) actionBar.dataset.pending = hasPendingChanges ? 'true' : 'false';
 
             const applyBtn = document.getElementById('settingsApplyBtn');
-            if (applyBtn) applyBtn.disabled = !hasUnsaved;
+            if (applyBtn) applyBtn.disabled = settingsSavePending || (!hasUnsaved && !settingsSaveError);
             const revertBtn = document.getElementById('settingsRevertBtn');
-            if (revertBtn) revertBtn.disabled = !hasUnsaved;
+            if (revertBtn) revertBtn.disabled = settingsSavePending || !hasUnsaved;
             const applyBtnTop = document.getElementById('settingsApplyBtnTop');
-            if (applyBtnTop) applyBtnTop.disabled = !hasUnsaved;
+            if (applyBtnTop) applyBtnTop.disabled = settingsSavePending || (!hasUnsaved && !settingsSaveError);
             const revertBtnTop = document.getElementById('settingsRevertBtnTop');
-            if (revertBtnTop) revertBtnTop.disabled = !hasUnsaved;
+            if (revertBtnTop) revertBtnTop.disabled = settingsSavePending || !hasUnsaved;
 
             const resetSectionBtn = document.getElementById('settingsResetSectionBtn');
             if (resetSectionBtn) {
@@ -33277,6 +31474,21 @@ function buildOnboardingPlanPreview() {
             } catch (error) { /* non-critical */ }
         }
 
+        function setSettingsMobileView(view, options = {}) {
+            const shell = document.querySelector('#view-settings .cc-page');
+            if (!shell) return;
+            const detail = view === 'detail';
+            shell.dataset.settingsMobileView = detail ? 'detail' : 'categories';
+            if (options.focus !== true || !window.matchMedia('(max-width: 760px)').matches) return;
+            const target = detail
+                ? shell.querySelector('[data-settings-section].active .cc-section-title')
+                : shell.querySelector('[data-settings-nav].active:not([hidden])');
+            if (target) {
+                if (detail) target.setAttribute('tabindex', '-1');
+                target.focus();
+            }
+        }
+
         function setActiveSettingsCategory(category, options = {}) {
             const requested = String(category || '').trim().toLowerCase();
             const sections = Array.from(document.querySelectorAll('#view-settings [data-settings-section]'));
@@ -33317,6 +31529,7 @@ function buildOnboardingPlanPreview() {
             if (options.skipSearch !== true) {
                 filterSettingsControlsBySearch();
             }
+            if (options.openDetail === true) setSettingsMobileView('detail', { focus: true });
             updateSettingsDraftUi();
             updateSettingsPreviewCard();
             // Lazily render the Mods & Customization panels when that category opens.
@@ -33349,30 +31562,453 @@ function buildOnboardingPlanPreview() {
             if (settingsBody) settingsBody.dataset.preview = showPreview ? 'true' : 'false';
         }
 
+        // Rank only local Settings labels and control metadata. The small alias
+        // dictionary covers common student wording; bounded one-edit matching
+        // catches a typo without turning unrelated searches into broad results.
+        function rankSettingsSearchCandidates(query, candidates) {
+            const normalize = value => String(value || '').slice(0, 800)
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+                .replace(/\bto[\s-]+do\b/gi, 'todo')
+                .replace(/\bauto[\s-]+save\b/gi, 'autosave')
+                .replace(/\be[\s-]+mail\b/gi, 'email')
+                .replace(/&/g, ' and ')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+            const stopWords = new Set([
+                'a', 'an', 'and', 'are', 'can', 'could', 'do', 'does', 'for', 'how',
+                'i', 'in', 'is', 'it', 'me', 'my', 'of', 'on', 'or', 'please', 'the',
+                'this', 'to', 'what', 'where', 'which', 'with', 'you', 'your', 'setting',
+                'settings', 'option', 'options', 'control', 'controls', 'find', 'search',
+                'show', 'change', 'set', 'turn', 'toggle', 'make', 'want', 'need'
+            ]);
+            const stem = token => {
+                const knownPlurals = { classes: 'class', glasses: 'glass' };
+                if (knownPlurals[token]) return knownPlurals[token];
+                if (token.length > 5 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+                if (token.length > 4 && token.endsWith('s')
+                    && !/(?:ss|us|is|ws)$/.test(token)) return token.slice(0, -1);
+                return token;
+            };
+            const tokenize = value => Array.from(new Set(normalize(value)
+                .split(' ')
+                .slice(0, 48)
+                .filter(Boolean)
+                .map(stem)
+                .filter(token => token.length > 1 && !stopWords.has(token))));
+            const queryTokens = tokenize(String(query || '').slice(0, 256)).slice(0, 8);
+            if (!queryTokens.length) return [];
+
+            const phraseAliases = {
+                'dark mode': ['theme', 'color scheme'],
+                'light mode': ['theme', 'color scheme'],
+                'dark theme': ['theme', 'color'],
+                'light theme': ['theme', 'color'],
+                'colour scheme': ['theme', 'color'],
+                'color scheme': ['theme', 'color'],
+                'bigger text': ['font size', 'accessibility text size'],
+                'larger text': ['font size', 'accessibility text size'],
+                'text bigger': ['font size', 'accessibility text size'],
+                'text larger': ['font size', 'accessibility text size'],
+                'screen reader': ['accessibility'],
+                'automatic save': ['autosave interval'],
+                'save automatically': ['autosave interval'],
+                'cloud backup': ['backup export'],
+                'backup password': ['encrypted workspace backup', 'encrypted backup'],
+                'backup passphrase': ['encrypted backup'],
+                'backup restore': ['backup recovery'],
+                'calendar feed': ['calendar source'],
+                'class schedule': ['calendar schedule'],
+                'to do list': ['todo tasks']
+            };
+            const wordAliases = {
+                dark: ['theme'], light: ['theme'], color: ['theme'], colour: ['theme'],
+                look: ['appearance', 'theme'], appearance: ['theme'],
+                typeface: ['font'], typography: ['font'], font: ['typography'],
+                bigger: ['size', 'font'], larger: ['size', 'font'], readable: ['readability'],
+                unreadable: ['readability', 'contrast', 'font'], alert: ['notification'],
+                reminder: ['notification'], ping: ['notification'],
+                homework: ['task', 'assignment'], assignment: ['homework', 'task'],
+                todo: ['homework', 'task'], due: ['deadline', 'calendar'],
+                deadline: ['due', 'calendar'], backup: ['export', 'restore'],
+                restore: ['backup', 'recovery'], recover: ['backup', 'recovery'],
+                cloud: ['sync', 'backup'], sync: ['cloud', 'backup'], google: ['integrations'],
+                chat: ['assistant'], assistant: ['chat'], animation: ['motion'],
+                motion: ['animation'], timer: ['focus'], focus: ['timer'],
+                zoom: ['scale', 'font'], accessibility: ['readability', 'contrast'],
+                password: ['encrypted', 'passphrase'], passphrase: ['password', 'encrypted']
+            };
+            const variants = [];
+            const seenVariants = new Set();
+            const addVariant = (tokens, kind, penalty = 0) => {
+                const clean = Array.from(new Set(tokens.filter(Boolean)));
+                if (!clean.length) return;
+                const key = clean.join(' ');
+                if (seenVariants.has(key) || variants.length >= 12) return;
+                seenVariants.add(key);
+                variants.push({ tokens: clean, kind, penalty });
+            };
+            addVariant(queryTokens, 'direct');
+            const queryPhrase = queryTokens.join(' ');
+            (phraseAliases[queryPhrase] || []).forEach(alias => addVariant(tokenize(alias), 'phrase', 8));
+            queryTokens.forEach((token, index) => {
+                (wordAliases[token] || []).slice(0, 3).forEach(alias => {
+                    const aliasTokens = tokenize(alias);
+                    addVariant([...queryTokens.slice(0, index), ...aliasTokens, ...queryTokens.slice(index + 1)], 'alias', 12);
+                });
+            });
+
+            const oneEditAway = (left, right) => {
+                if (left === right || Math.abs(left.length - right.length) > 1) return false;
+                if (left.length < 5 || right.length < 5) return false;
+                if (left.length === right.length) {
+                    const differences = [];
+                    for (let index = 0; index < left.length; index += 1) {
+                        if (left[index] !== right[index]) differences.push(index);
+                    }
+                    return differences.length === 1
+                        || (differences.length === 2
+                            && differences[1] === differences[0] + 1
+                            && left[differences[0]] === right[differences[1]]
+                            && left[differences[1]] === right[differences[0]]);
+                }
+                const shorter = left.length < right.length ? left : right;
+                const longer = left.length < right.length ? right : left;
+                let shortIndex = 0;
+                let longIndex = 0;
+                let skipped = false;
+                while (shortIndex < shorter.length && longIndex < longer.length) {
+                    if (shorter[shortIndex] === longer[longIndex]) {
+                        shortIndex += 1;
+                        longIndex += 1;
+                    } else if (skipped) {
+                        return false;
+                    } else {
+                        skipped = true;
+                        longIndex += 1;
+                    }
+                }
+                return true;
+            };
+            const fieldWeights = [
+                ['name', 100], ['path', 82], ['control', 72], ['description', 58],
+                ['group', 38], ['category', 30], ['keywords', 52]
+            ];
+            const indexedCandidates = (Array.isArray(candidates) ? candidates.slice(0, 400) : [])
+                .map((candidate, candidateIndex) => {
+                    if (!candidate || typeof candidate !== 'object') return null;
+                    const fieldTokenWeights = new Map();
+                    fieldWeights.forEach(([field, weight]) => tokenize(candidate[field]).forEach(fieldToken => {
+                        fieldTokenWeights.set(fieldToken, Math.max(fieldTokenWeights.get(fieldToken) || 0, weight));
+                    }));
+                    return {
+                        candidate,
+                        candidateIndex,
+                        fieldTokenWeights,
+                        fieldTokens: Array.from(fieldTokenWeights.keys())
+                    };
+                })
+                .filter(Boolean);
+            const vocabulary = new Set(indexedCandidates.flatMap(entry => entry.fieldTokens));
+            const vocabularyTokens = Array.from(vocabulary);
+            const exactOrPrefixTokens = new Set(queryTokens.filter(token => vocabularyTokens.some(fieldToken =>
+                fieldToken === token || (token.length >= 4 && fieldToken.startsWith(token))
+            )));
+            const ranked = [];
+            indexedCandidates.forEach(({ candidate, candidateIndex, fieldTokenWeights }) => {
+                let best = null;
+                variants.forEach(variant => {
+                    let score = -variant.penalty;
+                    let matched = 0;
+                    variant.tokens.forEach(token => {
+                        let tokenScore = 0;
+                        const exactScore = fieldTokenWeights.get(token) || 0;
+                        if (exactScore) tokenScore = exactScore;
+                        else fieldTokenWeights.forEach((weight, fieldToken) => {
+                            if (token.length >= 4 && fieldToken.startsWith(token)) {
+                                tokenScore = Math.max(tokenScore, Math.round(weight * 0.72));
+                            } else if (variant.kind === 'direct'
+                                && !exactOrPrefixTokens.has(token)
+                                && oneEditAway(token, fieldToken)) {
+                                tokenScore = Math.max(tokenScore, Math.round(weight * 0.46));
+                            }
+                        });
+                        if (tokenScore) {
+                            matched += 1;
+                            score += tokenScore;
+                        }
+                    });
+                    const complete = matched === variant.tokens.length;
+                    const result = {
+                        candidate,
+                        score,
+                        matchedTokens: matched,
+                        totalTokens: variant.tokens.length,
+                        coverage: matched / variant.tokens.length,
+                        complete,
+                        matchType: complete ? variant.kind : 'related',
+                        candidateIndex
+                    };
+                    if (!best || result.complete && !best.complete
+                        || (result.complete === best.complete && result.score > best.score)) best = result;
+                });
+                if (best && best.matchedTokens) ranked.push(best);
+            });
+
+            const sortResults = (left, right) => right.score - left.score || left.candidateIndex - right.candidateIndex;
+            const complete = ranked.filter(result => result.complete).sort(sortResults);
+            if (complete.length) return complete;
+            return ranked
+                .filter(result => result.coverage >= (queryTokens.length < 3 ? 0.5 : 0.4) && result.score >= 28)
+                .sort(sortResults);
+        }
+
+        function collectSettingsSearchCandidates(sections) {
+            const previous = collectSettingsSearchCandidates.cache;
+            const sameSections = previous && previous.sections.length === sections.length
+                && sections.every((section, index) => section === previous.sections[index]);
+            // Drain synchronous label/control edits as well as observer callbacks.
+            // Search-owned style/class/result changes deliberately do not dirty
+            // this index, so typing does not rescan every Settings control.
+            if (sameSections && previous.observer && previous.observer.takeRecords().length) previous.dirty = true;
+            if (sameSections && !previous.dirty) return previous.candidates;
+            if (previous && previous.observer) previous.observer.disconnect();
+            const rowSelector = '[data-setting-item], .atelier-setting-row, .settings-row, .settings-card';
+            const interactiveSelector = 'a[href]:not([aria-disabled="true"]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [role="radio"]';
+            const text = element => String(element && element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 320);
+            const controlText = control => control && !control.matches('input, textarea, select, .nf-select-trigger') ? text(control) : '';
+            const visibleControl = control => {
+                if (!control || control.hidden || control.closest('[hidden]')) return false;
+                if (control.getAttribute('aria-hidden') !== 'true') return true;
+                if (!control.matches('select.nf-select-native')) return false;
+                const trigger = control.closest('.nf-select')?.querySelector('.nf-select-trigger');
+                return !!trigger && !trigger.hidden && trigger.getAttribute('aria-hidden') !== 'true';
+            };
+            const visibleTarget = control => control && control.matches('select')
+                ? control.closest('.nf-select')?.querySelector('.nf-select-trigger') || control
+                : control;
+            const targetFor = item => {
+                const controls = Array.from(item.querySelectorAll(interactiveSelector)).filter(visibleControl);
+                return visibleTarget(controls.find(control => control.matches('[role="radio"][aria-checked="true"], input:checked'))
+                    || controls.find(control => control.matches('[data-pref-path]'))
+                    || controls[0]
+                    || item); // Disabled/read-only settings remain discoverable by their labels.
+            };
+            const results = [];
+            const seenItems = new Set();
+
+            sections.forEach(section => {
+                const category = String(section.getAttribute('data-settings-section') || '').toLowerCase();
+                const navButton = document.querySelector(`#view-settings [data-settings-nav="${category}"]`);
+                const categoryName = text(navButton && navButton.querySelector('.cc-sidebar-item-name, .atelier-settings-nav-btn-title'))
+                    || text(section.querySelector('.cc-section-title')) || category;
+                const categoryDescription = text(section.querySelector(':scope > .cc-section-head .cc-section-copy'));
+                const rows = Array.from(section.querySelectorAll(rowSelector))
+                    .filter(item => !item.hidden && !item.parentElement?.closest(rowSelector));
+
+                const addCandidate = (item, target, standalone = false) => {
+                    if (!item || !target || seenItems.has(item)) return;
+                    seenItems.add(item);
+                    const title = text(item.querySelector('.cc-row-name, .setting-name, .setting-title, .cc-feature-toggle span'));
+                    const group = item.closest('.cc-group');
+                    const groupName = text(group && group.querySelector('.cc-group-title'));
+                    const help = Array.from(item.querySelectorAll('.cc-row-help, .cc-foot-help, .setting-help, .cc-section-copy'))
+                        .slice(0, 4).map(text).filter(Boolean).join(' ').slice(0, 800);
+                    const controlTexts = Array.from(item.querySelectorAll(interactiveSelector))
+                        .filter(visibleControl)
+                        .slice(0, 32)
+                        .map(control => [control.getAttribute('aria-label'), control.getAttribute('title'), control.getAttribute('placeholder'), control.id,
+                            controlText(control), ...Array.from(control.querySelectorAll('option')).slice(0, 32).map(text)]
+                            .filter(Boolean).join(' ').slice(0, 240));
+                    const targetMeta = [target.getAttribute('aria-label'), target.getAttribute('title'), target.getAttribute('placeholder'), target.id,
+                        target.getAttribute('data-pref-path'), target.getAttribute('name')].filter(Boolean).join(' ');
+                    const pathControl = item.matches('[data-pref-path]') ? item : item.querySelector('[data-pref-path]');
+                    const path = String(pathControl && pathControl.getAttribute('data-pref-path') || '');
+                    const fallbackName = target.getAttribute('aria-label') || controlText(target) || path || groupName || categoryName;
+                    results.push({
+                        item,
+                        target,
+                        category,
+                        name: title || fallbackName,
+                        categoryName,
+                        group: groupName,
+                        path,
+                        control: [targetMeta, ...controlTexts].filter(Boolean).join(' ').slice(0, 800),
+                        description: help.slice(0, 800),
+                        context: [groupName, standalone ? categoryDescription : ''].filter(Boolean).join(' '),
+                        keywords: [categoryName, groupName].filter(Boolean).join(' '),
+                        standalone
+                    });
+                };
+
+                rows.forEach(item => addCandidate(item, targetFor(item)));
+                Array.from(section.querySelectorAll(interactiveSelector)).filter(visibleControl).forEach(control => {
+                    if (control.closest(rowSelector)) return;
+                    const item = control.closest('.cc-data-health-row, .cc-feature-toggle, .cc-setting-row') || control;
+                    addCandidate(item, visibleTarget(control), true);
+                });
+            });
+            if (typeof MutationObserver === 'function') {
+                const cache = { sections: sections.slice(), candidates: results, dirty: false, observer: null };
+                cache.observer = new MutationObserver(() => { cache.dirty = true; });
+                sections.forEach(section => cache.observer.observe(section, {
+                    subtree: true, childList: true, characterData: true, attributes: true,
+                    attributeFilter: ['aria-label', 'aria-hidden', 'aria-checked', 'checked', 'title', 'placeholder', 'id', 'data-pref-path', 'name', 'disabled', 'hidden', 'type']
+                }));
+                collectSettingsSearchCandidates.cache = cache;
+            } else collectSettingsSearchCandidates.cache = null;
+            return results;
+        }
+
+        function navigateToSettingsSearchCandidate(candidate, options = {}) {
+            if (!candidate || !candidate.item || !candidate.target || !candidate.item.isConnected || !candidate.target.isConnected) return false;
+            if (options.openSettings === true && typeof setActiveView === 'function') setActiveView('settings');
+            const keepQuery = options.preserveQuery === true;
+            setActiveSettingsCategory(candidate.category, {
+                clearSearch: !keepQuery,
+                skipSearch: keepQuery,
+                openDetail: true
+            });
+            let disclosure = candidate.item.closest('details');
+            while (disclosure) {
+                disclosure.open = true;
+                disclosure = disclosure.parentElement && disclosure.parentElement.closest('details');
+            }
+            document.querySelectorAll('#view-settings .is-search-target').forEach(node => node.classList.remove('is-search-target'));
+            candidate.item.classList.add('is-search-target');
+            if (candidate.target === candidate.item && !candidate.target.hasAttribute('tabindex')) {
+                candidate.target.setAttribute('tabindex', '-1');
+            }
+            candidate.target.focus({ preventScroll: true });
+            candidate.item.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
+            return true;
+        }
+
+        function searchSettingsForGlobalSearch(query, options = {}) {
+            const cleanQuery = String(query || '').trim().slice(0, 256);
+            if (!cleanQuery) return [];
+            const sections = Array.from(document.querySelectorAll('#view-settings [data-settings-section]'));
+            const candidates = collectSettingsSearchCandidates(sections);
+            const limit = Math.max(1, Math.min(12, Number(options.limit) || 8));
+            return rankSettingsSearchCandidates(cleanQuery, candidates).slice(0, limit).map(result => {
+                const candidate = result.candidate;
+                const id = candidate.path || candidate.target.id || `${candidate.category}:${candidate.name}:${result.candidateIndex}`;
+                return {
+                    id: `setting:${id}`,
+                    title: `Settings: ${candidate.name}`,
+                    context: [candidate.categoryName, candidate.description || candidate.context || candidate.group].filter(Boolean).join(' · '),
+                    settingsSearchScore: Math.max(0, Math.min(300, result.score)),
+                    action: () => navigateToSettingsSearchCandidate(candidate, { openSettings: true })
+                };
+            });
+        }
+
+        function renderSettingsSearchResults(query, results, totalMatches) {
+            const panel = document.getElementById('settingsSearchResults');
+            const list = document.getElementById('settingsSearchResultsList');
+            const more = document.getElementById('settingsSearchResultsMore');
+            const input = document.getElementById('settingsSearchInput');
+            if (!panel || !list) return;
+            list.replaceChildren();
+            if (list.dataset.keyboardBound !== 'true') {
+                list.dataset.keyboardBound = 'true';
+                list.addEventListener('keydown', moveSettingsSearchResultFocus);
+            }
+            const limit = 8;
+            results.slice(0, limit).forEach(result => {
+                const candidate = result.candidate;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'cc-search-result-button';
+                button.setAttribute('data-settings-search-result', '');
+                button.setAttribute('aria-label', `${candidate.name}, ${candidate.categoryName}. ${candidate.description || candidate.context || candidate.group || 'Go to setting'}`);
+
+                const title = document.createElement('span');
+                title.className = 'cc-search-result-title';
+                title.textContent = candidate.name;
+                const category = document.createElement('span');
+                category.className = 'cc-search-result-category';
+                category.textContent = candidate.categoryName;
+                button.append(title, category);
+                if (candidate.description || candidate.context || candidate.group) {
+                    const copy = document.createElement('span');
+                    copy.className = 'cc-search-result-copy';
+                    copy.textContent = candidate.description || candidate.context || candidate.group;
+                    button.append(copy);
+                }
+                button.addEventListener('click', () => {
+                    navigateToSettingsSearchCandidate(candidate, { preserveQuery: true });
+                });
+                const li = document.createElement('li');
+                li.append(button);
+                list.append(li);
+            });
+            panel.hidden = !query || results.length === 0;
+            if (input) input.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+            if (more) {
+                const remaining = Math.max(0, totalMatches - Math.min(results.length, limit));
+                more.hidden = remaining === 0;
+                more.textContent = remaining ? `${remaining} more matching setting${remaining === 1 ? '' : 's'} stay visible below.` : '';
+            }
+        }
+
+        function moveSettingsSearchResultFocus(event) {
+            const results = Array.from(document.querySelectorAll('#settingsSearchResults [data-settings-search-result]'));
+            if (!results.length || !['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) return false;
+            if (event.key === 'Escape' && results.includes(document.activeElement)) {
+                event.preventDefault();
+                document.getElementById('settingsSearchInput')?.focus();
+                return true;
+            }
+            const currentIndex = results.indexOf(document.activeElement);
+            if (currentIndex < 0 && event.key !== 'ArrowDown') return false;
+            let nextIndex = currentIndex;
+            if (event.key === 'ArrowDown') nextIndex = currentIndex < 0 ? 0 : Math.min(results.length - 1, currentIndex + 1);
+            if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? -1 : Math.max(-1, currentIndex - 1);
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = results.length - 1;
+            event.preventDefault();
+            if (nextIndex < 0) document.getElementById('settingsSearchInput')?.focus();
+            else results[nextIndex].focus();
+            return true;
+        }
+
         function filterSettingsControlsBySearch() {
             const searchInput = document.getElementById('settingsSearchInput');
-            const query = String(searchInput && searchInput.value || '').trim().toLowerCase();
+            const query = String(searchInput && searchInput.value || '').trim();
             const sections = Array.from(document.querySelectorAll('#view-settings [data-settings-section]'));
             if (!sections.length) return;
+            const candidates = collectSettingsSearchCandidates(sections);
+            const ranked = query ? rankSettingsSearchCandidates(query, candidates) : [];
+            const matchingItems = new Set(ranked.map(result => result.candidate.item));
+            const matchingGroups = new Set();
+            const categoryMatches = new Map();
+            ranked.forEach(({ candidate }) => {
+                categoryMatches.set(candidate.category, (categoryMatches.get(candidate.category) || 0) + 1);
+                for (let group = candidate.item.closest('.cc-group'); group; group = group.parentElement?.closest('.cc-group')) matchingGroups.add(group);
+            });
             let visibleCount = 0;
-            let matchingCategories = 0;
+            const matchingCategories = new Set();
+            candidates.forEach(candidate => {
+                const show = !query || matchingItems.has(candidate.item);
+                candidate.item.style.display = show ? '' : 'none';
+                candidate.item.classList.remove('is-search-target');
+                if (show && query) {
+                    visibleCount += 1;
+                    matchingCategories.add(candidate.category);
+                }
+            });
             sections.forEach(section => {
                 const category = String(section.getAttribute('data-settings-section') || '').toLowerCase();
                 const isActive = category === activeSettingsCategory;
                 const navButton = document.querySelector(`#view-settings [data-settings-nav="${category}"]`);
-                const candidates = Array.from(section.querySelectorAll('[data-setting-item], .atelier-setting-row, .settings-row, .settings-card'));
-                const categoryText = `${navButton ? navButton.textContent : ''} ${section.querySelector('.cc-section-title')?.textContent || ''} ${section.querySelector('.cc-section-copy')?.textContent || ''}`.toLowerCase();
-                const categoryMatches = !!query && categoryText.includes(query);
-                let sectionMatches = 0;
-                candidates.forEach(item => {
-                    const text = String(item.textContent || '').toLowerCase();
-                    const show = !query || categoryMatches || text.includes(query);
-                    item.style.display = show ? '' : 'none';
-                    if (show) sectionMatches += 1;
-                });
-                if (!candidates.length && (categoryMatches || String(section.textContent || '').toLowerCase().includes(query))) {
-                    sectionMatches = 1;
-                }
+                const sectionMatches = categoryMatches.get(category) || 0;
                 // With a query, Settings behaves like a global search: every
                 // category containing a match is shown, so results retain their
                 // labels and controls instead of forcing the student to search
@@ -33384,8 +32020,18 @@ function buildOnboardingPlanPreview() {
                     navButton.hidden = !!query && sectionMatches === 0;
                     navButton.setAttribute('aria-hidden', navButton.hidden ? 'true' : 'false');
                 }
-                if (sectionMatches && query) matchingCategories += 1;
-                if (query) visibleCount += sectionMatches;
+                section.querySelectorAll('.cc-group').forEach(group => {
+                    const hasMatch = matchingGroups.has(group);
+                    if (query && !hasMatch) {
+                        if (!group.hasAttribute('data-settings-search-display')) {
+                            group.setAttribute('data-settings-search-display', group.style.display);
+                        }
+                        group.style.display = 'none';
+                    } else if (group.hasAttribute('data-settings-search-display')) {
+                        group.style.display = group.getAttribute('data-settings-search-display');
+                        group.removeAttribute('data-settings-search-display');
+                    }
+                });
             });
 
             document.querySelectorAll('#view-settings .cc-sidebar-group').forEach(group => {
@@ -33404,6 +32050,7 @@ function buildOnboardingPlanPreview() {
             if (settingsMain) settingsMain.classList.toggle('is-searching', !!query);
             const emptyState = document.getElementById('settingsSearchEmpty');
             if (emptyState) emptyState.hidden = !query || visibleCount > 0;
+            renderSettingsSearchResults(query, ranked, visibleCount);
             const clearButton = document.getElementById('settingsSearchClearBtn');
             if (clearButton) clearButton.hidden = !query;
             const shortcut = document.getElementById('settingsSearchShortcut');
@@ -33413,9 +32060,10 @@ function buildOnboardingPlanPreview() {
             const searchHint = document.getElementById('settingsSearchHint');
             if (searchHint) {
                 searchHint.textContent = query
-                    ? `${visibleCount} match${visibleCount === 1 ? '' : 'es'} across ${matchingCategories} categor${matchingCategories === 1 ? 'y' : 'ies'}.`
+                    ? `${visibleCount} match${visibleCount === 1 ? '' : 'es'} across ${matchingCategories.size} categor${matchingCategories.size === 1 ? 'y' : 'ies'}.`
                     : 'Search by setting, feature, or task.';
             }
+            if (query) setSettingsMobileView('detail');
             updateSettingsContextualPreview(query);
         }
 
@@ -33458,66 +32106,98 @@ function buildOnboardingPlanPreview() {
         }
 
         function revertSettingsDraftChanges() {
-            if (!settingsDraftValues.size) return;
+            if (settingsSavePending || !settingsDraftValues.size) return;
             settingsDraftValues.clear();
             syncWorkspacePreferenceControls();
             filterSettingsControlsBySearch();
             showToast('Pending changes reverted');
         }
 
-        function applySettingsDraftChanges() {
-            if (!settingsDraftValues.size) return;
+        async function applySettingsDraftChanges() {
+            if (settingsSavePending || (!settingsDraftValues.size && !settingsSaveError)) return false;
             const entries = Array.from(settingsDraftValues.entries());
+            const saveReason = settingsSaveError ? 'retry' : 'settings-apply';
             let applySidebarDefault = false;
             let applyAssistantPanelDefault = false;
+            settingsSavePending = true;
+            settingsSaveError = '';
 
-            entries.forEach(([path, value]) => {
-                const shouldApplySidebarDefault = path === 'layout.sidebarDefault';
-                const shouldApplyAssistantPanelDefault = path === 'assistant.panelDefault';
-                if (shouldApplySidebarDefault) applySidebarDefault = true;
-                if (shouldApplyAssistantPanelDefault) applyAssistantPanelDefault = true;
-                setWorkspacePreference(path, value, {
-                    refresh: false,
-                    persist: false,
-                    applySidebarDefault: shouldApplySidebarDefault,
-                    applyAssistantPanelDefault: shouldApplyAssistantPanelDefault
-                });
-            });
-
-            applyWorkspacePreferences({
-                refresh: true,
-                applySidebarDefault,
-                applyAssistantPanelDefault
-            });
-
-            settingsDraftValues.clear();
-            settingsLastAppliedAt = Date.now();
-            updateSettingsLastAppliedLabel();
-            persistAppData();
-            syncWorkspacePreferenceControls();
-            filterSettingsControlsBySearch();
-            showToast(`Applied ${entries.length} ${entries.length === 1 ? 'change' : 'changes'}`);
-
-            // Brief visual confirmation on the redesigned status pill.
             try {
-                const ccPage = document.querySelector('#view-settings .cc-page');
-                if (ccPage && !ccPage.classList.contains('is-saved-flash')) {
-                    ccPage.classList.add('is-saved-flash');
-                    setTimeout(() => ccPage.classList.remove('is-saved-flash'), 1400);
-                }
-            } catch (e) { /* non-critical */ }
+                updateSettingsDraftUi();
+                entries.forEach(([path, value]) => {
+                    const shouldApplySidebarDefault = path === 'layout.sidebarDefault';
+                    const shouldApplyAssistantPanelDefault = path === 'assistant.panelDefault';
+                    if (shouldApplySidebarDefault) applySidebarDefault = true;
+                    if (shouldApplyAssistantPanelDefault) applyAssistantPanelDefault = true;
+                    setWorkspacePreference(path, value, {
+                        refresh: false,
+                        persist: false,
+                        applySidebarDefault: shouldApplySidebarDefault,
+                        applyAssistantPanelDefault: shouldApplyAssistantPanelDefault
+                    });
+                });
+
+                applyWorkspacePreferences({
+                    refresh: true,
+                    applySidebarDefault,
+                    applyAssistantPanelDefault
+                });
+
+                // Applied values remain active if storage fails. Only the
+                // verified commit below may acknowledge them as saved.
+                settingsDraftValues.clear();
+                persistAppData();
+                syncWorkspacePreferenceControls();
+                filterSettingsControlsBySearch();
+                await flushAppSaveNow(saveReason);
+                settingsLastAppliedAt = Date.now();
+                updateSettingsLastAppliedLabel();
+                showToast(entries.length
+                    ? `Saved ${entries.length} ${entries.length === 1 ? 'change' : 'changes'} locally`
+                    : 'Settings saved locally');
+
+                // New edits made during the save remain staged.
+                try {
+                    const ccPage = document.querySelector('#view-settings .cc-page');
+                    if (!settingsDraftValues.size && ccPage && !ccPage.classList.contains('is-saved-flash')) {
+                        ccPage.classList.add('is-saved-flash');
+                        setTimeout(() => ccPage.classList.remove('is-saved-flash'), 1400);
+                    }
+                } catch (e) { /* non-critical */ }
+                return true;
+            } catch (error) {
+                settingsSaveError = 'Changes remain active. Use Save Changes to retry the local save.';
+                try { reportError(error, { where: 'settings:save' }); } catch (reportingError) { /* retain the save failure */ }
+                showToast('Settings save failed. Your changes remain available in this session.');
+                return false;
+            } finally {
+                settingsSavePending = false;
+                updateSettingsDraftUi();
+            }
         }
 
         function bindWorkspacePreferenceControls() {
             if (settingsControlCenterBound) return;
             settingsControlCenterBound = true;
+            document.getElementById('assistantStudySetupBtn')?.addEventListener('click', async () => {
+                setWorkspacePreference('assistant.enabled', true);
+                await syncLazyFeaturePacks();
+                const controller = window.SutraAssistantConversationController;
+                if (!window.flowAssistant || !controller) { showToast('Assistant setup is unavailable. Reload and try again.'); return; }
+                controller.create({ title: 'Get to know me' }); setActiveView('assistantview'); controller.render('full');
+                const input = document.getElementById('asstInput');
+                input.value = 'Help me set up my study preferences'; input.dispatchEvent(new Event('input', { bubbles: true })); controller.send('full');
+            });
+
 
             document.querySelectorAll('#view-settings [data-pref-path]').forEach(control => {
                 const path = String(control.getAttribute('data-pref-path') || '').trim();
                 if (!path || control.dataset.bound === 'true') return;
                 control.dataset.bound = 'true';
                 const listener = () => {
-                    setDraftWorkspacePreference(path, readPreferenceControlValue(control));
+                    const value = readPreferenceControlValue(control);
+                    if (control.hasAttribute('data-pref-hour-time') && value === null) { syncWorkspacePreferenceControls(); return; }
+                    setDraftWorkspacePreference(path, value);
                     syncWorkspacePreferenceControls();
                     filterSettingsControlsBySearch();
                 };
@@ -33547,7 +32227,7 @@ function buildOnboardingPlanPreview() {
                 if (button.dataset.bound === 'true') return;
                 button.dataset.bound = 'true';
                 button.addEventListener('click', () => {
-                    setActiveSettingsCategory(button.getAttribute('data-settings-nav') || 'appearance', { clearSearch: true });
+                    setActiveSettingsCategory(button.getAttribute('data-settings-nav') || 'appearance', { clearSearch: true, openDetail: true });
                 });
             });
 
@@ -33555,7 +32235,7 @@ function buildOnboardingPlanPreview() {
             if (mobileSelect && mobileSelect.dataset.bound !== 'true') {
                 mobileSelect.dataset.bound = 'true';
                 mobileSelect.addEventListener('change', () => {
-                    setActiveSettingsCategory(mobileSelect.value || 'appearance', { clearSearch: true });
+                    setActiveSettingsCategory(mobileSelect.value || 'appearance', { clearSearch: true, openDetail: true });
                 });
             }
 
@@ -33564,10 +32244,19 @@ function buildOnboardingPlanPreview() {
                 searchInput.dataset.bound = 'true';
                 searchInput.addEventListener('input', filterSettingsControlsBySearch);
                 searchInput.addEventListener('keydown', event => {
+                    if (moveSettingsSearchResultFocus(event)) return;
                     if (event.key === 'Escape' && searchInput.value) {
                         event.preventDefault();
                         clearSettingsSearch({ focus: true });
                     }
+                });
+            }
+            const backToCategories = document.getElementById('settingsBackToCategories');
+            if (backToCategories && backToCategories.dataset.bound !== 'true') {
+                backToCategories.dataset.bound = 'true';
+                backToCategories.addEventListener('click', () => {
+                    clearSettingsSearch();
+                    setSettingsMobileView('categories', { focus: true });
                 });
             }
             const searchClearBtn = document.getElementById('settingsSearchClearBtn');
@@ -33822,6 +32511,8 @@ function buildOnboardingPlanPreview() {
             const expiredIds = new Set(expiredPages.map(page => String(page.id || '')));
             const currentWasRemoved = currentPageId && expiredIds.has(String(currentPageId));
             const secondaryWasRemoved = secondaryPageId && expiredIds.has(String(secondaryPageId));
+            if (expiredIds.has(String(splitPaneContexts?.leftContext?.selectedNoteId))
+                || expiredIds.has(String(appSettings?.notesSplitSecondaryPageId))) setSplitViewEnabled(false);
 
             pages = (Array.isArray(pages) ? pages : []).filter(page => !expiredIds.has(String(page && page.id || '')));
             tasks = (Array.isArray(tasks) ? tasks : []).map(task => {
@@ -34063,19 +32754,13 @@ function buildOnboardingPlanPreview() {
             const nextEnabled = !!enabled;
             const includeFullscreen = options && options.includeFullscreen === true;
             if (nextEnabled) {
-                splitViewEnabledBeforeFocusMode = !!appSettings.notesSplitViewEnabled;
-                if (splitViewEnabledBeforeFocusMode) {
-                    setSplitViewEnabled(false, { persist: false });
-                }
+                flushSecondaryPageBeforeContextChange();
                 const sidebar = document.getElementById('sidebar');
                 const sidebarOpen = !!(sidebar && !sidebar.classList.contains('collapsed'));
                 sidebarWasOpenBeforeFocusMode = sidebarOpen;
                 if (sidebarOpen) {
                     toggleSidebar();
                 }
-            } else if (splitViewEnabledBeforeFocusMode) {
-                setSplitViewEnabled(true, { persist: false });
-                splitViewEnabledBeforeFocusMode = false;
             }
 
             if (!nextEnabled) {
@@ -34089,6 +32774,7 @@ function buildOnboardingPlanPreview() {
             }
             appSettings.focusModeEnabled = nextEnabled;
             applyFocusModeState();
+            applySplitViewState();
             if (includeFullscreen) {
                 if (nextEnabled) {
                     focusModeFullscreenLinked = true;
@@ -34319,7 +33005,7 @@ function buildOnboardingPlanPreview() {
         function gotoTutorialSettingsSection(section) {
             safeRunTutorial(() => setActiveView('settings'));
             if (typeof setActiveSettingsCategory === 'function') {
-                safeRunTutorial(() => setActiveSettingsCategory(section));
+                safeRunTutorial(() => setActiveSettingsCategory(section, { openDetail: true }));
             }
         }
 
@@ -34375,7 +33061,7 @@ function buildOnboardingPlanPreview() {
             const allSteps = [
                 /* ---------- 1-2 Welcome ---------- */
                 { title: 'Welcome to your guided tour',
-                  body: 'This is a 66-step walkthrough of Sutra — a local-first workspace for notes, tasks, calendar, homework, exams, college, life, and projects. Use Next / Back to step through, Skip to leave. You can rerun this tour any time from Settings → Data & backups → Start guided tour. Your data stays on your device throughout.' },
+                  body: 'This guided walkthrough covers Sutra — a local-first workspace for notes, tasks, calendar, homework, exams, college, life, and projects. Use Next / Back to step through, Skip to leave. Reopen it from Settings → Advanced & packs → Advanced → Tutorial & onboarding. Choose Start guided tour or Redo Tutorial. Your data stays on your device throughout.' },
 
                 { selector: '.view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('today')),
@@ -34732,7 +33418,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#lifeDashboard',
                   before: () => tutorialRevealView('life'),
                   title: 'Life trackers',
-                  body: 'Goals (SMART), Habits, Skills, Fitness, Books, Spending, and Journal live here. Each is a focused mini-tracker that surfaces a tiny summary back on Home so nothing gets buried.' },
+                  body: 'Goals, habits, skills, books, spending, and a calculator live here. Focus sessions and ordinary notes stay in their own workspaces. Retired health and journal records are preserved in backups without active tracking controls.' },
 
                 /* ---------- 52 Business ---------- */
                 { selector: '#businessDashboardRoot',
@@ -34743,7 +33429,7 @@ function buildOnboardingPlanPreview() {
                 /* ---------- 53-54 Top dock ---------- */
                 { selector: '#quickAppLaunchers, #integrationsDock',
                   before: () => safeRunTutorial(() => setActiveView('today')),
-                  title: 'Integrations dock',
+                  title: 'Shortcuts dock',
                   body: 'Quick launchers for Spotify and ChatGPT. Add your own website or page shortcuts from the Create sidebar or Settings → Web shortcuts.' },
 
                 /* ---------- 54-62 Settings ---------- */
@@ -34778,17 +33464,17 @@ function buildOnboardingPlanPreview() {
                   body: 'Export tasks and time blocks as .ics for Google / Apple / Outlook, or import an .ics file into the Timeline.' },
 
                 { selector: '#startTutorialBtn',
-                  before: () => gotoTutorialSettingsSection('data'),
+                  before: () => gotoTutorialSettingsSection('advanced'),
                   title: 'Restart this tour anytime',
-                  body: 'Run this guided tour again from Settings → Data & backups → Start guided tour. The status text remembers whether you finished, skipped, or never started.' },
+                  body: 'Open Settings → Advanced & packs → Advanced → Tutorial & onboarding. Choose Start guided tour or Redo Tutorial. The status text remembers whether you finished, skipped, or never started.' },
 
                 { selector: '#rerunOnboardingBtn',
-                  before: () => gotoTutorialSettingsSection('data'),
+                  before: () => gotoTutorialSettingsSection('advanced'),
                   title: 'Rerun full onboarding',
                   body: 'Re-open the unified onboarding (Welcome, Focus, Setup, AI & Backups, Tour) whenever your use case changes. Your notes, tasks, homework, and other data are preserved — only setup preferences are revisited.' },
 
                 { selector: '#resetOnboardingBtn',
-                  before: () => gotoTutorialSettingsSection('data'),
+                  before: () => gotoTutorialSettingsSection('advanced'),
                   title: 'Reset onboarding (testing)',
                   body: 'Clears onboarding flags so the first-run experience opens again on next load. Strictly for development / demos — it does not delete any notes, tasks, homework, AP data, college data, themes, or settings.' },
 
@@ -34804,7 +33490,7 @@ function buildOnboardingPlanPreview() {
 
                 /* ---------- 66 Closing ---------- */
                 { title: 'You\'re ready to fly',
-                  body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Create has templates and split-screen, Tasks + Homework feed Home, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. This tour lives in Settings → Data & backups if you want to revisit it.' }
+                  body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Create has templates and split-screen, Tasks + Homework feed Home, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. Reopen this tour from Settings → Advanced & packs → Advanced → Tutorial & onboarding.' }
             ];
 
             // Essentials path: a ~5-step "just the things that matter" tour for the
@@ -34840,7 +33526,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#view-settings, .view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('settings')),
                   title: '5 · Yours, and portable',
-                  body: 'Everything stays on your device. From Settings → Data & backups you can export an encrypted .sutra file, rerun this tour, or take the full walkthrough. That\'s the essentials — you\'re ready.' }
+                  body: 'Everything stays on your device. Export an encrypted .sutra file from Settings → Data & Backup. Reopen this quick tour from the Command Palette, or find the full walkthrough in Settings → Advanced & packs → Advanced → Tutorial & onboarding. That\'s the essentials — you\'re ready.' }
             ];
 
             // Filter out steps whose targets don't currently exist (e.g. tabs
@@ -35665,7 +34351,7 @@ function buildOnboardingPlanPreview() {
             if (splitNotesToggleBtn && splitNotesToggleBtn.dataset.bound !== 'true') {
                 splitNotesToggleBtn.dataset.bound = 'true';
                 splitNotesToggleBtn.addEventListener('click', () => {
-                    const next = !(appSettings && appSettings.notesSplitViewEnabled);
+                    const next = !isNotesSplitViewVisible();
                     setSplitViewEnabled(next);
                 });
             }
@@ -35697,12 +34383,13 @@ function buildOnboardingPlanPreview() {
                     noteUndoManager.pushDebounced(secondaryEditor);
                 });
                 secondaryEditor.addEventListener('keydown', (ev) => {
-                    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'z' && !ev.shiftKey) {
+                    const historyKey = String(ev.key || '').toLowerCase();
+                    if ((ev.ctrlKey || ev.metaKey) && historyKey === 'z' && !ev.shiftKey) {
                         ev.preventDefault();
                         noteUndoManager.undo(secondaryEditor);
                         return;
                     }
-                    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'y' || (ev.key === 'z' && ev.shiftKey))) {
+                    if ((ev.ctrlKey || ev.metaKey) && (historyKey === 'y' || (historyKey === 'z' && ev.shiftKey))) {
                         ev.preventDefault();
                         noteUndoManager.redo(secondaryEditor);
                         return;
@@ -36526,11 +35213,15 @@ function buildOnboardingPlanPreview() {
             'Soft pastel study aesthetic'
         ]);
         const AI_THEME_MAX_PROMPT = 600;
+        const AI_THEME_CHAT_MAX_TURNS = 6;
+        const AI_THEME_CHAT_MAX_MESSAGE_CHARS = 1200;
         const AI_THEME_MIN_CONTRAST = 4.5;
         // Modal/working state for the in-progress generated theme (not yet applied).
         let aiThemeModalState = null; // { theme, previousTheme, lastPrompt, requestId }
         // Live-preview state — survives the modal closing so the floating banner works.
         let aiThemePreviewState = null; // { savedBodyTheme, savedBodyThemeKey, theme }
+        // Ephemeral link to the Assistant conversation that created the current preview.
+        let aiThemeChatConversationId = null;
         let aiThemeUiBound = false;
 
         function aiThemeProviderStatus() {
@@ -36683,6 +35374,171 @@ function buildOnboardingPlanPreview() {
             return lines.join('\n');
         }
 
+        // Models sometimes wrap an otherwise valid theme in a small JSON
+        // envelope (for example {"theme": {...}}). Unwrap only known object
+        // containers; the result still goes through the same allowlisted color
+        // sanitizer and contrast repair below.
+        function normalizeAiThemeEnvelope(value) {
+            let candidate = value;
+            const wrappers = ['theme', 'palette', 'customTheme', 'result', 'data'];
+            const colorFields = [
+                ...AI_THEME_TOKEN_KEYS,
+                'background', 'backgroundPrimary', 'bg', 'surface', 'backgroundSecondary',
+                'surfaceSecondary', 'panel', 'bg2', 'text', 'foreground', 'ink', 'fg',
+                'accentColor', 'primary', 'brand', 'highlight', 'sidebarBg', 'nav',
+                'navigation', 'buttonBg', 'buttons', 'action'
+            ];
+            const hasThemeColors = (payload) => {
+                if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+                const colors = payload.colors;
+                const source = colors && typeof colors === 'object' && !Array.isArray(colors) ? colors : payload;
+                return colorFields.some((key) => {
+                    if (!Object.prototype.hasOwnProperty.call(source, key) || source[key] == null) return false;
+                    const raw = String(source[key]).trim();
+                    return /^#[0-9a-fA-F]{6}$/.test(raw)
+                        || /^#[0-9a-fA-F]{3}$/.test(raw)
+                        || /^rgba?\(\s*\d+[\s,]+\d+[\s,]+\d+/i.test(raw);
+                });
+            };
+            const findThemePayload = (candidate, depth) => {
+                if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+                if (hasThemeColors(candidate)) return candidate;
+                if (depth >= 3) return null;
+                for (const key of wrappers) {
+                    const found = findThemePayload(candidate[key], depth + 1);
+                    if (found) return found;
+                }
+                return null;
+            };
+            return findThemePayload(value, 0);
+        }
+
+        function isAiThemeCreationRequest(value) {
+            const text = String(value || '').trim();
+            if (!text || /^\/theme\s+off\b/i.test(text)) return false;
+            const refersToSutra = /\bsutra\b/i.test(text);
+            if (!refersToSutra && /\b(?:slides?|deck|presentation|document)\b/i.test(text)) return false;
+            const appOrWorkspace = /\b(?:sutra|app|application|workspace)\b/i.test(text);
+            const paletteRequest = /\b(?:color|colour)\s+palette\b/i.test(text);
+            if (!appOrWorkspace && !paletteRequest) return false;
+            return /\b(?:create|generate|make|design|build|invent|craft|suggest|give(?:\s+me)?|come\s+up\s+with)\b[\s\S]{0,120}\b(?:theme|palette|color\s+scheme|colour\s+scheme)\b/i.test(text)
+                || /\b(?:i\s+(?:want|need)|i(?:'d|\s+would)\s+like|help\s+me|can\s+you|could\s+you)\b[\s\S]{0,100}\b(?:theme|palette|color\s+scheme|colour\s+scheme)\b/i.test(text);
+        }
+
+        function isAiThemeChatHistory(history) {
+            let enabled = false;
+            (Array.isArray(history) ? history : []).forEach((message) => {
+                if (!message || message.role !== 'user') return;
+                const content = String(message.content || '').trim();
+                if (/^\/theme\s+off(?:\s|$)/i.test(content)) enabled = false;
+                else if (/^\/theme(?:\s|$)/i.test(content) || isAiThemeCreationRequest(content)) enabled = true;
+            });
+            return enabled;
+        }
+
+        // Dedicated theme chats use the shared Assistant provider/model/effort and
+        // disclosure path, but send only the theme request and its bounded theme
+        // conversation. General workspace enrichment and attachments stay out.
+        function buildAiThemeChatRequest(text, history) {
+            const currentText = String(text || '').trim();
+            if (/^\/theme\s+off(?:\s|$)/i.test(currentText)) return { active: false, disabled: true };
+            const prior = Array.isArray(history) ? history : [];
+            let lastThemeOff = -1;
+            prior.forEach((message, index) => {
+                if (message && message.role === 'user' && /^\/theme\s+off(?:\s|$)/i.test(String(message.content || '').trim())) {
+                    lastThemeOff = index;
+                }
+            });
+            const firstThemeTurn = prior.findIndex((message, index) => index > lastThemeOff && message && message.role === 'user'
+                && (/^\/theme(?:\s|$)/i.test(String(message.content || '').trim())
+                    || isAiThemeCreationRequest(message.content)));
+            const isExplicitThemeTurn = /^\/theme(?:\s|$)/i.test(currentText);
+            const isNaturalThemeTurn = isAiThemeCreationRequest(currentText);
+            if (!isExplicitThemeTurn && firstThemeTurn < 0 && !isNaturalThemeTurn) return null;
+
+            let userText = currentText.replace(/^\/theme\s*/i, '').trim();
+            if (userText.length > AI_THEME_MAX_PROMPT) userText = userText.slice(0, AI_THEME_MAX_PROMPT);
+            if (!userText) {
+                return {
+                    active: true,
+                    systemPrompt: buildAiThemeSystemPrompt(),
+                    messages: [],
+                    errorMessage: 'Add a short description after /theme before sending.'
+                };
+            }
+
+            // A natural-language theme request can start in an existing Assistant
+            // chat; only include turns from that theme request onward. A new /theme
+            // session starts with the current message and does not inherit unrelated
+            // earlier chat context.
+            const themeHistory = firstThemeTurn >= 0 ? prior.slice(firstThemeTurn) : [];
+            const normalizeUserText = (value) => String(value || '').trim().replace(/^\/theme\s*/i, '').trim().slice(0, AI_THEME_MAX_PROMPT);
+            let historyMessages = themeHistory
+                .filter((message) => message && (message.role === 'user' || message.role === 'assistant'))
+                .slice(-(AI_THEME_CHAT_MAX_TURNS * 2))
+                .map((message) => {
+                    let content = String(message.content || '').trim();
+                    if (message.role === 'user') content = normalizeUserText(content);
+                    if (content.length > AI_THEME_CHAT_MAX_MESSAGE_CHARS) content = content.slice(0, AI_THEME_CHAT_MAX_MESSAGE_CHARS);
+                    return { role: message.role, content };
+                })
+                .filter((message) => message.content);
+            // Regenerate reuses an already-persisted user turn without duplicating it.
+            if (historyMessages.length && historyMessages[historyMessages.length - 1].role === 'user'
+                && normalizeUserText(historyMessages[historyMessages.length - 1].content) === userText) {
+                historyMessages.pop();
+            }
+            // Provider chat APIs expect user-led alternating turns. The current
+            // request is the sixth user turn at most, so keep only five prior pairs.
+            historyMessages = historyMessages.slice(-(AI_THEME_CHAT_MAX_TURNS * 2 - 2));
+            if (historyMessages[0] && historyMessages[0].role === 'assistant') historyMessages.shift();
+            const sequencedHistory = [];
+            historyMessages.forEach((message) => {
+                const previous = sequencedHistory[sequencedHistory.length - 1];
+                if (previous && previous.role === message.role) {
+                    previous.content = `${previous.content}\n\n${message.content}`.slice(-AI_THEME_CHAT_MAX_MESSAGE_CHARS);
+                } else {
+                    sequencedHistory.push({ ...message });
+                }
+            });
+            historyMessages = sequencedHistory;
+            const lastHistoryMessage = historyMessages[historyMessages.length - 1];
+            if (lastHistoryMessage && lastHistoryMessage.role === 'user') {
+                lastHistoryMessage.content = `${lastHistoryMessage.content}\n\n${userText}`.slice(-AI_THEME_CHAT_MAX_MESSAGE_CHARS);
+            } else {
+                historyMessages.push({ role: 'user', content: userText });
+            }
+            return { active: true, systemPrompt: buildAiThemeSystemPrompt(), messages: historyMessages, responseMimeType: 'application/json' };
+        }
+
+        function hasCompleteAiThemeChatPalette(text) {
+            const parsed = parseStructuredIntelligenceJson(text);
+            if (!parsed.ok) return false;
+            const payload = normalizeAiThemeEnvelope(parsed.value);
+            const colors = payload && payload.colors && typeof payload.colors === 'object' ? payload.colors : payload;
+            if (!colors) return false;
+            return AI_THEME_TOKEN_KEYS.every((key) => {
+                const raw = String(colors[key] || '').trim();
+                return /^#[0-9a-fA-F]{6}$/.test(raw) || /^#[0-9a-fA-F]{3}$/.test(raw);
+            });
+        }
+
+        function parseAiThemeChatResponse(text) {
+            const parsed = parseStructuredIntelligenceJson(text);
+            if (!parsed.ok) {
+                return { ok: false, errorCategory: 'validation', errorMessage: 'The reply did not contain a usable theme palette. Nothing changed. Ask Assistant to return the theme format, or revise your description.' };
+            }
+            const payload = normalizeAiThemeEnvelope(parsed.value);
+            if (!payload) {
+                return { ok: false, errorCategory: 'validation', errorMessage: 'The reply did not contain a usable theme palette. Nothing changed. Ask Assistant to return the theme format, or revise your description.' };
+            }
+            const validated = validateAiThemePayload(payload, { fallbackName: 'Generated Theme' });
+            if (!validated.ok) {
+                return { ok: false, errorCategory: 'validation', errorMessage: 'The generated palette could not be validated. Nothing changed.' };
+            }
+            return { ok: true, theme: validated.theme };
+        }
+
         // The single AI request path for both first-pass generation and refinement.
         // Only the theme description, the token schema, and (when refining) the current
         // generated theme are ever sent — never any other workspace content.
@@ -36741,10 +35597,18 @@ function buildOnboardingPlanPreview() {
                 return {
                     ok: false,
                     errorCategory: 'validation',
-                    errorMessage: 'The model returned output that was not a valid theme. Nothing was changed — try again or switch models.'
+                    errorMessage: 'The model reply did not contain a usable theme palette. Nothing changed. Try a shorter description, or change the selected model in Assistant before generating again.'
                 };
             }
-            const validated = validateAiThemePayload(parsed.value, {
+            const themePayload = normalizeAiThemeEnvelope(parsed.value);
+            if (!themePayload) {
+                return {
+                    ok: false,
+                    errorCategory: 'validation',
+                    errorMessage: 'The model reply did not contain a usable theme palette. Nothing changed. Try a shorter description, or change the selected model in Assistant before generating again.'
+                };
+            }
+            const validated = validateAiThemePayload(themePayload, {
                 baseColors: currentTheme && currentTheme.colors,
                 currentTheme,
                 fallbackName: currentTheme && currentTheme.name ? currentTheme.name : 'Generated Theme'
@@ -36929,6 +35793,99 @@ function buildOnboardingPlanPreview() {
             return row;
         }
 
+        // Build a review card inside the caller's dedicated answer container. Invalid
+        // replies leave that container untouched so the Assistant can show its normal
+        // response plus an actionable validation notice.
+        function renderAiThemeChatResponse(text, host, conversationId, history) {
+            if (!host || typeof host.replaceChildren !== 'function') {
+                return { ok: false, errorCategory: 'render', errorMessage: 'The theme preview could not be displayed.' };
+            }
+            if (conversationId && currentChatId && String(currentChatId) !== String(conversationId)) {
+                return { ok: false, stale: true, errorCategory: 'stale-conversation' };
+            }
+            if (!isAiThemeChatHistory(Array.isArray(history) ? history : convo)) return { ok: false, ordinary: true };
+            if (!hasCompleteAiThemeChatPalette(text)) return { ok: false, ordinary: true };
+            const parsed = parseAiThemeChatResponse(text);
+            if (!parsed.ok) return parsed;
+            if (conversationId) aiThemeChatConversationId = String(conversationId);
+            const theme = parsed.theme;
+            const card = document.createElement('section');
+            card.className = 'ai-theme-chat-card';
+            card.setAttribute('aria-label', `Theme preview: ${theme.name}`);
+
+            const title = document.createElement('h4');
+            title.className = 'ai-theme-chat-title';
+            title.textContent = theme.name || 'Generated theme';
+            card.appendChild(title);
+            if (theme.description) {
+                const description = document.createElement('p');
+                description.className = 'ai-theme-chat-description';
+                description.textContent = theme.description;
+                card.appendChild(description);
+            }
+
+            const swatches = buildAiThemeSwatchRow(theme);
+            swatches.classList.add('ai-theme-chat-swatches');
+            const labels = ['Background', 'Panel', 'Sidebar', 'Accent', 'Button', 'Text'];
+            const values = [theme.colors.bgPrimary, theme.colors.bgSecondary, theme.colors.sidebar, theme.colors.accent, theme.colors.button, theme.colors.textPrimary];
+            swatches.querySelectorAll('.ai-theme-swatch').forEach((swatch, index) => {
+                swatch.setAttribute('role', 'img');
+                swatch.setAttribute('aria-label', `${labels[index]} ${values[index]}`);
+            });
+            card.appendChild(swatches);
+
+            const guidance = document.createElement('p');
+            guidance.className = 'ai-theme-chat-guidance';
+            guidance.textContent = isAiThemeChatHistory(convo)
+                ? 'Theme mode is on. Describe refinements here, or type /theme off to return to regular Assistant. Review the colors before you preview or apply.'
+                : 'Theme mode is off. Send /theme followed by a description to start again. You can still preview or apply this earlier palette.';
+            card.appendChild(guidance);
+
+            const status = document.createElement('div');
+            status.className = 'ai-theme-chat-status';
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
+            const actions = document.createElement('div');
+            actions.className = 'ai-theme-chat-actions';
+            const previewBtn = document.createElement('button');
+            previewBtn.type = 'button';
+            previewBtn.className = 'btn btn-secondary';
+            previewBtn.textContent = 'Preview';
+            const applyBtn = document.createElement('button');
+            applyBtn.type = 'button';
+            applyBtn.className = 'btn btn-primary';
+            applyBtn.textContent = 'Apply theme';
+            const revertBtn = document.createElement('button');
+            revertBtn.type = 'button';
+            revertBtn.className = 'btn btn-secondary';
+            revertBtn.textContent = 'Revert preview';
+            revertBtn.disabled = true;
+            previewBtn.addEventListener('click', () => {
+                if (startAiThemePreview(theme)) {
+                    status.textContent = `${theme.name} is previewing. Your saved theme has not changed.`;
+                    revertBtn.disabled = false;
+                }
+            });
+            applyBtn.addEventListener('click', () => {
+                const created = applyGeneratedAiTheme(theme);
+                if (created) {
+                    status.textContent = `${theme.name} was applied and saved as a custom theme.`;
+                    applyBtn.disabled = true;
+                    applyBtn.textContent = 'Applied';
+                    revertBtn.disabled = true;
+                }
+            });
+            revertBtn.addEventListener('click', () => {
+                revertAiThemePreview();
+                status.textContent = 'The saved theme has been restored.';
+                revertBtn.disabled = true;
+            });
+            actions.append(previewBtn, applyBtn, revertBtn);
+            card.append(status, actions);
+            host.replaceChildren(card);
+            return { ok: true, theme, element: card };
+        }
+
         function renderAiThemeResult(theme, previousTheme) {
             const els = getAiThemeEls();
             if (!els.result) return;
@@ -37051,6 +36008,63 @@ function buildOnboardingPlanPreview() {
             }
         }
 
+        function openAssistantThemePrompt(options = {}) {
+            const opts = options && typeof options === 'object' ? options : {};
+            if (asstInFlight) {
+                showToast('Stop the current Assistant response before starting a theme chat.');
+                return false;
+            }
+            if (!isViewEnabled('assistantview')) {
+                try { setFeatureViewEnabled('assistantview', true, { markSetupComplete: false, syncActiveView: false }); } catch (e) { /* surface below */ }
+            }
+            if (!isViewEnabled('assistantview')) {
+                showToast('Turn on Sutra Assistant in Settings to create a theme.');
+                return false;
+            }
+            const controller = window.SutraAssistantConversationController;
+            if (!controller || typeof controller.create !== 'function' || typeof controller.select !== 'function') {
+                showToast('Sutra Assistant is not ready. Reload the app and try again.');
+                return false;
+            }
+
+            let conversation = null;
+            let reusedThemeChat = false;
+            if (opts.reuseThemeChat === true && aiThemeChatConversationId) {
+                if (controller.select(aiThemeChatConversationId)) {
+                    conversation = typeof controller.getCurrent === 'function' ? controller.getCurrent() : { id: aiThemeChatConversationId };
+                    reusedThemeChat = true;
+                }
+            }
+            if (!conversation) {
+                const seed = opts.theme ? { title: 'Refine a theme' } : { title: 'Create a theme' };
+                conversation = controller.create(seed);
+            }
+            if (!conversation || !conversation.id) {
+                showToast('Could not open a theme conversation. Try again.');
+                return false;
+            }
+            aiThemeChatConversationId = conversation.id;
+            closeAiThemeModal();
+            const themePanel = document.getElementById('themePanel');
+            if (themePanel && themePanel.classList.contains('active')) toggleThemePanel();
+            try { setActiveView('assistantview'); } catch (e) { /* controller render below may still be available */ }
+            try { if (typeof controller.render === 'function') controller.render('full'); } catch (e) { /* non-critical */ }
+
+            const initialPrompt = reusedThemeChat
+                ? 'Refine the current theme: '
+                : (opts.theme
+                    ? '/theme Refine this current palette: ' + JSON.stringify({ name: opts.theme.name, colors: opts.theme.colors }) + '\nRequested adjustment: '
+                    : '/theme ');
+            const input = document.getElementById('asstInput');
+            if (input && input.isConnected && currentChatId === conversation.id && activeView === 'assistantview') {
+                input.value = initialPrompt;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.focus();
+                try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) { /* textarea may not allow selection */ }
+            }
+            return true;
+        }
+
         function cancelAiThemeRequest() {
             if (aiThemeModalState && aiThemeModalState.requestId) {
                 try { cancelIntelligenceRequest(aiThemeModalState.requestId); } catch (e) { /* non-critical */ }
@@ -37125,7 +36139,7 @@ function buildOnboardingPlanPreview() {
             });
             if (bannerRefine) bannerRefine.addEventListener('click', () => {
                 const theme = aiThemePreviewState && aiThemePreviewState.theme;
-                openAiThemeModal(theme ? { theme } : {});
+                openAssistantThemePrompt({ reuseThemeChat: true, theme });
             });
             if (bannerRevert) bannerRevert.addEventListener('click', () => { revertAiThemePreview(); });
         }
@@ -37190,11 +36204,11 @@ function buildOnboardingPlanPreview() {
             const card = document.getElementById('aiThemeGenerateCard');
             if (!card || card.dataset.bound === 'true') return;
             card.dataset.bound = 'true';
-            card.addEventListener('click', () => openAiThemeModal());
+            card.addEventListener('click', () => openAssistantThemePrompt());
             card.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    openAiThemeModal();
+                    openAssistantThemePrompt();
                 }
             });
         }
@@ -37617,7 +36631,10 @@ function buildOnboardingPlanPreview() {
                 renderPreview();
                 modal.classList.add('active');
                 document.body.classList.add('modal-open');
+                const initialValue = inputEl.value;
                 requestAnimationFrame(() => {
+                    if (activeHtmlEmbedDialogResolver !== closeDialog || !modal.classList.contains('active')
+                        || modal.contains(document.activeElement) || inputEl.value !== initialValue) return;
                     inputEl.focus();
                     inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
                 });
@@ -38570,20 +37587,34 @@ function buildOnboardingPlanPreview() {
 
         // ===== PAGES MODE =====
         function togglePagesMode() {
-            const isPagesMode = document.body.classList.toggle('notes-pages-mode');
-            const btn = document.getElementById('pagesToggleBtn');
-            if (btn) btn.title = isPagesMode ? 'Switch to Pageless' : 'Switch to Pages';
+            const isPagesMode = !document.body.classList.contains('notes-pages-mode');
             if (appSettings) {
                 appSettings.notesPagesMode = isPagesMode;
+                appSettings.notes = appSettings.notes || {};
+                appSettings.notes.pageModeEnabled = isPagesMode;
                 persistAppData();
             }
+            loadPagesMode();
         }
 
         function loadPagesMode() {
-            const isPagesMode = appSettings && appSettings.notesPagesMode === true;
+            const notes = (appSettings && appSettings.notes) || {};
+            const isPagesMode = typeof notes.pageModeEnabled === 'boolean'
+                ? notes.pageModeEnabled : !!(appSettings && appSettings.notesPagesMode === true);
             document.body.classList.toggle('notes-pages-mode', isPagesMode);
             const btn = document.getElementById('pagesToggleBtn');
-            if (btn) btn.title = isPagesMode ? 'Switch to Pageless' : 'Switch to Pages';
+            if (btn) {
+                btn.title = isPagesMode ? 'Switch to Pageless' : 'Switch to Pages';
+                btn.setAttribute('aria-pressed', String(isPagesMode));
+            }
+            const pane = document.querySelector('#view-notes .notes-pane-primary');
+            if (pane) {
+                pane.style.setProperty('--notes-page-height', notes.defaultPageSize === 'a4' ? '1123px' : '1056px');
+                pane.style.setProperty('--notes-page-width', notes.defaultPageSize === 'a4' ? '794px' : '816px');
+                const margins = Number(notes.defaultMargins);
+                if (Number.isFinite(margins) && margins > 0) pane.style.setProperty('--notes-custom-page-pad', Math.round(margins * 3.78) + 'px');
+                else pane.style.removeProperty('--notes-custom-page-pad');
+            }
             // Sync with Settings checkbox
             const settingsCheckbox = document.getElementById('settingsPageModeEnabled');
             if (settingsCheckbox) settingsCheckbox.checked = isPagesMode;
@@ -38686,38 +37717,18 @@ function buildOnboardingPlanPreview() {
 
         // ===== INSERT MORE DROPDOWN (Section 4 cleanup) =====
         function toggleInsertMoreMenu(event) {
-            const menu = document.getElementById('insertMoreMenu');
-            if (!menu) return;
-            const isOpen = menu.style.display === 'block';
-            if (isOpen) { menu.style.display = 'none'; return; }
-            // Position the menu below the button
-            const btn = document.getElementById('insertMoreBtn');
-            if (btn) {
-                const rect = btn.getBoundingClientRect();
-                menu.style.top = (rect.bottom + 6) + 'px';
-                // Align to right edge if would overflow
-                const menuWidth = 220;
-                const leftPos = rect.left;
-                const rightPos = rect.right - menuWidth;
-                if (leftPos + menuWidth > window.innerWidth - 12) {
-                    menu.style.left = Math.max(12, rightPos) + 'px';
-                } else {
-                    menu.style.left = leftPos + 'px';
-                }
-            }
-            menu.style.display = 'block';
-            // Update suggesting mode label
-            const label = document.getElementById('suggestingModeLabel');
-            if (label) {
-                const isOn = document.body.classList.contains('suggesting-mode');
-                label.textContent = isOn ? 'Turn off suggesting' : 'Turn on suggesting';
-            }
+            document.querySelector('.notes-toolbar-overflow-toggle')?.click();
             if (event) event.stopPropagation();
         }
 
         function closeInsertMoreMenu() {
             const menu = document.getElementById('insertMoreMenu');
             if (menu) menu.style.display = 'none';
+            const details = document.querySelector('.notes-toolbar-overflow');
+            if (details) details.open = false;
+            const tools = document.getElementById('notesToolsMenu');
+            if (tools) tools.hidden = true;
+            document.querySelector('.notes-toolbar-overflow-toggle')?.setAttribute('aria-expanded', 'false');
         }
 
         // ===== SUGGESTING MODE (Section 12) =====
@@ -38817,22 +37828,10 @@ function buildOnboardingPlanPreview() {
                 appSettings.notes.pageModeEnabled = enabled;
                 persistAppData();
             }
-            // Apply the setting immediately
-            document.body.classList.toggle('notes-pages-mode', enabled);
+            // The outer page card owns size and padding for both editor engines.
+            loadPagesMode();
             const editor = document.getElementById('editor');
             if (editor) {
-                if (enabled) {
-                    editor.classList.add('page-mode-active');
-                    const size = (appSettings && appSettings.notes && appSettings.notes.defaultPageSize) || 'letter';
-                    editor.style.maxWidth = size === 'a4' ? '794px' : '816px';
-                    editor.style.margin = '40px auto';
-                    editor.style.padding = '96px';
-                    editor.style.background = 'var(--editor-bg, var(--surface-bg))';
-                    editor.style.color = 'var(--text-primary)';
-                    editor.style.boxShadow = '0 4px 20px var(--shadow-soft, rgba(0, 0, 0, 0.12)), 0 1px 3px var(--shadow-hairline, rgba(0, 0, 0, 0.06))';
-                    editor.style.borderRadius = '4px';
-                    editor.style.minHeight = size === 'a4' ? '1123px' : '1056px';
-                } else {
                     editor.classList.remove('page-mode-active');
                     editor.style.maxWidth = '';
                     editor.style.margin = '';
@@ -38842,7 +37841,6 @@ function buildOnboardingPlanPreview() {
                     editor.style.boxShadow = '';
                     editor.style.borderRadius = '';
                     editor.style.minHeight = '';
-                }
             }
             if (typeof showToast === 'function') showToast(enabled ? 'Page mode ON' : 'Page mode OFF');
         }
@@ -38856,9 +37854,7 @@ function buildOnboardingPlanPreview() {
                 appSettings.notes.defaultPageSize = size;
                 persistAppData();
             }
-            // Re-apply page mode if it's enabled
-            const enabledEl = document.getElementById('settingsPageModeEnabled');
-            if (enabledEl && enabledEl.checked) applyPageModeFromSettings();
+            loadPagesMode();
         }
 
         function applyPageMarginsFromSettings() {
@@ -38870,16 +37866,7 @@ function buildOnboardingPlanPreview() {
                 appSettings.notes.defaultMargins = margins;
                 persistAppData();
             }
-            // Re-apply page mode if it's enabled
-            const enabledEl = document.getElementById('settingsPageModeEnabled');
-            if (enabledEl && enabledEl.checked) {
-                const editor = document.getElementById('editor');
-                if (editor) {
-                    // 1mm ≈ 3.78px
-                    const px = Math.round(margins * 3.78);
-                    editor.style.padding = px + 'px';
-                }
-            }
+            loadPagesMode();
         }
 
         function loadFontSettingsIntoSettings() {
@@ -38887,7 +37874,8 @@ function buildOnboardingPlanPreview() {
             const fontSize = (appSettings && appSettings.notes && appSettings.notes.fontSize) || '16';
             const lineHeight = (appSettings && appSettings.notes && appSettings.notes.lineHeight) || '1.6';
             const editorZoom = (appSettings && appSettings.notes && appSettings.notes.editorZoom) || '100';
-            const pageModeEnabled = (appSettings && appSettings.notes && appSettings.notes.pageModeEnabled) || false;
+            const pageModeEnabled = appSettings && appSettings.notes && typeof appSettings.notes.pageModeEnabled === 'boolean'
+                ? appSettings.notes.pageModeEnabled : !!(appSettings && appSettings.notesPagesMode);
             const pageSize = (appSettings && appSettings.notes && appSettings.notes.defaultPageSize) || 'letter';
 
             const fontFamilyEl = document.getElementById('settingsFontFamily');
@@ -38903,6 +37891,8 @@ function buildOnboardingPlanPreview() {
             if (zoomEl) zoomEl.value = editorZoom;
             if (pageModeEl) pageModeEl.checked = pageModeEnabled;
             if (pageSizeEl) pageSizeEl.value = pageSize;
+            const pageMarginsEl = document.getElementById('settingsPageMargins');
+            if (pageMarginsEl) pageMarginsEl.value = String((appSettings && appSettings.notes && appSettings.notes.defaultMargins) || 25.4);
 
             // Load user mode and Atelier theme into settings (Sections 22, 23)
             const userModeEl = document.getElementById('settingsUserMode');
@@ -39582,6 +38572,109 @@ function buildOnboardingPlanPreview() {
                 if (editorEl) editorEl.innerHTML = '';
             }
             try { if (typeof filterPages === 'function') filterPages(); } catch(e) {}
+        }
+
+        // Move existing records in place: type-specific models and asset IDs stay
+        // owned by their original pages. Titles encode the sidebar hierarchy.
+        function planPageSpaceMove(pageId, spaceId) {
+            const page = pages.find(item => item && item.id === pageId);
+            const target = spaces.find(space => space && space.id === spaceId);
+            if (!page || !target || isHelpDocsPage(page)) return { error: 'This page cannot be moved.' };
+            const sourceId = page.spaceId || 'default';
+            if (sourceId === target.id) return { error: 'Choose a different space.' };
+            const prefix = page.title + '::';
+            const members = pages.filter(item => item && (item.spaceId || 'default') === sourceId
+                && (item.id === page.id || item.title.startsWith(prefix)));
+            if (members.some(isHelpDocsPage)) return { error: 'Help & Docs must stay in its own space.' };
+            const rootTitle = page.title.split('::').pop();
+            const moves = members.map(item => ({ page: item, title: rootTitle + item.title.slice(page.title.length) }));
+            const occupied = new Set(pages.filter(item => item && (item.spaceId || 'default') === target.id).map(item => item.title));
+            const titles = new Set();
+            for (const item of moves) {
+                if (occupied.has(item.title) || titles.has(item.title)) {
+                    return { error: 'The destination already has a page with this name. Rename the page or choose another space.' };
+                }
+                titles.add(item.title);
+            }
+            const ids = new Set(members.map(item => item.id));
+            const pair = getNotesSplitPair();
+            const unpairs = !!(pair && ids.has(pair.left) !== ids.has(pair.right));
+            return { page, target, sourceId, moves, ids, unpairs };
+        }
+
+        function movePageToSpace(pageId, spaceId) {
+            if (!workspaceHydrationComplete || workspaceImportInProgress || persistenceWritesBlocked
+                || sutraRemoteCommitPending || sutraRevocationLockActive
+                || document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') {
+                showToast('Wait until workspace saving is available before moving pages.');
+                return null;
+            }
+            // Flush while both editors still belong to the source space.
+            flushVisibleNotesEditorsBeforeLeaving();
+            const plan = planPageSpaceMove(pageId, spaceId);
+            if (plan.error) { showToast(plan.error); return null; }
+            if (plan.unpairs) setSplitViewEnabled(false);
+            const pinned = getPinnedPagesState().notesBySpace;
+            const movingPins = (pinned[plan.sourceId] || []).filter(id => plan.ids.has(id));
+            const now = new Date().toISOString();
+            plan.moves.forEach(item => {
+                item.page.spaceId = plan.target.id;
+                item.page.title = item.title;
+                item.page.updatedAt = now;
+            });
+            if (movingPins.length) {
+                pinned[plan.sourceId] = pinned[plan.sourceId].filter(id => !plan.ids.has(id));
+                pinned[plan.target.id] = Array.from(new Set([...(pinned[plan.target.id] || []), ...movingPins]));
+            }
+            cleanupPinnedNotePageRefs();
+            persistAppData();
+            switchSpace(plan.target.id);
+            loadPage(plan.page.id);
+            showToast(`Moved ${plan.moves.length === 1 ? 'page' : `${plan.moves.length} pages`} to ${plan.target.name}.`);
+            return plan.page;
+        }
+
+        function openMovePageToSpace(pageId) {
+            const page = pages.find(item => item && item.id === pageId);
+            if (!page || isHelpDocsPage(page)) return;
+            const destinations = spaces.filter(space => space && space.id !== (page.spaceId || 'default'));
+            if (!destinations.length) { showToast('Create another space from the Spaces menu first.'); return; }
+            const body = document.createElement('div');
+            body.className = 'page-space-move-form';
+            const label = document.createElement('label');
+            label.textContent = 'Destination space';
+            const select = document.createElement('select');
+            select.id = 'movePageSpaceSelect';
+            label.htmlFor = select.id;
+            destinations.forEach(space => {
+                const option = document.createElement('option');
+                option.value = space.id;
+                option.textContent = `${space.icon || ''} ${space.name}`.trim();
+                select.appendChild(option);
+            });
+            const description = document.createElement('p');
+            const status = document.createElement('p');
+            status.setAttribute('role', 'status');
+            body.append(label, select, description, status);
+            function refreshPreview() {
+                const plan = planPageSpaceMove(pageId, select.value);
+                description.textContent = plan.error ? 'Choose a destination for this page and its children.' : `Move “${page.title.split('::').pop()}”${plan.moves.length > 1 ? ` and its ${plan.moves.length - 1} child ${plan.moves.length === 2 ? 'page' : 'pages'}` : ''} to the top level of this space. Content, attachments, links, and PIN protection stay with each page.${plan.unpairs ? ' This moves one member out of its split pair and unpairs the notes.' : ''}`;
+                status.textContent = plan.error || '';
+            }
+            select.addEventListener('change', refreshPreview);
+            refreshPreview();
+            const modal = openSutraModal({
+                titleText: 'Move to space', bodyNode: body,
+                buttons: [
+                    { label: 'Cancel', value: false },
+                    { label: 'Move', primary: true, keepOpen: true, onClick: () => {
+                        const plan = planPageSpaceMove(pageId, select.value);
+                        if (plan.error) { status.textContent = plan.error; return; }
+                        if (movePageToSpace(pageId, select.value)) modal.close(true);
+                    } }
+                ]
+            });
+            select.focus();
         }
 
         function renderSpacesCurrentDisplay() {
@@ -40916,15 +40009,61 @@ function buildOnboardingPlanPreview() {
         // consistent across reloads and never produces reload-induced duplicates.
 
         // ===== SMART PASTE + CLIPBOARD IMAGES (Section 20) =====
+        let plainTextPasteRequest = null;
+        ['sutra:note-page-loaded', 'sutra:note-page-locked', 'sutra:workspace-lock-changed',
+            'sutra:workspace-remote-commit', 'noteflow:view-changed', 'pagehide'].forEach(name => {
+            window.addEventListener(name, () => { plainTextPasteRequest = null; });
+        });
+        function classicPasteEditor(target) {
+            const editor = target && target.closest && target.closest('#editor, #editorSecondary');
+            return editor && editor.isContentEditable ? editor : null;
+        }
+        function insertClassicPlainText(editor, text) {
+            if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
+            const page = pages.find(p => p.id === (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId));
+            if (!page || !canWritePageContent(page) || !text) return false;
+            // Paste is one atomic step in Sutra's classic-editor history, which
+            // owns Ctrl+Z rather than the browser's native execCommand history.
+            noteUndoManager.push(editor);
+            const inserted = document.execCommand('insertText', false, String(text).replace(/\r\n?/g, '\n'));
+            if (inserted) {
+                noteUndoManager.push(editor);
+                savePage();
+            }
+            return inserted;
+        }
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey
+                && (String(event.key).toLowerCase() === 'v' || event.code === 'KeyV')) {
+                const editor = classicPasteEditor(event.target);
+                if (!editor) return; // Modern Editor owns its own clipboard transaction.
+                plainTextPasteRequest = { editor, at: Date.now() };
+            } else if (!['Control', 'Meta', 'Shift'].includes(event.key)) {
+                plainTextPasteRequest = null;
+            }
+        }, true);
+        function handleClassicPlainTextPaste(e) {
+            if (e.type === 'beforeinput' && e.inputType !== 'insertFromPaste' && e.inputType !== 'insertFromPasteAsQuotation') return false;
+            const editor = classicPasteEditor(e.target);
+            if (!editor) return false;
+            const request = plainTextPasteRequest;
+            const plain = e.shiftKey || (request && request.editor === editor && Date.now() - request.at < 2000);
+            if (!plain) return false;
+            const text = window.SutraDOMSafety.clipboardText(e.clipboardData || e.dataTransfer)
+                || (typeof e.data === 'string' ? e.data : '');
+            if (!text) return true; // Preserve the browser's subsequent input event.
+            e.preventDefault();
+            insertClassicPlainText(editor, text);
+            plainTextPasteRequest = null;
+            return true;
+        }
+        document.addEventListener('beforeinput', handleClassicPlainTextPaste, true);
         document.addEventListener('paste', function(e) {
-            const editor = document.getElementById('editor');
-            const editorSecondary = document.getElementById('editorSecondary');
-            const isInEditor = (editor && (editor.contains(e.target) || document.activeElement === editor)) ||
-                               (editorSecondary && (editorSecondary.contains(e.target) || document.activeElement === editorSecondary));
-            if (!isInEditor) return;
-
+            if (handleClassicPlainTextPaste(e)) return;
+            const editor = classicPasteEditor(e.target);
+            if (!editor) return;
             const clipboardData = e.clipboardData || window.clipboardData;
-            if (!clipboardData) return;
+            if (!clipboardData || e.defaultPrevented) return;
 
             // Check for image data first
             const items = clipboardData.items;
@@ -40980,7 +40119,7 @@ function buildOnboardingPlanPreview() {
                     document.execCommand('createLink', false, url);
                 }
             }
-        });
+        }, true);
 
         // ===== STUDENT WRITING TOOLS (Section 15) =====
         async function insertFootnote() {
@@ -42306,12 +41445,54 @@ function buildOnboardingPlanPreview() {
         function _examTakenAt(id) {
             return id ? (_takenExamsMap()[id] || null) : null;
         }
+        function _storedExamOfficialResult(id) {
+            const result = testingHub && testingHub.officialResults && Object.hasOwn(testingHub.officialResults, id)
+                ? testingHub.officialResults[id] : null;
+            return result && typeof result === 'object' && !Array.isArray(result)
+                && typeof result.examDate === 'string' && typeof result.totalScore === 'string' && result.totalScore.trim()
+                ? result : null;
+        }
+        function _examOfficialResult(id) {
+            const result = _storedExamOfficialResult(id);
+            const takenAt = _examTakenAt(id);
+            return result && takenAt && result.examDate === String(takenAt).slice(0, 10) ? result : null;
+        }
+        function _examLifecycleLabel(id) {
+            if (!_isExamTaken(id)) return 'Upcoming';
+            return _examOfficialResult(id) ? 'Result recorded' : 'Taken · results pending';
+        }
+        async function editTestingHubExamResult(id) {
+            if (!resolveTestingHubExamId(id)) return;
+            const owner = testingHub;
+            const previous = owner.officialResults && owner.officialResults[id];
+            const previousJson = JSON.stringify(previous);
+            const takenAt = _examTakenAt(id);
+            const meta = _examMeta(id) || {};
+            const date = await atelierPrompt('Date this exam was taken:', takenAt ? String(takenAt).slice(0, 10) : (previous && previous.examDate || meta.examDate || ''), { title: 'Official exam result', inputType: 'date' });
+            if (date === null) return;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || _examDaysLeft(date) == null || _examDaysLeft(date) > 0) {
+                showToast('Enter a valid exam date today or earlier.'); return;
+            }
+            const score = await atelierPrompt('Official score or result (practice scores stay separate):', previous && previous.examDate === date ? String(previous.totalScore || '') : '', { title: 'Record official result', placeholder: 'e.g. 1450, 32, or Pass' });
+            if (score === null) return;
+            const totalScore = String(score).trim();
+            if (!totalScore || totalScore.length > 200) { showToast('Enter a result of 1–200 characters.'); return; }
+            if (testingHub !== owner || _examTakenAt(id) !== takenAt
+                || JSON.stringify(owner.officialResults && owner.officialResults[id]) !== previousJson
+                || !resolveTestingHubExamId(id)) {
+                showToast('This exam changed while you were editing. Open the result again.'); return;
+            }
+            if (!owner.officialResults || typeof owner.officialResults !== 'object' || Array.isArray(owner.officialResults)) owner.officialResults = {};
+            Object.defineProperty(owner.officialResults, id, { configurable: true, enumerable: true, writable: true,
+                value: { ...(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}), examDate: date, totalScore, recordedAt: new Date().toISOString() } });
+            _setExamTaken(id, true, date);
+        }
         // Set/clear an exam's taken state by exam-card id. Persists + re-renders.
         function _setExamTaken(id, taken, dateISO) {
             if (!id) return false;
             const map = _takenExamsMap();
             if (taken) {
-                let iso = dateISO;
+                let iso = dateISO || map[id];
                 if (!iso) {
                     const d = new Date();
                     iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -42321,7 +41502,7 @@ function buildOnboardingPlanPreview() {
                 delete map[id];
             }
             try { persistAppData(); } catch (e) { /* non-critical */ }
-            try { if (activeView === 'testing' && typeof renderTestingHub === 'function') renderTestingHub(); } catch (e) { /* non-critical */ }
+            _refreshAfterExamMutation(id);
             try { rerenderActiveExamDetail(); } catch (e) { /* non-critical */ }
             return true;
         }
@@ -42358,9 +41539,15 @@ function buildOnboardingPlanPreview() {
         function _toNum(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
         function _examDaysLeft(dateISO) {
             if (!dateISO) return null;
-            const d = new Date(String(dateISO).length <= 10 ? dateISO + 'T23:59:00' : dateISO);
+            const value = String(dateISO);
+            const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+            const d = new Date(dateOnly ? value + 'T12:00:00' : value);
             if (isNaN(d)) return null;
-            return Math.ceil((d - Date.now()) / 86400000);
+            if (dateOnly && (d.getFullYear() !== Number(dateOnly[1]) || d.getMonth() + 1 !== Number(dateOnly[2]) || d.getDate() !== Number(dateOnly[3]))) return null;
+            const now = new Date(Date.now());
+            // Compare local calendar dates, not elapsed 24-hour periods. DST
+            // and the time of day must not make two views disagree.
+            return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
         }
 
         // Deterministic readiness verdict from score gap + time pressure.
@@ -42454,6 +41641,10 @@ function buildOnboardingPlanPreview() {
             const practice = Array.isArray(profile.practiceTests) ? profile.practiceTests : [];
             const unresolved = (Array.isArray(profile.mistakes) ? profile.mistakes : []).filter(m => (m.status || 'unresolved') === 'unresolved');
             const mk = (o) => Object.assign({ minutes: 35, impact: 'High', actionLabel: 'Start Now', actKind: 'practice', section: '' }, o);
+            if (_isExamTaken(id)) {
+                const result = _examOfficialResult(id);
+                return mk({ title: _examLifecycleLabel(id), detail: result ? 'Official result: ' + result.totalScore : 'Your exam is finished. Record the official result when it arrives.', minutes: 2, impact: 'Low', actionLabel: result ? 'Edit result' : 'Record result', actKind: 'result' });
+            }
             if (!profile.examDate) {
                 return mk({ title: 'Set your exam date', detail: 'Add your test date so your countdown, readiness, and plan can calibrate.', minutes: 2, impact: 'High', actionLabel: 'Add date', actKind: 'setup' });
             }
@@ -42542,6 +41733,7 @@ function buildOnboardingPlanPreview() {
         function runExamNextAction(id) {
             const p = _examProfileFor(id); if (!p) return;
             const n = computeExamNextAction(id, p, getExamConfig(id));
+            if (n.actKind === 'result') return editTestingHubExamResult(id);
             if (n.actKind === 'setup') return openExamSetupPanel(id);
             if (n.actKind === 'mistakes') { return openExamMoreDetails(id, 'mistakes'); }
             return addPracticeTest(id);
@@ -42580,7 +41772,9 @@ function buildOnboardingPlanPreview() {
             if (!profile) { host.innerHTML = `<div class="exam-empty"><i class="fas fa-question-circle"></i>That exam wasn't found. It may have been deleted.</div>`; return; }
             const cfg = getExamConfig(id);
             const daysLeft = _examDaysLeft(profile.examDate);
-            const readiness = computeExamReadiness(id, profile, cfg);
+            const readiness = _isExamTaken(id)
+                ? { key: 'on-track', label: 'Prep complete', detail: 'Official results stay separate from practice scores.' }
+                : computeExamReadiness(id, profile, cfg);
             const next = computeExamNextAction(id, profile, cfg);
             const weak = rankWeakAreas(id, profile, cfg, 3);
             const series = _examScoreSeries(profile);
@@ -42591,13 +41785,15 @@ function buildOnboardingPlanPreview() {
 
             const safeShort = escapeHtml(shortLabel);
             let headline;
-            if (daysLeft == null) headline = 'No date set';
+            if (_isExamTaken(id)) headline = escapeHtml(_examLifecycleLabel(id));
+            else if (daysLeft == null) headline = 'No date set';
             else if (daysLeft < 0) headline = `${safeShort} was ${Math.abs(daysLeft)}d ago`;
             else if (daysLeft === 0) headline = `${safeShort} is today`;
             else headline = `${safeShort} in <strong>${daysLeft}</strong> day${daysLeft === 1 ? '' : 's'}`;
-            const dateDisplay = profile.examDate ? new Date(_examDaysLeft(profile.examDate) != null ? profile.examDate + 'T12:00:00' : profile.examDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Add an exam date in setup';
+            const displayDate = _isExamTaken(id) ? String(_examTakenAt(id)).slice(0, 10) : profile.examDate;
+            const dateDisplay = displayDate ? new Date(_examDaysLeft(displayDate) != null ? displayDate + 'T12:00:00' : displayDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Add an exam date in setup';
 
-            const focusBtnLabel = next.actKind === 'setup' ? next.actionLabel
+            const focusBtnLabel = ['setup', 'result'].includes(next.actKind) ? next.actionLabel
                 : next.actKind === 'mistakes' ? 'Review mistakes'
                 : next.section ? `Start ${next.section} ${(cfg.terminology && cfg.terminology.practiceUnit) || 'set'}` : 'Start practice';
 
@@ -42830,7 +42026,7 @@ function buildOnboardingPlanPreview() {
             const daysLeft = apNext ? apNext.daysLeft : null;
             const agg = _apPracticeAggregate();
             let headline, dateDisplay;
-            if (!apNext) { headline = 'No AP exam dated'; dateDisplay = 'Add an exam date to an AP subject'; }
+            if (!apNext) { headline = 'No upcoming AP exam'; dateDisplay = 'Add a future sitting or review your completed results below'; }
             else {
                 if (daysLeft < 0) headline = `${escapeHtml(apNext.label)} was ${Math.abs(daysLeft)}d ago`;
                 else if (daysLeft === 0) headline = `${escapeHtml(apNext.label)} is today`;
@@ -42849,7 +42045,9 @@ function buildOnboardingPlanPreview() {
             else if (avgConf >= 3) readiness = { key: 'on-track', label: 'On Track', detail: 'Steady progress — target your weakest units next.' };
             else readiness = { key: 'behind', label: 'Push needed', detail: 'Confidence is low — prioritize weak units and practice sets.' };
 
-            const nbaTitle = !subjects.length ? 'Add your first AP subject'
+            const allTaken = subjects.length > 0 && subjects.every(subject => _isExamTaken('ap:' + subject.id));
+            if (allTaken) readiness = { key: 'on-track', label: 'Prep complete', detail: 'Review official results below when they arrive.' };
+            const nbaTitle = allTaken ? 'Review exam results below' : !subjects.length ? 'Add your first AP subject'
                 : (daysLeft != null && daysLeft <= 7) ? 'Take a timed practice exam'
                 : 'Open an FRQ/MCQ set for your weakest unit';
             const hero = `
@@ -42883,7 +42081,14 @@ function buildOnboardingPlanPreview() {
                         </div>
                     </div>
                 </div>`;
-            host.innerHTML = `<div class="th2-ov th2-ov-ap">${hero}<div class="th2-ap-slot" id="th2ApWorkspaceSlot"></div></div>`;
+            const completedResults = subjects.filter(subject => _isExamTaken('ap:' + subject.id) || _storedExamOfficialResult('ap:' + subject.id)).map(subject => {
+                const subjectId = 'ap:' + subject.id;
+                const result = _storedExamOfficialResult(subjectId);
+                return `<section class="th2-card"><h3>${escapeHtml(subject.name || 'AP subject')} · ${escapeHtml(_examLifecycleLabel(subjectId))}</h3>
+                    <p>${result ? 'Saved result (' + escapeHtml(result.examDate) + '): ' + escapeHtml(result.totalScore) : 'Record your official result when it arrives.'}</p>
+                    <button class="th2-card-action" type="button" onclick="editTestingHubExamResult(${escapeHtml(JSON.stringify(subjectId))})">${result ? 'Edit saved result' : 'Record official result'}</button></section>`;
+            }).join('');
+            host.innerHTML = `<div class="th2-ov th2-ov-ap">${hero}${completedResults}<div class="th2-ap-slot" id="th2ApWorkspaceSlot"></div></div>`;
             const slot = document.getElementById('th2ApWorkspaceSlot');
             if (slot && apAnchor) { apAnchor.hidden = false; slot.appendChild(apAnchor); }
             try { if (typeof renderApBattlePlan === 'function') renderApBattlePlan(); } catch (e) { /* non-critical */ }
@@ -43383,7 +42588,7 @@ function buildOnboardingPlanPreview() {
                 if (!aps) return null;
                 const subjects = Array.isArray(aps.subjects) ? aps.subjects : [];
                 const candidates = subjects
-                    .filter(s => s && s.examDate)
+                    .filter(s => s && s.examDate && !_isExamTaken('ap:' + s.id))
                     .map(s => ({ s, when: new Date(s.examDate + 'T' + (s.examTime || '23:59') + ':00') }))
                     .filter(x => !isNaN(x.when));
                 if (!candidates.length) return null;
@@ -43616,7 +42821,7 @@ function buildOnboardingPlanPreview() {
                 : meta.daysLeft < 0 ? 'Past'
                 : meta.daysLeft === 0 ? 'Next: today'
                 : `Next: ${meta.daysLeft}d`;
-            const dateLine = meta.examDate ? new Date(meta.examDate).toLocaleDateString() : '—';
+            const dateLine = meta.examDate ? parseDate(meta.examDate).toLocaleDateString() : '—';
             const key = group.key;
             const subLabel = group.empty
                 ? 'No subjects yet'
@@ -43767,7 +42972,8 @@ function buildOnboardingPlanPreview() {
                     ? (daysLeft != null && daysLeft <= 30 ? 'reviewing' : 'studying')
                     : 'planning';
                 let nextTask = null;
-                if (!subj.examDate) nextTask = 'Add an exam date';
+                if (_isExamTaken(id)) nextTask = _examLifecycleLabel(id);
+                else if (!subj.examDate) nextTask = 'Add an exam date';
                 else if (weakUnits.length > 0) nextTask = `Review weak unit: ${weakUnits[0].title}`;
                 else if (practiceLogs.length === 0) nextTask = 'Run a diagnostic practice set';
                 else if (daysLeft != null && daysLeft >= 0 && daysLeft <= 14) nextTask = 'Timed FRQ + MCQ mixed set';
@@ -43790,8 +42996,7 @@ function buildOnboardingPlanPreview() {
             if (id.startsWith('custom:')) {
                 const exam = (testingHub.custom || []).find(c => c.id === id.slice(7));
                 if (!exam) return null;
-                const examDate = exam.examDate ? new Date(exam.examDate) : null;
-                const daysLeft = examDate ? Math.ceil((examDate - Date.now()) / 86400000) : null;
+                const daysLeft = _examDaysLeft(exam.examDate);
                 const mistakes = Array.isArray(exam.mistakes) ? exam.mistakes : [];
                 const tasks = Array.isArray(exam.tasks) ? exam.tasks : [];
                 const nextTask = (tasks.find(t => !t.done) || {}).text || null;
@@ -43811,8 +43016,7 @@ function buildOnboardingPlanPreview() {
             }
             const profile = getExamProfile(id);
             if (!profile) return null;
-            const examDate = profile.examDate ? new Date(profile.examDate) : null;
-            const daysLeft = examDate ? Math.ceil((examDate - Date.now()) / 86400000) : null;
+            const daysLeft = _examDaysLeft(profile.examDate);
             const mistakes = profile.mistakes || [];
             const tasks = profile.tasks || [];
             const nextTask = (tasks.find(t => !t.done) || {}).text || null;
@@ -43852,12 +43056,14 @@ function buildOnboardingPlanPreview() {
                         studyStatus: meta.studyStatus || '',
                         taken,
                         takenAt: taken ? _examTakenAt(id) : null,
+                        resultStatus: _examLifecycleLabel(id),
+                        officialResult: _examOfficialResult(id) ? _examOfficialResult(id).totalScore : null,
                         targetScore: meta.targetScore || null,
                         currentScore: meta.currentScore || null,
                         openTasks: meta.openTasks || 0,
                         unresolvedMistakes: meta.unresolvedMistakes || 0,
                         practiceCount: meta.practiceCount || 0,
-                        nextTask: meta.nextTask || ''
+                        nextTask: taken ? _examLifecycleLabel(id) : meta.nextTask || ''
                     };
                 }).filter(Boolean).filter(e => e.examDate || e.openTasks || e.practiceCount || e.currentScore != null || e.taken);
                 if (!exams.length) return null;
@@ -43881,8 +43087,9 @@ function buildOnboardingPlanPreview() {
                 const options = opts || {};
                 const id = resolveTestingHubExamId(ref);
                 if (!id) return { ok: false, error: 'no-match', ref: String(ref || '') };
+                const previousState = { id, taken: _isExamTaken(id), takenAt: _examTakenAt(id), studyStatus: (_examProfileFor(id) || {}).studyStatus || '' };
                 let changed = false;
-                if (options.taken != null) { _setExamTaken(id, !!options.taken); changed = true; }
+                if (options.taken != null) { _setExamTaken(id, !!options.taken, typeof options.takenAt === 'string' ? options.takenAt : undefined); changed = true; }
                 if (typeof options.studyStatus === 'string' && ['planning', 'studying', 'reviewing', 'ready'].includes(options.studyStatus)) {
                     const profile = _examProfileFor(id);
                     if (profile) { profile.studyStatus = options.studyStatus; changed = true; }
@@ -43891,7 +43098,7 @@ function buildOnboardingPlanPreview() {
                     try { persistAppData(); } catch (e) { /* non-critical */ }
                 }
                 const meta = _examMeta(id) || {};
-                return { ok: true, changed, examId: id, examName: meta.name || _examIdLabel(id), taken: _isExamTaken(id), studyStatus: (options.studyStatus || meta.studyStatus || '') };
+                return { ok: true, changed, previousState, examId: id, examName: meta.name || _examIdLabel(id), taken: _isExamTaken(id), studyStatus: (options.studyStatus || meta.studyStatus || '') };
             } catch (e) {
                 return { ok: false, error: 'exception' };
             }
@@ -43907,12 +43114,12 @@ function buildOnboardingPlanPreview() {
                 : meta.daysLeft < 0 ? 'past'
                 : meta.daysLeft <= 7 ? 'critical'
                 : meta.daysLeft <= 30 ? 'urgent' : '';
-            const countdownText = taken ? 'Completed'
+            const countdownText = taken ? 'Taken'
                 : meta.daysLeft === null || meta.daysLeft === undefined ? 'No date'
                 : meta.daysLeft < 0 ? 'Past'
                 : meta.daysLeft === 0 ? 'Today'
                 : `${meta.daysLeft} day${meta.daysLeft === 1 ? '' : 's'}`;
-            const dateLine = meta.examDate ? new Date(meta.examDate).toLocaleDateString() : '—';
+            const dateLine = meta.examDate ? parseDate(meta.examDate).toLocaleDateString() : '—';
             const isAp = (id === 'ap' || (id.startsWith && id.startsWith('ap:')));
             const quickActions = isAp
                 ? `<button class="th2-card-action" type="button" onclick="event.stopPropagation(); openExamDetail('${escapeHtml(id)}');"><i class="fas fa-arrow-right"></i> Open in AP workspace</button>
@@ -43944,8 +43151,8 @@ function buildOnboardingPlanPreview() {
                         <div class="th2-exam-card-title">
                             <h3>${escapeHtml(meta.name)}</h3>
                             ${taken
-                                ? '<span class="th2-exam-card-status th2-exam-taken-badge"><i class="fas fa-circle-check" aria-hidden="true"></i> Completed</span>'
-                                : `<span class="th2-exam-card-status status-${escapeHtml(meta.studyStatus)}">${escapeHtml(meta.studyStatus)}</span>`}
+                                ? '<span class="th2-exam-card-status th2-exam-taken-badge"><i class="fas fa-circle-check" aria-hidden="true"></i> ' + escapeHtml(_examLifecycleLabel(id)) + '</span>'
+                                : `<span class="th2-exam-card-status status-${escapeHtml(meta.studyStatus)}">Upcoming · ${escapeHtml(meta.studyStatus)}</span>`}
                         </div>
                         <div class="th2-exam-card-countdown">
                             <div class="th2-card-countdown-num">${escapeHtml(countdownText)}</div>
@@ -43957,9 +43164,11 @@ function buildOnboardingPlanPreview() {
                         ${targetMetaHtml}
                         ${practiceMetaHtml}
                     </div>
-                    ${meta.nextTask ? `<div class="th2-exam-card-next"><i class="fas fa-arrow-right"></i> ${escapeHtml(meta.nextTask)}</div>` : ''}
+                    ${_storedExamOfficialResult(id) && !_examOfficialResult(id) ? `<div class="th2-exam-card-next">Saved result (${escapeHtml(_storedExamOfficialResult(id).examDate)}): ${escapeHtml(_storedExamOfficialResult(id).totalScore)}</div>` : ''}
+                    ${taken || meta.nextTask ? `<div class="th2-exam-card-next"><i class="fas fa-arrow-right"></i> ${escapeHtml(taken ? (_examOfficialResult(id) ? 'Official result: ' + _examOfficialResult(id).totalScore : 'Record your result when it arrives.') : meta.nextTask)}</div>` : ''}
                     <footer class="th2-exam-card-actions">
                         ${quickActions}
+                        ${id !== 'ap' ? `<button class="th2-card-action" type="button" onclick="event.stopPropagation(); editTestingHubExamResult(${escapeHtml(JSON.stringify(id))})">${_storedExamOfficialResult(id) ? 'Edit saved result' : 'Record official result'}</button>` : ''}
                         <button class="th2-card-action" type="button" onclick="event.stopPropagation(); toggleTestingHubExamTaken('${escapeHtml(id)}')"><i class="fas ${taken ? 'fa-rotate-left' : 'fa-circle-check'}"></i> ${taken ? 'Mark not taken' : 'Mark taken'}</button>
                         <button class="th2-card-action th2-card-action-primary" type="button" onclick="event.stopPropagation(); openExamDetail('${escapeHtml(id)}')"><i class="fas fa-arrow-right"></i> Open</button>
                     </footer>
@@ -44199,7 +43408,7 @@ function buildOnboardingPlanPreview() {
         function getTestingHubKpis() {
             const exams = _allExamProfiles();
             // Next exam: include AP via apStudyWorkspace.
-            const nextNonAp = exams
+            const nextNonAp = exams.filter(e => !_isExamTaken(e.id))
                 .map(e => ({ ...e, when: e.profile.examDate ? new Date(e.profile.examDate + 'T23:59:00') : null }))
                 .filter(x => x.when && !isNaN(x.when) && (x.when - Date.now()) > -86400000)
                 .sort((a, b) => a.when - b.when)[0];
@@ -44248,7 +43457,7 @@ function buildOnboardingPlanPreview() {
         // Deterministic "Next best study action" — picks one card from a
         // priority list. Uses only local data; no external calls.
         function computeNextBestStudyAction() {
-            const exams = _allExamProfiles();
+            const exams = _allExamProfiles().filter(e => !_isExamTaken(e.id));
 
             // 1) Imminent exam: within 7 days.
             const apNext = _apNextExamMeta();
@@ -44369,7 +43578,7 @@ function buildOnboardingPlanPreview() {
             }
 
             // 7) Anything pinned? Suggest logging a practice test.
-            const pinned = _activeExamIds().filter(id => id !== 'ap');
+            const pinned = _activeExamIds().filter(id => id !== 'ap' && !_isExamTaken(id));
             if (pinned.length > 0) {
                 const target = pinned[0];
                 return {
@@ -44800,6 +44009,7 @@ function buildOnboardingPlanPreview() {
                 window.switchTestingHubSection = switchTestingHubSection;
                 window.getTestingHubAssistantSummary = getTestingHubAssistantSummary;
                 window.setTestingHubExamStatus = setTestingHubExamStatus;
+                window.editTestingHubExamResult = editTestingHubExamResult;
                 window.toggleTestingHubExamTaken = (id) => { try { _setExamTaken(id, !_isExamTaken(id)); } catch (e) {} };
                 window.openExamDetail = openExamDetail;
                 window.closeExamDetail = closeExamDetail;
@@ -44969,6 +44179,7 @@ function buildOnboardingPlanPreview() {
   <li>Use <code>::</code> in page names to build note hierarchies.</li>
   <li>Split-screen presets can open note pairs such as assignment + notes, AP unit + notes, or essay + research.</li>
   <li>In Modern Editor Split View, each pane has its own note, caret, and undo history. Toolbar actions apply to the active pane.</li>
+  <li><strong>Ctrl/⌘+Shift+V</strong> pastes plain text in either note editor. The page icon picker searches the bundled emoji names; multiple search words narrow the results.</li>
   <li>Select text and choose <strong>Add comment on selection</strong> to start an anchored thread. Click its highlighted passage or quoted text to review, reply, resolve, or reopen it. Comments follow the active Split View note and stay in backups and version history. If a passage is removed or cannot be identified safely, the thread stays available with a changed-text notice.</li>
   <li>HTML embeds appear as live nodes in the Modern Editor. Use the embed menu to edit, resize, or remove them; previews remain sandboxed.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
@@ -44985,7 +44196,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>Any page can be PIN-protected from the page context menu (<strong>···</strong> → <strong>Lock with PIN</strong>).</li>
-  <li>PINs are 4–8 digits. The raw PIN is never stored — only a SHA-256 hash with a per-page random salt is persisted. This keeps the page private within your browser, but it is not full disk encryption.</li>
+  <li>PINs are 4–8 digits. The raw PIN is never stored. New or changed page PINs use a versioned PBKDF2 verifier with a random salt; older verifiers remain readable and upgrade after a successful normal unlock. This is an in-app privacy gate: local note content is not encrypted by the PIN. Use encrypted .sutra backups for portable encryption.</li>
   <li>A locked page shows a PIN entry screen instead of its content. The correct PIN unlocks it for the rest of the session.</li>
   <li><strong>Optional duress deletion:</strong> after unlocking normally, Lock settings can configure a separate 6–8 digit alternate PIN. Entering it on the lock screen permanently removes that page tree from the active workspace, Sutra Trash, and local workspace snapshots without another warning. The normal and duress PINs must differ, and duplicates never inherit the destructive PIN.</li>
   <li>Downloaded/cloud backups and another unsynced device may still contain an older copy; browser apps cannot guarantee physical secure erasure. The raw duress PIN is never stored, only a salted high-cost verifier.</li>
@@ -45012,6 +44223,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Manage Spaces</strong> is a visual manager for creating, opening, renaming, duplicating, deleting, and exporting spaces. It shows note count, Canvas count, active-space state, and recent timestamps.</li>
   <li><strong>Pinned pages</strong> appear in the Pinned section at the top of the Create tree while staying in their original hierarchy. Pin or unpin from the page row actions. Pins are scoped per space and survive rename, move, refresh, export, and restore.</li>
   <li><strong>Compact search</strong> starts as a search icon in Notes. Click to expand it; Escape clears or collapses it. Search covers note titles, tags, note content, and Canvas text where practical.</li>
+  <li><strong>Pages</strong> in the note toolbar's More menu adds automatic sheet gaps in the primary Modern Editor. Typing, paste, zoom, and width changes recalculate them. Manual breaks start a new sheet; oversized media and tables stay intact. Automatic gaps are never saved as note content. Classic Editor keeps manual breaks.</li>
   <li><strong>Resizable tables</strong> in standard notes expose column and row handles. Drag to size, then autosave, refresh, switch spaces, export, or restore without losing dimensions.</li>
   <li><strong>Canvas pages</strong> are first-class Create pages. Create one from New Page &rarr; Canvas, pin it, move it, duplicate it, search it, or back it up like any other page.</li>
   <li>Canvas supports selection, pan/zoom, freehand drawing, text, sticky notes, shapes, connectors, groups, tables, linked Sutra notes, and selected-content conversion into notes or tasks.</li>
@@ -45020,6 +44232,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Slides</strong> has a thumbnail rail, compact Insert / History / Slide menus, Fit and zoom controls, object formatting, speaker notes, and presentation mode. Sheets keeps its formula bar and main formatting actions near the grid, with more tools in Format / Data / Structure / File.</li>
   <li><strong>Custom timelines</strong> can be inserted from the toolbar in Notes, Canvas, and Slides (under Insert). They belong to that page and do not create schedule events. Sheets does not offer timelines.</li>
   <li>Click a note link to copy, edit, or remove its link formatting while keeping the text. Arrow keys keep the selected slash command visible. <strong>AI writing help</strong> opens in the right Assistant panel and only changes the note after you approve a draft.</li>
+  <li><strong>/grammar, /spelling, /rephrase:</strong> select text first, or type a command at the caret to preload eligible text blocks from this note. In Assistant chat, enter the command followed by your passage. Opening the review sends nothing. Generate sends only the displayed passage and instruction; review or edit the draft, then Apply or Cancel. Note changes support Undo; chat changes return to the composer without sending another message.</li>
   <li>Canvas text and sticky notes keep their edits when resized or zoomed. Linked note cards show a readable opening excerpt; locked note contents remain protected. HTML pages keep secondary actions in the three-dot menu.</li>
 </ul>
                     `
@@ -45029,7 +44242,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Command Palette, Global Search, And Quick Capture',
                     body: `
 <ul>
-  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P) is for fast actions and jumping around the app. It now includes <em>Open Review</em> and <em>Start review session</em>.</li>
+  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P or the navigation command button) is for fast actions and jumping around the app. It includes <em>Open Review</em> and <em>Start review session</em>.</li>
   <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, To-do, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
   <li>The empty state of Global Search now shows a list of <strong>recent searches</strong>; click one to re-run it. Recent searches persist in <code>settings.recentSearches</code> and travel through every backup path.</li>
   <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items. For homework, “tonight” means today at 11:59 PM unless you state a specific time.</li>
@@ -45058,8 +44271,11 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>To-do keeps homework and general tasks together. Switch between <strong>All</strong>, <strong>Homework</strong>, and <strong>General</strong>; general tasks do not need a class.</li>
-  <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps current and undated work with each class, with separate collapsed Past-due and Completed sections. Search and filters show matching tasks right away.</li>
-  <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
+  <li>Quick Capture previews class and activity matches. When several destinations match, choose one or explicitly choose no class before saving. Imported Homework notes and Reference URLs remain editable in task details.</li>
+  <li>Assistant task-details questions use the saved notes and Reference URL. Sources used lists selected tasks, exams, and notes; approved PIN reads are labeled as one-time reads.</li>
+  <li>Life → Quick Calculator accepts keyboard arithmetic, parentheses, Enter, Backspace, and Escape. College score edits keep Tab focus while updating rankings.</li>
+  <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps all unfinished work with its class, including past-due tasks; only Completed is collapsed separately. Search and filters show matching tasks right away.</li>
+  <li>Schedule, Complete, and More sit together on each task row. When motion is enabled, a brief completion effect acknowledges an accepted local action. Save confirmation and failures remain visible separately.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>
   <li>The Class Dashboard shows open homework, upcoming class deadlines, linked notes, and any AP subject tied to that class.</li>
@@ -45122,6 +44338,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>AP Study tracks subjects, units, sessions, practice logs, readiness, and weak areas.</li>
+  <li>Exam cards distinguish <strong>Upcoming</strong>, <strong>Taken &middot; results pending</strong>, and <strong>Result recorded</strong>. Mark taken when finished, then use <strong>Record official result</strong> when the score arrives. Practice scores stay separate. Sutra currently tracks one sitting per exam card.</li>
   <li><strong>AP Battle Plan</strong> can create a real AP Study session, create a note, log a task, or schedule a block.</li>
   <li>Linked AP subjects can open their class dashboard from the Homework bridge so course work and exam prep stay connected.</li>
   <li>AP cards from a unit can become Review cards by picking the AP class as the source when creating a card in the Review tab. Future review sessions can then study just that class.</li>
@@ -45172,7 +44389,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Timeline, Schedule This, And Calendar',
                     body: `
 <ul>
-  <li>Timeline supports Month, Planner, Week, Day, and Year planning views. (The standalone 3-Day view was retired; older 3-day data folds into the Day view.)</li>
+  <li>Timeline supports Month, Planner, Week, and Day planning views. (The standalone 3-Day view was retired; older 3-day data folds into the Day view.)</li>
   <li><strong>Schedule this</strong> creates a prep block from homework, college, and deadline items without retyping the block.</li>
   <li>Timeline shows Sutra time blocks. Import external calendar events via <code>.ics</code> import in Settings → Advanced.</li>
   <li><code>.ics</code> import/export is the portable calendar format for Timeline data.</li>
@@ -45184,8 +44401,8 @@ function buildOnboardingPlanPreview() {
                     title: 'Life, Trackers, And Business',
                     body: `
 <ul>
-  <li>Life now keeps the primary student tools up front: Habits, Sleep, Spending, Journal, and Goals.</li>
-  <li>Secondary tools such as Calories, Calculator, Books, Fitness, and Skills live under <strong>More Life Tools</strong>.</li>
+  <li>Life keeps Goals, Habits, Spending, Skills, Calculator, and Books available.</li>
+  <li>Wellness, sleep, nutrition, fitness, and Life journal tools are retired. Existing records stay preserved in backups and Sync; ordinary authored notes remain available.</li>
   <li><strong>Trackers feed Home.</strong> Habits, goals, and reading items appear in the Home tracker-summary card and inside Global Search under <em>Trackers</em>. Goals and reading items can be linked to a Review deck so the same topic shows up in Today, Search, and Review.</li>
   <li>Business remains available, but student-focused modes keep it quieter unless you switch into Business mode or already have Business data.</li>
 </ul>
@@ -45206,7 +44423,8 @@ function buildOnboardingPlanPreview() {
                     title: 'Settings, Data Health, And Safe Apply',
                     body: `
 <ul>
-  <li>Settings drafts can be <strong>Save &amp; Apply</strong> or <strong>Revert</strong> instead of silently changing the app underneath you.</li>
+  <li>Settings groups controls in a desktop sidebar. On phones, select a category and use <strong>All Settings</strong> to go back; search works across categories.</li>
+  <li>Use <strong>Save Changes</strong> or <strong>Revert</strong> for staged preferences. Switching categories keeps pending edits; controls labeled as applying immediately retain that behavior.</li>
   <li>The <strong>Workspace Health</strong> card summarizes export/import status and recent backup diagnostics.</li>
   <li><strong>Release notes</strong> now appear inside Notifications with read, unread, dismiss, and version-aware deduplication state. They are no longer a separate notification system.</li>
   <li>Timed commitment reminders and streak-at-risk notices use the same notification center and dedupe keys as deadlines, homework, calendar, and save alerts.</li>
@@ -45220,7 +44438,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li><code>.sutra</code> is the full-fidelity encrypted workspace backup format for local state, notes, settings, AP data, homework, college data, binary assets, and linked metadata. Older unencrypted <code>.sutra</code> and legacy <code>.atelier</code> files still import.</li>
-  <li>The connected-productivity additions — <code>reviewWorkspace</code> (decks, items, sessions, settings), <code>focusTemplates</code>, <code>splitPaneContexts</code>, plus <code>settings.mobileTodayMode</code> and <code>settings.recentSearches</code> — all flow through the same save/export/import path. Round-trip tests verify 19 workspace fields stay in sync.</li>
+  <li>Workspace backups preserve durable student data and required attachments. Browser layout state and credentials have separate portability rules. A restore with missing required bytes reports an incomplete recovery; keep the original backup.</li>
   <li>Export from Settings before major changes and keep multiple dated copies. Sutra will ask for a backup password and cannot recover it if forgotten.</li>
   <li>Import replaces the active workspace state, so Sutra first offers an encrypted pre-import safety snapshot. Confirm browser downloads yourself; Sutra verifies configured backup-folder writes.</li>
   <li><strong>Optional Drive sync:</strong> Settings &rsaquo; Data can upload encrypted snapshots to your Google Drive app-data folder while Sutra is open, online, unlocked, and authorized. Manual encrypted <code>.sutra</code> backups remain independent of Drive.</li>
@@ -45229,9 +44447,10 @@ function buildOnboardingPlanPreview() {
                 },
                 {
                     id: 'sutra-cloud',
-                    title: 'Sutra Cloud (Optional Encrypted Cloud Backup)',
+                    title: 'Sutra Cloud (Sync And Encrypted Backups)',
                     body: `
-<p><strong>Sutra Cloud</strong> is an optional way to back up your encrypted workspace to a cloud destination of your choice and restore it on another device. It is <strong>off by default</strong> and is <strong>backup/restore, not live sync</strong>. Open it from the <strong>Sutra Cloud</strong> button in the save bar at the bottom of the workspace.</p>
+<p><strong>Sutra Cloud</strong> brings optional Sync and encrypted backups into one hub with separate status and controls. <strong>Sync</strong> replicates changes between devices; <strong>backups</strong> preserve recoverable snapshots. Both are off until you explicitly configure them. Local saving continues independently.</p>
+<p>An authentication failure in encrypted Sync data pauses Sync without applying the unverified record or replacing the vault key. It may indicate a different key or damaged data; it is not proof of either cause. Resolve it before resuming. Automatic backup failures retry with bounded delays and report success only after a confirmed upload.</p>
 <h3>How it works</h3>
 <ul>
   <li>Your workspace is <strong>encrypted on this device</strong> into a <code>.sutra</code> file <em>before</em> anything is uploaded. The provider you choose stores <strong>only the encrypted file</strong> — it can never read your notes, tasks, or files.</li>
@@ -45267,7 +44486,7 @@ function buildOnboardingPlanPreview() {
 </ul>
 <h3>Provider limitations (important)</h3>
 <ul>
-  <li>Sutra is a static browser app with a strict security policy (CSP). <strong>WebDAV, Custom HTTP, and most custom Supabase/S3 destinations need a self-hosted build</strong> with the origin added to the CSP. OneDrive and Dropbox require your own OAuth app configuration. S3 is preview/planned, not a finished transport. Sutra labels each state in the panel.</li>
+  <li>Sutra is a static browser app with a strict security policy (CSP). Hosted <code>*.supabase.co</code> projects are permitted; arbitrary WebDAV, Custom HTTP, and self-hosted Supabase origins need a self-hosted build with the origin added to the CSP. OneDrive and Dropbox require your own OAuth app configuration. S3 is preview/planned, not a finished transport. Sutra labels each state in the panel.</li>
   <li><strong>Box</strong> can't be connected in the hosted browser app: its sign-in requires a confidential client secret a static app can't hold safely (unlike Google Drive, OneDrive, and Dropbox). Use <strong>Manual encrypted file</strong> and save into a Box-synced folder, or self-host with a small token-exchange proxy.</li>
 </ul>
 <h3>Security model</h3>
@@ -45306,6 +44525,7 @@ function buildOnboardingPlanPreview() {
   <li>Different paragraphs or top-level note blocks merge when that is provably safe. Incompatible edits to the same block create one item under Sync &rsaquo; <strong>Conflicts</strong>; no duplicate is added to the sidebar. Only <strong>Keep both as pages</strong> creates a second page.</li>
   <li>A delete never destroys someone's newer edit — the edit wins and the item comes back.</li>
   <li>Offline edits queue and upload when you're back online.</li>
+  <li>Unlocked Sync checks every two minutes while the tab is visible, and when it returns to the foreground. Change-triggered backups retry temporary upload contention once per minute.</li>
 </ul>
 <h3>Security model</h3>
 <ul>
@@ -45340,7 +44560,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Local-First Warning',
                     body: `
 <ul>
-  <li>Sutra is local-first. Your primary workspace lives in browser storage on this device unless you export it or explicitly enable encrypted Google Drive sync.</li>
+  <li>Sutra is local-first. Your primary workspace lives in browser storage. Exports, explicitly selected Assistant requests, and separately enabled encrypted backups or Sync can send the chosen content outside this device. Enabled automatic backup and Sync can run while the app is open without a new click.</li>
   <li>No login is required for the core product, and no backend is required for your local notes, classes, AP planning, or college planning.</li>
   <li>If you clear browser data without a backup, local data can be lost.</li>
 </ul>
@@ -45362,15 +44582,16 @@ function buildOnboardingPlanPreview() {
                     title: 'Sutra Assistant (Contextual, Local-First)',
                     body: `
 <ul>
-  <li>Sutra Assistant is a contextual workspace layer, not a generic chatbot. It sees the active view, the open note or active Canvas summary, your selection, and (depending on context depth) tasks, homework, timeline, review-due, AP subjects, and college items.</li>
-  <li><strong>Context depth</strong> in <em>Settings &rsaquo; Assistant</em> controls how much it sees: <em>Minimal</em> (view only), <em>Current view</em> (default), or <em>Workspace-aware</em> (broader bounded summary).</li>
-  <li>Above the input, an <strong>adaptive quick actions</strong> row changes per view (Shape my day, Summarize, Selection &rarr; tasks, Generate review cards, Schedule open tasks, &hellip;).</li>
+  <li>Sutra Assistant retrieves permitted workspace content relevant to your request. Workspace-aware context does not grant access by itself: enable the areas you want in Assistant privacy settings. Sutra uses bounded retrieval rather than sending the entire workspace.</li>
+  <li>New workspaces use <strong>Everyday</strong>: workspace-aware retrieval, five recent messages plus brief older excerpts, and reviewed changes with Apply and Undo. <strong>Private</strong> uses no workspace access and independent messages; <strong>Advanced</strong> lets you customize the existing controls. Existing permissions and area blocks are preserved. Presets apply immediately after any unsaved Settings draft is saved or reverted.</li>
+  <li><strong>Effort</strong> appears for models with supported reasoning controls, including Gemini 3 text models. Available levels follow the selected model; unsupported attachment messages identify the file and reason.</li>
+  <li>An <strong>adaptive quick actions</strong> row changes per view (Shape my day, Summarize, Selection &rarr; tasks, Generate review cards, Schedule open tasks, &hellip;).</li>
   <li>Every major view also has a small <strong>Ask Sutra</strong> pill row at the top with view-relevant prompts.</li>
   <li>Sutra Assistant can <strong>propose</strong> local app actions: <code>insert_text</code>, <code>replace_selection</code>, <code>create_task</code>, <code>create_homework</code>, <code>create_timeline_block</code>, <code>create_page</code>, <code>create_review_deck</code>, <code>add_review_cards</code>, <code>create_cram_session</code>, <code>create_college_task</code>, <code>navigate</code>, plus Canvas actions such as <code>canvas_add_sticky</code>, <code>canvas_add_text</code>, <code>canvas_group_selection</code>, and <code>canvas_create_task_from_selection</code>. Each proposal becomes an <strong>action card</strong> with Apply / Decline buttons. Canvas mutations are high-risk and always require explicit approval.</li>
-  <li>Applied actions flow through the same autosave path as anything you create by hand, so they survive <code>.atelier</code> and JSON export/import.</li>
-  <li><strong>API keys</strong> live in <code>sessionStorage</code> for this browser session only. They are <strong>never</strong> included in <code>.atelier</code> or JSON exports.</li>
-  <li>Image/vision upload is not offered &mdash; paste text from screenshots instead. The provider field accepts an exact model ID; typos fail at the provider, not in Sutra.</li>
-  <li>Command Palette (<code>Ctrl/&#8984;+K</code>) entries: <em>Ask Sutra</em>, <em>Ask Sutra about current note</em>, <em>Sutra: Shape my day</em>, <em>Sutra: Create review cards from current note</em>, <em>Sutra: Schedule my open tasks</em>, <em>Sutra: Import assignments from pasted text</em>, <em>Sutra: Change context depth</em>.</li>
+  <li>Assistant proposals require review before they change the workspace. Applied changes use normal local saving and backup paths; source disclosures identify what was used. A locked note requires separate one-time consent and PIN verification.</li>
+  <li><strong>API keys</strong> are session-only by default. You may choose encrypted device storage. Keys and provider credentials are excluded from workspace exports and Sync snapshots.</li>
+  <li>Models load from the selected provider when a key is available. Attachment and reasoning support depend on the model; incompatible files show a specific reason. Thinking effort appears inside the composer for supported models.</li>
+  <li>Command Palette (<code>Ctrl/&#8984;+Shift+P</code>) entries: <em>Ask Sutra</em>, <em>Ask Sutra about current note</em>, <em>Sutra: Shape my day</em>, <em>Sutra: Create review cards from current note</em>, <em>Sutra: Schedule my open tasks</em>, <em>Sutra: Import assignments from pasted text</em>, <em>Sutra: Change context depth</em>.</li>
 </ul>
                     `
                 },
@@ -45379,8 +44600,9 @@ function buildOnboardingPlanPreview() {
                     title: 'Tutorial And Help',
                     body: `
 <ul>
-  <li>The interactive tutorial can be started, resumed, skipped, or redone from Settings.</li>
+  <li>Open <strong>Settings &rsaquo; Advanced &amp; packs &rsaquo; Advanced &rsaquo; Tutorial &amp; onboarding</strong> and choose <strong>Start guided tour</strong> or <strong>Redo Tutorial</strong>. Use Next / Back, Skip to leave, and Finish to close. The Command Palette also offers <strong>Quick start tour (5 essentials)</strong>.</li>
   <li>This Help &amp; Docs page is the fast written reference for starting, planning, studying, searching, backing up, and restoring.</li>
+  <li>Use its <strong>Table of Contents</strong> to jump to a section, and <strong>Back to top</strong> to return. Both controls support the keyboard; Help stays read-only while ordinary notes remain editable.</li>
 </ul>
                     `
                 }
@@ -45567,7 +44789,7 @@ ${renderedSections}
 
         function syncNotesSecondaryEditorV2() {
             const mirror = getSecondaryEditor();
-            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && appSettings.notesSplitViewEnabled && window.SutraNotesEditorV2?.isAvailable());
+            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && isNotesSplitViewVisible() && !isSpecialSplitPage(pages.find(p => p.id === secondaryPageId)) && window.SutraNotesEditorV2?.isAvailable());
             let host = document.getElementById('editorV2SecondaryHost');
             if (!enabled) {
                 flushSecondaryPageBeforeContextChange();
@@ -45803,7 +45025,7 @@ function getActiveEditor() {
     const secondaryVisible = !!(
         secondary &&
         appSettings &&
-        appSettings.notesSplitViewEnabled &&
+        isNotesSplitViewVisible() &&
         secondaryPane &&
         secondaryPane.style.display !== 'none'
     );
@@ -45829,6 +45051,8 @@ function getActiveEditor() {
             const toolbar = document.getElementById('toolbar');
             if (toolbar) {
                 toolbar.setAttribute('aria-label', `Formatting toolbar for the ${secondaryIsActive ? 'comparison' : 'main'} note: ${activeTitle}`);
+                toolbar.inert = isSpecialSplitPage(activePage);
+                toolbar.setAttribute('aria-disabled', toolbar.inert ? 'true' : 'false');
             }
             updateWordCount();
             if (changed) renderComments();
@@ -46454,8 +45678,25 @@ function getActiveEditor() {
             }
         }
 
+        function isSpecialSplitPage(page) {
+            return !!(page && (isFolderPage(page) || normalizePageType(page.type) === PAGE_TYPES.CANVAS || page.htmlDocument || page.slides || page.spreadsheet));
+        }
+
         function getAvailableSplitPages() {
-            return pages.filter(page => page && !isHelpDocsPage(page) && normalizePageType(page.type) !== PAGE_TYPES.CANVAS && !isFolderPage(page));
+            return pages.filter(page => page && !isHelpDocsPage(page) && (page.spaceId || 'default') === (activeSpaceId || 'default'));
+        }
+
+        function getNotesSplitPair() {
+            if (!appSettings?.notesSplitViewEnabled) return null;
+            const left = splitPaneContexts?.leftContext?.selectedNoteId || currentPageId;
+            const right = appSettings.notesSplitSecondaryPageId || secondaryPageId;
+            const available = getAvailableSplitPages();
+            if (!left || !right || left === right || !available.some(p => p.id === left) || !available.some(p => p.id === right)) return null;
+            return { left, right };
+        }
+
+        function isNotesSplitViewVisible() {
+            return !appSettings?.focusModeEnabled && getNotesSplitPair()?.left === currentPageId;
         }
 
         function getFallbackSecondaryPageId() {
@@ -46469,6 +45710,7 @@ function getActiveEditor() {
             if (!allowDisabled && !(appSettings && appSettings.notesSplitViewEnabled)) return false;
             const page = pages.find(p => p.id === secondaryPageId);
             if (!page) return false;
+            if (isSpecialSplitPage(page)) { secondaryEditorDirty = false; return false; }
             if (page.isLocked && page.lockHash && !unlockedPageIds.has(secondaryPageId)) return false;
             // Section 17 — split-pane edits use the SAME checkpoint policy as the
             // primary editor: snapshot the pre-edit state before overwriting it.
@@ -46491,6 +45733,7 @@ function getActiveEditor() {
         }
 
         function flushSecondaryPageBeforeContextChange() {
+            window.SutraContextualShell?.getCreateSplitSurface?.()?.flush();
             if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.flushPendingEdit();
             if (splitSecondaryDebounceTimer) {
                 clearTimeout(splitSecondaryDebounceTimer);
@@ -46582,7 +45825,18 @@ function getActiveEditor() {
                 splitScrollPositions[secondaryPageId] = scrollSurface.scrollTop || 0;
             }
             secondaryPageId = page.id;
+            syncNotesSecondaryEditorV2();
             const _secondaryLocked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
+            const special = !_secondaryLocked && isSpecialSplitPage(page);
+            if (special) {
+                editor.hidden = true;
+                editor.contentEditable = 'false';
+                editor.replaceChildren();
+                secondaryEditorDirty = false;
+                window.SutraContextualShell?.getCreateSplitSurface?.()?.show(page.id);
+            } else {
+            window.SutraContextualShell?.getCreateSplitSurface?.()?.hide();
+            editor.hidden = false;
             if (_secondaryLocked) {
                 editor.contentEditable = 'false';
                 const v2Host = document.getElementById('editorV2SecondaryHost');
@@ -46599,6 +45853,7 @@ function getActiveEditor() {
                 if (v2Host) { v2Host.hidden = false; v2Host.inert = false; }
                 loadPageContentIntoEditor(editor, page);
             }
+            }
             const restoredScrollTop = typeof splitScrollPositions[page.id] === 'number'
                 ? splitScrollPositions[page.id]
                 : 0;
@@ -46614,6 +45869,9 @@ function getActiveEditor() {
             try { updateSplitPaneContext('right', { selectedNoteId: page.id, scrollPosition: editor.scrollTop || 0 }); } catch (err) { /* non-critical */ }
             if (shouldPersist && appSettings) {
                 appSettings.notesSplitSecondaryPageId = page.id;
+                updateSplitPaneContext('left', { selectedNoteId: currentPageId });
+                setSplitViewSelection('notes', 'notes');
+                renderNotesTabsSignal();
                 persistAppData();
             }
         }
@@ -46638,7 +45896,7 @@ function getActiveEditor() {
         }
 
         function applySplitViewState() {
-            const enabled = !!(appSettings && appSettings.notesSplitViewEnabled);
+            const enabled = isNotesSplitViewVisible();
             const secondaryPane = document.getElementById('notesSecondaryPane');
             const container = document.getElementById('notesEditorContainer');
             const toggleBtn = document.getElementById('splitNotesToggleBtn');
@@ -46647,24 +45905,19 @@ function getActiveEditor() {
             if (container) container.classList.toggle('split-active', enabled);
             if (secondaryPane) secondaryPane.setAttribute('aria-hidden', enabled ? 'false' : 'true');
             if (toggleBtn) toggleBtn.classList.toggle('active', enabled);
+            renderNotesTabsSignal();
 
             if (!enabled) {
+                window.SutraContextualShell?.getCreateSplitSurface?.()?.hide();
                 syncNotesSecondaryEditorV2();
                 setActiveEditorPane('primary');
                 return;
             }
-            syncNotesSecondaryEditorV2();
+            if (secondaryPane) secondaryPane.hidden = false;
             setActiveEditorPane('primary');
             syncNotesSplitPaneStickyMetrics();
             renderSplitNoteSelect();
-            const fallbackId = getFallbackSecondaryPageId();
-            // Prefer the deeper pane-context restore over the legacy single-id
-            // setting, so a saved Notes+Notes split pairing comes back exactly.
-            const ctxRightId = (splitPaneContexts && splitPaneContexts.rightContext && splitPaneContexts.rightContext.selectedNoteId) || null;
-            const preferredId = (secondaryPageId && secondaryPageId !== currentPageId)
-                ? secondaryPageId
-                : (ctxRightId || (appSettings && appSettings.notesSplitSecondaryPageId) || fallbackId);
-            loadSecondaryPage(preferredId, { persist: false });
+            loadSecondaryPage(getNotesSplitPair().right, { persist: false });
             // Mark the current pane pairing so future cross-view splits know.
             setSplitViewSelection('notes', 'notes');
         }
@@ -46677,22 +45930,38 @@ function getActiveEditor() {
             if (nextEnabled) {
                 const fallbackId = getFallbackSecondaryPageId();
                 if (!fallbackId) {
-                    showToast('Create another note to use split-screen.');
+                    showToast('Create another page in this space to use split-screen.');
                     appSettings.notesSplitViewEnabled = false;
                     applySplitViewState();
                     return;
                 }
-                if (!secondaryPageId || secondaryPageId === currentPageId) {
-                    secondaryPageId = appSettings.notesSplitSecondaryPageId || fallbackId;
+                const available = getAvailableSplitPages();
+                if (!available.some(page => page.id === secondaryPageId) || secondaryPageId === currentPageId) {
+                    const savedId = appSettings.notesSplitSecondaryPageId;
+                    secondaryPageId = savedId !== currentPageId && available.some(page => page.id === savedId) ? savedId : fallbackId;
                 }
+                if (secondaryPageId === currentPageId) secondaryPageId = fallbackId;
+                updateSplitPaneContext('left', { selectedNoteId: currentPageId });
+                setSplitViewSelection('notes', 'notes');
             } else {
                 flushSecondaryPageBeforeContextChange();
             }
 
             appSettings.notesSplitViewEnabled = nextEnabled;
             appSettings.notesSplitSecondaryPageId = secondaryPageId || null;
+            if (shouldPersist) {
+                ensureWorkspacePreferences();
+                appSettings.preferences.editor.splitViewDefault = nextEnabled;
+            }
             applySplitViewState();
             if (shouldPersist) persistAppData();
+        }
+
+        function openPageInSplitView(pageId) {
+            flushVisibleNotesEditorsBeforeLeaving();
+            setSplitViewEnabled(false);
+            loadPage(pageId);
+            setSplitViewEnabled(true);
         }
 
         function swapSplitSecondaryIntoPrimary() {
@@ -46700,11 +45969,15 @@ function getActiveEditor() {
             flushSecondaryPageBeforeContextChange();
             const target = secondaryPageId;
             const oldPrimaryId = currentPageId;
+            updateSplitPaneContext('left', { selectedNoteId: target });
+            appSettings.notesSplitSecondaryPageId = oldPrimaryId;
+            secondaryPageId = oldPrimaryId;
             loadPage(target);
-            if (oldPrimaryId && oldPrimaryId !== target) {
-                secondaryPageId = oldPrimaryId;
-                loadSecondaryPage(oldPrimaryId);
-            }
+            persistAppData();
+        }
+
+        function renderNotesTabsSignal() {
+            window.dispatchEvent(new CustomEvent('sutra:notes-pair-changed'));
         }
 
         function ensureInlineValidationHint(inputEl) {
@@ -48019,6 +47292,15 @@ function getActiveEditor() {
             return createImportedPage(title, sourceLink + markup, PAGE_ICONS.NOTE, { open: false });
         }
 
+        // One implementation, independent DOM and session state for each Canvas pane.
+        const createCanvasEditorInstance = function (canvasDocument, canvasWindow, canvasPageResolver) {
+            const document = canvasDocument;
+            const window = canvasWindow;
+            const getComputedStyle = canvasWindow.getComputedStyle.bind(canvasWindow);
+            let activeCanvasRuntime = null;
+            function getPrimaryCanvasPage() { return canvasPageResolver(); }
+            function getPrimaryEditor() { return document.getElementById('editor'); }
+            function getNotesEditorV2Host() { return document.getElementById('editorV2Host'); }
         function ensureCanvasRuntime(page) {
             if (!page || normalizePageType(page.type) !== PAGE_TYPES.CANVAS) return null;
             if (!activeCanvasRuntime || activeCanvasRuntime.pageId !== page.id) {
@@ -48338,7 +47620,7 @@ function getActiveEditor() {
         function showCanvasEditorForPage(page) {
             const editor = getPrimaryEditor();
             const canvasRoot = document.getElementById('canvasEditor');
-            if (editor) editor.hidden = true;
+            if (editor) { editor.hidden = true; delete editor.dataset.pageId; }
             if (canvasRoot) canvasRoot.hidden = false;
             const tags = document.getElementById('tagsContainer');
             if (tags) tags.hidden = true;
@@ -48347,7 +47629,7 @@ function getActiveEditor() {
             var v2Host = getNotesEditorV2Host();
             if (v2Host) v2Host.hidden = true;
             var secPane = document.getElementById('notesSecondaryPane');
-            if (secPane) secPane.hidden = true;
+            if (secPane) secPane.hidden = !isNotesSplitViewVisible();
             // Immersive, Freeform-style full-page canvas: the body class lets CSS
             // strip the note chrome (rich-text toolbar, flow row, breadcrumbs) so
             // the canvas is its own page rather than a window inside a note.
@@ -49120,7 +48402,7 @@ function getActiveEditor() {
                 category: 'none',
                 createdAt: new Date().toISOString(),
                 origin: 'canvas',
-                noteId: currentPageId
+                noteId: canvasPageResolver()?.id
             };
             tasks.unshift(task);
             taskOrder.unshift(task.id);
@@ -49957,10 +49239,10 @@ function getActiveEditor() {
             if (!page || !isPageContentAuthorized(page)) return { ok: false, error: 'Unlock the Canvas page before undoing this edit.' };
             const restored = engine.undoCanvas(page.canvas, payload);
             if (!restored.ok) return restored;
-            if (page.id === currentPageId) pushCanvasUndo(page);
+            if (page.id === canvasPageResolver()?.id) pushCanvasUndo(page);
             page.canvas = normalizeCanvasModel(restored.model);
             saveCanvasPage(page, { persist: true });
-            if (page.id === currentPageId) renderCanvasPage(page);
+            if (page.id === canvasPageResolver()?.id) renderCanvasPage(page);
             else renderPagesList();
             return { ok: true, pageId: page.id };
         }
@@ -50018,7 +49300,9 @@ function getActiveEditor() {
                     insertContentTimeline: insertCanvasContentTimeline,
                     getContentTimelineSelection: getCanvasContentTimelineSelection,
                     updateContentTimeline: updateCanvasContentTimeline,
-                    getContext: getCanvasAssistantContext,
+                    getContext: () => canvasWindow === globalThis && activeEditorPane === 'secondary'
+                        ? window.SutraContextualShell?.getCreateSplitSurface?.()?.getCanvasContext() || null
+                        : getCanvasAssistantContext(),
                     addText: (text, fields = {}) => addCanvasObject('text', { text: String(text || 'Text'), ...fields }),
                     addSticky: (text, fields = {}) => addCanvasObject('sticky', { text: String(text || 'Sticky note'), fill: '#f6d56f', ...fields }),
                     addShape: (shape = 'rectangle', fields = {}) => addCanvasObject('shape', { label: shape, text: shape, fill: 'var(--surface-bg)', stroke: 'var(--accent)', shape, ...fields }),
@@ -50087,13 +49371,108 @@ function getActiveEditor() {
                     applyAssistantOperations: canvasApplyAssistantOperations,
                     undoAssistantMutation: canvasUndoAssistantMutation
                 };
-                window.getCanvasAssistantContext = getCanvasAssistantContext;
+                window.getCanvasAssistantContext = window.SutraCanvas.getContext;
                 window.canvasExportJson = canvasExportJson;
                 window.canvasExportImage = canvasExportImage;
                 window.canvasExportPdf = canvasExportPdf;
             } catch (err) { /* non-critical */ }
         }
         installSutraCanvasApi();
+
+            return { dispose: () => { if (activeCanvasRuntime?.viewportSaveTimer) clearTimeout(activeCanvasRuntime.viewportSaveTimer); activeCanvasRuntime = null; }, ensureCanvasRuntime, getCanvasEls, canvasWorkbench, pushCanvasUndo, saveCanvasPage, applyCanvasTransform, canvasObjectPath, bindCanvasTextEditor, renderCanvasObject, getCanvasLinkedNoteExcerpt, renderCanvasConnections, renderCanvasPage, showCanvasEditorForPage, hideCanvasEditor, canvasSetTool, syncCanvasToolbarState, addCanvasObject, canvasAddText, canvasAddSticky, canvasAddShape, toggleCanvasShapeMenu, canvasAddShapeFromMenu, buildCanvasShapeSvg, canvasAddFrame, canvasAddTable, canvasAddFreehand, handleCanvasObjectPointerDown, handleCanvasPointerMove, handleCanvasPointerUp, canvasDeleteSelected, canvasDuplicateSelected, canvasGroupSelected, canvasUngroupSelected, canvasAddConnector, canvasUndo, canvasRedo, canvasSetViewport, canvasScheduleViewportSave, canvasZoomAt, canvasZoomBy, canvasResetZoom, canvasSetBackground, canvasSelectAll, canvasFitView, canvasToggleSnap, canvasCycleBackground, canvasToggleMinimap, canvasApplyObjectResult, canvasArrangeSelection, canvasChangeLayer, canvasToggleSelectionLock, canvasCopySelected, canvasPasteSelected, canvasNudgeSelection, renderCanvasWorkbenchChrome, renderCanvasMinimap, canvasInsertExistingNote, canvasOpenInsertNoteModal, getSelectedCanvasText, canvasConvertSelectionToNote, canvasCreateTaskFromSelection, getCanvasAssistantContext, bindCanvasSurfaceOnce, setCanvasSelection, canvasMoveObject, canvasResizeObject, getCanvasExportFilename, getCanvasExportColor, getCanvasExportBounds, drawCanvasExportText, canvasExportRoundRectPath, drawCanvasExportObject, drawCanvasExportConnection, renderCanvasPageToBitmap, downloadCanvasBlob, canvasExportJson, canvasExportImage, binaryStringToUint8Array, createPdfBlobFromJpegDataUrl, canvasExportPdf, canvasAssistantEngine, validateCanvasAssistantOperations, canvasCreateAssistantBoard, canvasApplyAssistantOperations, canvasUndoAssistantMutation, captureCanvasContentTimelineInsertion, isCanvasContentTimelineTokenCurrent, insertCanvasContentTimeline, getCanvasContentTimelineSelection, updateCanvasContentTimeline, installSutraCanvasApi };
+        };
+        const primaryCanvasEditor = createCanvasEditorInstance(document, window, getPrimaryCanvasPage);
+        function ensureCanvasRuntime(...args) { return primaryCanvasEditor.ensureCanvasRuntime(...args); }
+        function getCanvasEls(...args) { return primaryCanvasEditor.getCanvasEls(...args); }
+        function canvasWorkbench(...args) { return primaryCanvasEditor.canvasWorkbench(...args); }
+        function pushCanvasUndo(...args) { return primaryCanvasEditor.pushCanvasUndo(...args); }
+        function saveCanvasPage(...args) { return primaryCanvasEditor.saveCanvasPage(...args); }
+        function applyCanvasTransform(...args) { return primaryCanvasEditor.applyCanvasTransform(...args); }
+        function canvasObjectPath(...args) { return primaryCanvasEditor.canvasObjectPath(...args); }
+        function bindCanvasTextEditor(...args) { return primaryCanvasEditor.bindCanvasTextEditor(...args); }
+        function renderCanvasObject(...args) { return primaryCanvasEditor.renderCanvasObject(...args); }
+        function getCanvasLinkedNoteExcerpt(...args) { return primaryCanvasEditor.getCanvasLinkedNoteExcerpt(...args); }
+        function renderCanvasConnections(...args) { return primaryCanvasEditor.renderCanvasConnections(...args); }
+        function renderCanvasPage(...args) { return primaryCanvasEditor.renderCanvasPage(...args); }
+        function showCanvasEditorForPage(...args) { return primaryCanvasEditor.showCanvasEditorForPage(...args); }
+        function hideCanvasEditor(...args) { return primaryCanvasEditor.hideCanvasEditor(...args); }
+        function canvasSetTool(...args) { return primaryCanvasEditor.canvasSetTool(...args); }
+        function syncCanvasToolbarState(...args) { return primaryCanvasEditor.syncCanvasToolbarState(...args); }
+        function addCanvasObject(...args) { return primaryCanvasEditor.addCanvasObject(...args); }
+        function canvasAddText(...args) { return primaryCanvasEditor.canvasAddText(...args); }
+        function canvasAddSticky(...args) { return primaryCanvasEditor.canvasAddSticky(...args); }
+        function canvasAddShape(...args) { return primaryCanvasEditor.canvasAddShape(...args); }
+        function toggleCanvasShapeMenu(...args) { return primaryCanvasEditor.toggleCanvasShapeMenu(...args); }
+        function canvasAddShapeFromMenu(...args) { return primaryCanvasEditor.canvasAddShapeFromMenu(...args); }
+        function buildCanvasShapeSvg(...args) { return primaryCanvasEditor.buildCanvasShapeSvg(...args); }
+        function canvasAddFrame(...args) { return primaryCanvasEditor.canvasAddFrame(...args); }
+        function canvasAddTable(...args) { return primaryCanvasEditor.canvasAddTable(...args); }
+        function canvasAddFreehand(...args) { return primaryCanvasEditor.canvasAddFreehand(...args); }
+        function handleCanvasObjectPointerDown(...args) { return primaryCanvasEditor.handleCanvasObjectPointerDown(...args); }
+        function handleCanvasPointerMove(...args) { return primaryCanvasEditor.handleCanvasPointerMove(...args); }
+        function handleCanvasPointerUp(...args) { return primaryCanvasEditor.handleCanvasPointerUp(...args); }
+        function canvasDeleteSelected(...args) { return primaryCanvasEditor.canvasDeleteSelected(...args); }
+        function canvasDuplicateSelected(...args) { return primaryCanvasEditor.canvasDuplicateSelected(...args); }
+        function canvasGroupSelected(...args) { return primaryCanvasEditor.canvasGroupSelected(...args); }
+        function canvasUngroupSelected(...args) { return primaryCanvasEditor.canvasUngroupSelected(...args); }
+        function canvasAddConnector(...args) { return primaryCanvasEditor.canvasAddConnector(...args); }
+        function canvasUndo(...args) { return primaryCanvasEditor.canvasUndo(...args); }
+        function canvasRedo(...args) { return primaryCanvasEditor.canvasRedo(...args); }
+        function canvasSetViewport(...args) { return primaryCanvasEditor.canvasSetViewport(...args); }
+        function canvasScheduleViewportSave(...args) { return primaryCanvasEditor.canvasScheduleViewportSave(...args); }
+        function canvasZoomAt(...args) { return primaryCanvasEditor.canvasZoomAt(...args); }
+        function canvasZoomBy(...args) { return primaryCanvasEditor.canvasZoomBy(...args); }
+        function canvasResetZoom(...args) { return primaryCanvasEditor.canvasResetZoom(...args); }
+        function canvasSetBackground(...args) { return primaryCanvasEditor.canvasSetBackground(...args); }
+        function canvasSelectAll(...args) { return primaryCanvasEditor.canvasSelectAll(...args); }
+        function canvasFitView(...args) { return primaryCanvasEditor.canvasFitView(...args); }
+        function canvasToggleSnap(...args) { return primaryCanvasEditor.canvasToggleSnap(...args); }
+        function canvasCycleBackground(...args) { return primaryCanvasEditor.canvasCycleBackground(...args); }
+        function canvasToggleMinimap(...args) { return primaryCanvasEditor.canvasToggleMinimap(...args); }
+        function canvasApplyObjectResult(...args) { return primaryCanvasEditor.canvasApplyObjectResult(...args); }
+        function canvasArrangeSelection(...args) { return primaryCanvasEditor.canvasArrangeSelection(...args); }
+        function canvasChangeLayer(...args) { return primaryCanvasEditor.canvasChangeLayer(...args); }
+        function canvasToggleSelectionLock(...args) { return primaryCanvasEditor.canvasToggleSelectionLock(...args); }
+        function canvasCopySelected(...args) { return primaryCanvasEditor.canvasCopySelected(...args); }
+        function canvasPasteSelected(...args) { return primaryCanvasEditor.canvasPasteSelected(...args); }
+        function canvasNudgeSelection(...args) { return primaryCanvasEditor.canvasNudgeSelection(...args); }
+        function renderCanvasWorkbenchChrome(...args) { return primaryCanvasEditor.renderCanvasWorkbenchChrome(...args); }
+        function renderCanvasMinimap(...args) { return primaryCanvasEditor.renderCanvasMinimap(...args); }
+        function canvasInsertExistingNote(...args) { return primaryCanvasEditor.canvasInsertExistingNote(...args); }
+        function canvasOpenInsertNoteModal(...args) { return primaryCanvasEditor.canvasOpenInsertNoteModal(...args); }
+        function getSelectedCanvasText(...args) { return primaryCanvasEditor.getSelectedCanvasText(...args); }
+        function canvasConvertSelectionToNote(...args) { return primaryCanvasEditor.canvasConvertSelectionToNote(...args); }
+        function canvasCreateTaskFromSelection(...args) { return primaryCanvasEditor.canvasCreateTaskFromSelection(...args); }
+        function getCanvasAssistantContext(...args) { return primaryCanvasEditor.getCanvasAssistantContext(...args); }
+        function bindCanvasSurfaceOnce(...args) { return primaryCanvasEditor.bindCanvasSurfaceOnce(...args); }
+        function setCanvasSelection(...args) { return primaryCanvasEditor.setCanvasSelection(...args); }
+        function canvasMoveObject(...args) { return primaryCanvasEditor.canvasMoveObject(...args); }
+        function canvasResizeObject(...args) { return primaryCanvasEditor.canvasResizeObject(...args); }
+        function getCanvasExportFilename(...args) { return primaryCanvasEditor.getCanvasExportFilename(...args); }
+        function getCanvasExportColor(...args) { return primaryCanvasEditor.getCanvasExportColor(...args); }
+        function getCanvasExportBounds(...args) { return primaryCanvasEditor.getCanvasExportBounds(...args); }
+        function drawCanvasExportText(...args) { return primaryCanvasEditor.drawCanvasExportText(...args); }
+        function canvasExportRoundRectPath(...args) { return primaryCanvasEditor.canvasExportRoundRectPath(...args); }
+        function drawCanvasExportObject(...args) { return primaryCanvasEditor.drawCanvasExportObject(...args); }
+        function drawCanvasExportConnection(...args) { return primaryCanvasEditor.drawCanvasExportConnection(...args); }
+        function renderCanvasPageToBitmap(...args) { return primaryCanvasEditor.renderCanvasPageToBitmap(...args); }
+        function downloadCanvasBlob(...args) { return primaryCanvasEditor.downloadCanvasBlob(...args); }
+        function canvasExportJson(...args) { return primaryCanvasEditor.canvasExportJson(...args); }
+        function canvasExportImage(...args) { return primaryCanvasEditor.canvasExportImage(...args); }
+        function binaryStringToUint8Array(...args) { return primaryCanvasEditor.binaryStringToUint8Array(...args); }
+        function createPdfBlobFromJpegDataUrl(...args) { return primaryCanvasEditor.createPdfBlobFromJpegDataUrl(...args); }
+        function canvasExportPdf(...args) { return primaryCanvasEditor.canvasExportPdf(...args); }
+        function canvasAssistantEngine(...args) { return primaryCanvasEditor.canvasAssistantEngine(...args); }
+        function validateCanvasAssistantOperations(...args) { return primaryCanvasEditor.validateCanvasAssistantOperations(...args); }
+        function canvasCreateAssistantBoard(...args) { return primaryCanvasEditor.canvasCreateAssistantBoard(...args); }
+        function canvasApplyAssistantOperations(...args) { return primaryCanvasEditor.canvasApplyAssistantOperations(...args); }
+        function canvasUndoAssistantMutation(...args) { return primaryCanvasEditor.canvasUndoAssistantMutation(...args); }
+        function captureCanvasContentTimelineInsertion(...args) { return primaryCanvasEditor.captureCanvasContentTimelineInsertion(...args); }
+        function isCanvasContentTimelineTokenCurrent(...args) { return primaryCanvasEditor.isCanvasContentTimelineTokenCurrent(...args); }
+        function insertCanvasContentTimeline(...args) { return primaryCanvasEditor.insertCanvasContentTimeline(...args); }
+        function getCanvasContentTimelineSelection(...args) { return primaryCanvasEditor.getCanvasContentTimelineSelection(...args); }
+        function updateCanvasContentTimeline(...args) { return primaryCanvasEditor.updateCanvasContentTimeline(...args); }
+        function installSutraCanvasApi(...args) { return primaryCanvasEditor.installSutraCanvasApi(...args); }
 
         function linkedPdfIdForNotePage(page) {
             if (!page || !window.SutraAttachments || typeof window.SutraAttachments.listForEntity !== 'function') return '';
@@ -50154,8 +49533,44 @@ function getActiveEditor() {
             reopenLinkedPdfForNotePage(page);
         });
 
+        function notifyNotePageLoaded(pageId) {
+            // Specialized Create surfaces also need this signal after PIN unlock
+            // and removal, when the route stays on the same page.
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', {
+                    detail: { pageId: pageId }
+                }));
+            } catch (err) { /* lifecycle signal is best-effort */ }
+        }
+
         function loadPage(pageId) {
             purgeExpiredTemporaryPages({ silent: true });
+            const pair = getNotesSplitPair();
+            if (pair && pageId === pair.right) {
+                const target = pages.find(p => p.id === pair.right);
+                if (target && !isPageContentAuthorized(target)) {
+                    flushVisibleNotesEditorsBeforeLeaving();
+                    updateSplitPaneContext('left', { selectedNoteId: pair.right });
+                    appSettings.notesSplitSecondaryPageId = pair.left;
+                    secondaryPageId = pair.left;
+                    loadPage(pair.right);
+                    persistAppData();
+                    return;
+                }
+                if (currentPageId !== pair.left) loadPage(pair.left);
+                setActiveEditorPane('secondary');
+                (document.querySelector('#editorV2SecondaryHost .ProseMirror') || getSecondaryEditor())?.focus();
+                return;
+            }
+            flushSecondaryPageBeforeContextChange();
+            if (pair && currentPageId === pair.left && pageId !== pair.left) {
+                const outgoingRight = pages.find(p => p.id === pair.right);
+                if (outgoingRight?.isLocked && (outgoingRight.lockAutoLock || 'navigation') === 'navigation') {
+                    unlockedPageIds.delete(pair.right);
+                    clearAutoLockTimer(pair.right);
+                    getSecondaryEditor()?.replaceChildren();
+                }
+            }
 
             // Auto-lock the outgoing page when navigating away
             if (currentPageId && currentPageId !== pageId) {
@@ -50175,10 +49590,13 @@ function getActiveEditor() {
 
             const page = pages.find(p => p.id === pageId);
             if (page) {
+                // Invalidate the rendered owner before navigation listeners run.
+                const outgoingEditor = getPrimaryEditor();
+                if (outgoingEditor) delete outgoingEditor.dataset.pageId;
                 window.SutraFolderWorkspace?.close();
                 document.body.classList.remove('folder-page-active');
                 currentPageId = pageId;
-                try { updateSplitPaneContext('left', { selectedNoteId: pageId }); } catch (err) { /* non-critical */ }
+                if (!pair || pageId === pair.left) updateSplitPaneContext('left', { selectedNoteId: pageId });
                 const uiState = ensureUiState();
                 if (uiState) {
                     uiState.lastOpenedPageId = pageId;
@@ -50204,8 +49622,7 @@ function getActiveEditor() {
                 renderSplitNoteSelect();
                 closeCompactSidebarDrawer();
 
-                // Always load content into the editor so saves work normally.
-                // The lock overlay is purely visual — show it on top if needed.
+                // Hydrate only authorized content; locked pages use an empty editor.
                 const primaryEditor = getPrimaryEditor();
                 const isCanvasPage = normalizePageType(page.type) === PAGE_TYPES.CANVAS;
                 const isFolder = isFolderPage(page);
@@ -50254,16 +49671,7 @@ function getActiveEditor() {
                 restorePrimaryNotesScrollTop(getStoredPageScrollTop(pageId));
                 try { renderBacklinksPanel(isCanvasPage || isFolder ? null : pageId); } catch (err) { /* non-critical */ }
 
-                if (appSettings && appSettings.notesSplitViewEnabled) {
-                    if (!secondaryPageId || secondaryPageId === currentPageId) {
-                        secondaryPageId = getFallbackSecondaryPageId();
-                    }
-                    if (secondaryPageId) {
-                        loadSecondaryPage(secondaryPageId, { persist: true });
-                    } else {
-                        setSplitViewEnabled(false);
-                    }
-                }
+                applySplitViewState();
                 renderComments();
                 reopenLinkedPdfForNotePage(page);
 
@@ -50271,11 +49679,7 @@ function getActiveEditor() {
                 // Pages subscribe to this instead of polling for the active page;
                 // it also fires when the same id is re-loaded (e.g. after an import)
                 // so surface editors re-sync their visibility.
-                try {
-                    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', {
-                        detail: { pageId: pageId }
-                    }));
-                } catch (err) { /* lifecycle signal is best-effort */ }
+                notifyNotePageLoaded(pageId);
             }
         }
 
@@ -50509,6 +49913,11 @@ function getActiveEditor() {
             });
             if (!shouldDelete) return;
 
+            if (!pages.includes(pageToDelete) || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) {
+                showToast('The workspace changed. Review the page again before deleting it.');
+                return;
+            }
+
             const idsToDelete = collectPageIdsForDeletion(pageId);
             if (idsToDelete.size === 0) return;
             closeSidebarPageActionsMenus();
@@ -50516,7 +49925,7 @@ function getActiveEditor() {
             // A locked note can't be deleted without proving the PIN — this also
             // guards locked sub-pages caught in a parent's deletion subtree.
             const lockCleared = await verifyLockedPagesBeforeDeletion(idsToDelete);
-            if (!lockCleared) return;
+            if (!lockCleared || !lockCleared.isCurrent()) return;
 
             executePageDeletion(idsToDelete);
         }
@@ -50634,6 +50043,8 @@ function getActiveEditor() {
                 });
             }
             removeShortcutsForDeletedPages(Array.from(idsToDelete));
+            if (idsToDelete.has(splitPaneContexts?.leftContext?.selectedNoteId)
+                || idsToDelete.has(appSettings?.notesSplitSecondaryPageId)) setSplitViewEnabled(false);
             if (secondaryPageId && idsToDelete.has(secondaryPageId)) {
                 secondaryPageId = null;
                 if (appSettings) appSettings.notesSplitSecondaryPageId = null;
@@ -50654,14 +50065,8 @@ function getActiveEditor() {
             }
 
             renderSplitNoteSelect();
-            if (appSettings && appSettings.notesSplitViewEnabled) {
-                const fallback = secondaryPageId || getFallbackSecondaryPageId();
-                if (fallback) {
-                    loadSecondaryPage(fallback, { persist: true });
-                } else {
-                    setSplitViewEnabled(false);
-                }
-            }
+            if (appSettings?.notesSplitViewEnabled && !getNotesSplitPair()) setSplitViewEnabled(false);
+            else applySplitViewState();
             renderPagesList();
             if (options.toast !== false) showToast(permanent ? 'Page removed.' : 'Page deleted successfully!');
             if (permanent) {
@@ -51167,8 +50572,8 @@ function getActiveEditor() {
 
         // =====================================================================
         // PAGE LOCK — crypto helpers
-        // Uses Web Crypto SHA-256 with a random per-page salt.
-        // The raw PIN is never stored; only the hex hash + salt are persisted.
+        // New verifiers use versioned PBKDF2 with a random per-page salt.
+        // The raw PIN is never stored. Legacy salted SHA-256 remains readable.
         // =====================================================================
 
         async function generateLockSalt() {
@@ -51178,17 +50583,36 @@ function getActiveEditor() {
         }
 
         async function hashPinWithSalt(pin, salt) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(salt + String(pin));
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(hashBuffer))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
+            if (!window.SutraPagePinCrypto) throw new Error('Secure page PIN verification is unavailable.');
+            return window.SutraPagePinCrypto.create(pin, salt);
         }
 
         async function verifyPagePin(pin, storedHash, salt) {
-            const hash = await hashPinWithSalt(pin, salt);
-            return hash === storedHash;
+            return !!(window.SutraPagePinCrypto && await window.SutraPagePinCrypto.verify(pin, storedHash, salt));
+        }
+
+        function isCurrentPageLock(page, hash, salt) {
+            return pages.includes(page) && page.id === currentPageId && activeView === 'notes'
+                && page.isLocked && page.lockHash === hash && page.lockSalt === salt
+                && !workspaceImportInProgress && !sutraRemoteCommitPending && !sutraRevocationLockActive;
+        }
+
+        async function upgradeLegacyPagePin(page, pin, hash, salt) {
+            if (!/^[0-9a-f]{64}$/i.test(String(hash || ''))) return isCurrentPageLock(page, hash, salt);
+            try {
+                const nextSalt = await generateLockSalt();
+                const nextHash = await hashPinWithSalt(pin, nextSalt);
+                if (!isCurrentPageLock(page, hash, salt)) return false;
+                if (persistenceWritesBlocked) return true;
+                page.lockHash = nextHash;
+                page.lockSalt = nextSalt;
+                page.updatedAt = new Date().toISOString();
+                savePagesToLocal();
+                return true;
+            } catch (error) {
+                reportError(error, { where: 'pageLock:upgrade' });
+                return isCurrentPageLock(page, hash, salt);
+            }
         }
 
         const PAGE_DURESS_KDF_ITERATIONS = 210000;
@@ -51272,7 +50696,7 @@ function getActiveEditor() {
             const page = typeof pageOrId === 'object' && pageOrId
                 ? pageOrId : pages.find(entry => entry && String(entry.id) === String(pageOrId || ''));
             return !!(page && pages.includes(page) && activeView === 'notes'
-                && (String(page.id) === String(currentPageId) || (appSettings.notesSplitViewEnabled && String(page.id) === String(secondaryPageId)))
+                && (String(page.id) === String(currentPageId) || (isNotesSplitViewVisible() && String(page.id) === String(secondaryPageId)))
                 && String(page.spaceId || 'default') === String(activeSpaceId || 'default')
                 && !page.isSystemPage && !isHelpDocsPage(page) && isPageContentAuthorized(page)
                 && workspaceHydrationComplete && !workspaceImportInProgress && !sutraRemoteCommitPending
@@ -51282,6 +50706,9 @@ function getActiveEditor() {
         // Prompt for a locked page's PIN and verify it. Returns true once the
         // correct PIN is entered, false if the user cancels or exhausts attempts.
         async function promptAndVerifyPageLock(page) {
+            const expectedHash = page.lockHash;
+            const expectedSalt = page.lockSalt;
+            const isCurrent = () => pages.includes(page) && page.isLocked && page.lockHash === expectedHash && page.lockSalt === expectedSalt;
             let label = `Enter the PIN for "${page.title || 'this note'}" to delete it.`;
             for (let attempt = 0; attempt < 5; attempt++) {
                 const pin = await showCustomPromptDialog({
@@ -51293,7 +50720,8 @@ function getActiveEditor() {
                     inputType: 'password'
                 });
                 if (pin === null) return false; // user cancelled
-                if (pin && await verifyPagePin(pin, page.lockHash, page.lockSalt)) return true;
+                if (!isCurrent()) return false;
+                if (pin && await verifyPagePin(pin, expectedHash, expectedSalt)) return isCurrent();
                 label = 'Incorrect PIN. Try again to delete this locked note.';
             }
             return false;
@@ -51323,10 +50751,17 @@ function getActiveEditor() {
                     continue;
                 }
                 const current = pages.find(entry => entry && String(entry.id) === id);
-                if (!current || !current.isLocked || !current.lockHash || !current.lockSalt) {
+                if (current !== page || !current.isLocked || !current.lockHash || !current.lockSalt) {
                     return { ok: false, status: 'changed', message: 'The page lock changed before Assistant access could be granted.' };
                 }
-                if (await verifyPagePin(pin, current.lockHash, current.lockSalt)) {
+                const expectedHash = current.lockHash;
+                const expectedSalt = current.lockSalt;
+                const verified = await verifyPagePin(pin, expectedHash, expectedSalt);
+                if (!pages.includes(current) || !current.isLocked || current.lockHash !== expectedHash || current.lockSalt !== expectedSalt
+                    || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) {
+                    return { ok: false, status: 'changed', message: 'The page lock changed before Assistant access could be granted.' };
+                }
+                if (verified) {
                     return { ok: true, pageId: id };
                 }
                 label = 'Incorrect PIN. Try again to allow Assistant to read this page once.';
@@ -51337,17 +50772,25 @@ function getActiveEditor() {
         // must not be deletable without the PIN. Verifies every still-locked page
         // in the deletion set; aborts the whole delete if any verification fails.
         async function verifyLockedPagesBeforeDeletion(idsToDelete) {
+            const pageList = pages;
+            const pageCount = pages.length;
+            const targets = Array.from(idsToDelete).map(id => pages.find(page => page.id === id)).filter(Boolean)
+                .map(page => ({ page, title: page.title, locked: page.isLocked, hash: page.lockHash, salt: page.lockSalt, unlocked: unlockedPageIds.has(page.id) }));
+            const isCurrent = () => pages === pageList && pages.length === pageCount && !workspaceImportInProgress && !sutraRemoteCommitPending && !sutraRevocationLockActive
+                && targets.length === idsToDelete.size && targets.every(target => pages.includes(target.page) && target.page.title === target.title
+                    && target.page.isLocked === target.locked && target.page.lockHash === target.hash && target.page.lockSalt === target.salt
+                    && unlockedPageIds.has(target.page.id) === target.unlocked);
             const lockedPages = Array.from(idsToDelete)
                 .map(id => pages.find(p => p.id === id))
                 .filter(p => p && p.isLocked && p.lockHash && !unlockedPageIds.has(p.id));
             for (const page of lockedPages) {
                 const verified = await promptAndVerifyPageLock(page);
-                if (!verified) {
+                if (!verified || !isCurrent()) {
                     showToast('Locked note was not deleted — correct PIN required.');
                     return false;
                 }
             }
-            return true;
+            return isCurrent() ? { isCurrent } : false;
         }
 
         // =====================================================================
@@ -51359,9 +50802,16 @@ function getActiveEditor() {
             if (!page) return false;
             // Flush unsaved editor content before locking so the content is captured
             if (pageId === currentPageId) savePage();
-            page.lockDuressVerifier = null;
+            const expectedHash = page.lockHash;
+            const expectedSalt = page.lockSalt;
+            const expectedDuress = page.lockDuressVerifier;
             const salt = await generateLockSalt();
-            const hash = await hashPinWithSalt(pin, salt);
+            let hash;
+            try { hash = await hashPinWithSalt(pin, salt); }
+            catch (error) { reportError(error, { where: 'pageLock:create' }); return false; }
+            if (!pages.includes(page) || page.lockHash !== expectedHash || page.lockSalt !== expectedSalt || page.lockDuressVerifier !== expectedDuress
+                || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) return false;
+            page.lockDuressVerifier = null;
             page.isLocked = true;
             page.lockHash = hash;
             page.lockSalt = salt;
@@ -51374,12 +50824,22 @@ function getActiveEditor() {
 
         async function changePageLock(pageId, newPin) {
             const page = pages.find(p => p.id === pageId);
-            if (!page) return false;
-            if (page.lockDuressVerifier && await verifyPageDuressPin(newPin, page.lockDuressVerifier)) {
+            if (!canManagePageLock(page)) return { ok: false, code: 'not-authorized' };
+            const expectedHash = page.lockHash;
+            const expectedSalt = page.lockSalt;
+            const expectedDuress = page.lockDuressVerifier;
+            const wasUnlocked = unlockedPageIds.has(pageId);
+            if (expectedDuress && await verifyPageDuressPin(newPin, expectedDuress)) {
                 return { ok: false, code: 'matches-duress' };
             }
             const salt = await generateLockSalt();
-            const hash = await hashPinWithSalt(newPin, salt);
+            let hash;
+            try { hash = await hashPinWithSalt(newPin, salt); }
+            catch (error) { reportError(error, { where: 'pageLock:change' }); return { ok: false, code: 'unavailable' }; }
+            if (!canManagePageLock(page) || page.lockHash !== expectedHash || page.lockSalt !== expectedSalt || page.lockDuressVerifier !== expectedDuress
+                || unlockedPageIds.has(pageId) !== wasUnlocked) {
+                return { ok: false, code: 'changed' };
+            }
             page.lockHash = hash;
             page.lockSalt = salt;
             page.lockedAt = new Date().toISOString();
@@ -51391,13 +50851,18 @@ function getActiveEditor() {
 
         async function setPageDuressPin(pageId, pin) {
             const page = pages.find(p => p.id === pageId);
-            if (!page || !page.isLocked || !page.lockHash || !page.lockSalt || !unlockedPageIds.has(pageId)) {
+            if (!canManagePageLock(page)) {
                 return { ok: false, code: 'not-authorized' };
             }
-            if (await verifyPagePin(pin, page.lockHash, page.lockSalt)) {
+            const hash = page.lockHash, salt = page.lockSalt, duress = page.lockDuressVerifier;
+            if (await verifyPagePin(pin, hash, salt)) {
                 return { ok: false, code: 'matches-normal' };
             }
-            page.lockDuressVerifier = await createPageDuressVerifier(pin);
+            const verifier = await createPageDuressVerifier(pin);
+            if (!canManagePageLock(page) || page.lockHash !== hash || page.lockSalt !== salt || page.lockDuressVerifier !== duress) {
+                return { ok: false, code: 'changed' };
+            }
+            page.lockDuressVerifier = verifier;
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             renderPagesList();
@@ -51406,7 +50871,7 @@ function getActiveEditor() {
 
         function clearPageDuressPin(pageId) {
             const page = pages.find(p => p.id === pageId);
-            if (!page || !unlockedPageIds.has(pageId)) return false;
+            if (!canManagePageLock(page)) return false;
             page.lockDuressVerifier = null;
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
@@ -51435,9 +50900,41 @@ function getActiveEditor() {
             renderPagesList();
         }
 
+        function canManagePageLock(page) {
+            return !!(page && pages.includes(page) && page.isLocked && page.lockHash && page.lockSalt
+                && unlockedPageIds.has(page.id) && !workspaceImportInProgress && !sutraRemoteCommitPending
+                && !sutraRevocationLockActive && !persistenceWritesBlocked);
+        }
+
+        async function confirmPageLockRemoval(pageId) {
+            const page = pages.find(p => p.id === pageId);
+            if (!canManagePageLock(page)) { showToast('Unlock the page again to manage its PIN.'); return false; }
+            const hash = page.lockHash, salt = page.lockSalt, duress = page.lockDuressVerifier;
+            const confirmed = await showCustomConfirmDialog({
+                title: 'Remove PIN protection',
+                message: 'Are you sure you want to remove the PIN from this page? Anyone can then open it without a PIN.',
+                confirmText: 'Remove PIN',
+                confirmVariant: 'danger'
+            });
+            if (!confirmed) return false;
+            if (!canManagePageLock(page) || page.lockHash !== hash || page.lockSalt !== salt || page.lockDuressVerifier !== duress) {
+                showToast('PIN protection was not removed. Unlock the page again and retry.'); return false;
+            }
+            removePageLock(pageId);
+            showToast('PIN protection removed.');
+            if (pageId === currentPageId) {
+                hideLockedPageScreen();
+                const primaryEditor = getPrimaryEditor();
+                if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                notifyNotePageLoaded(page.id);
+            }
+            return true;
+        }
+
         function manualLockPage(pageId) {
             // Flush any unsaved editor content before hiding it behind the lock screen
             if (pageId === currentPageId) savePage();
+            if (pageId === secondaryPageId && isNotesSplitViewVisible()) flushSecondaryPageBeforeContextChange();
             unlockedPageIds.delete(pageId);
             window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(pageId) } }));
             // If this is the currently open page, show the lock screen
@@ -51454,6 +50951,9 @@ function getActiveEditor() {
 
         function renderLockedPageScreen(page) {
             window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(page && page.id || '') } }));
+            // Relocking does not navigate through loadPage(). Clear both editor
+            // surfaces here too, after callers save and revoke authorization.
+            loadPageContentIntoEditor(getPrimaryEditor(), page);
             renderComments();
             const primaryPane = document.getElementById('notesPrimaryPane');
             if (window.SutraFolderWorkspace) window.SutraFolderWorkspace.close();
@@ -51523,6 +51023,7 @@ function getActiveEditor() {
             const duressSetupBtn = document.getElementById('lockScreenDuressSetupBtn');
             const duressExplainerBtn = document.getElementById('lockScreenDuressExplainerBtn');
             let setupDuressAfterUnlock = false;
+            let lockVerificationPending = false;
 
             requestAnimationFrame(() => { try { input.focus(); } catch (e) {} });
 
@@ -51573,6 +51074,7 @@ function getActiveEditor() {
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                if (lockVerificationPending) return;
                 const pin = input.value;
                 errorEl.textContent = '';
                 input.classList.remove('pin-shake');
@@ -51586,50 +51088,64 @@ function getActiveEditor() {
                 // When configured, derive both answers before branching. This keeps
                 // ordinary unlocks and failed attempts on the same expensive path
                 // and ensures the real PIN always wins if imported data is corrupt.
-                const [normalPinOk, duressPinOk] = await Promise.all([
-                    verifyPagePin(pin, page.lockHash, page.lockSalt),
-                    page.lockDuressVerifier ? verifyPageDuressPin(pin, page.lockDuressVerifier) : Promise.resolve(false)
-                ]);
-                if (normalPinOk) {
-                    const openDuressSetup = setupDuressAfterUnlock;
-                    setupDuressAfterUnlock = false;
-                    unlockedPageIds.add(page.id);
-                    startAutoLockTimer(page.id, page.lockAutoLock);
-                    hideLockedPageScreen();
-                    // Reload the page content now that it's unlocked
-                    const primaryEditor = getPrimaryEditor();
-                    if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
-                    renderTagsContainer();
-                    updatePageTemporaryMeta(page);
-                    updateWordCount();
-                    renderPagesList();
-                    reopenLinkedPdfForNotePage(page);
-                    try { input.value = ''; } catch (err) {}
-                    if (openDuressSetup) {
-                        requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
-                    }
-                } else if (duressPinOk) {
-                    // No trigger-time confirmation by design: the destructive
-                    // behavior was explicitly acknowledged during setup.
-                    input.value = '';
-                    input.disabled = true;
-                    if (!performPageDuressDeletion(page)) {
-                        input.disabled = false;
-                        errorEl.textContent = 'Page was not removed because local recovery cleanup could not be verified.';
+                const expectedHash = page.lockHash;
+                const expectedSalt = page.lockSalt;
+                const expectedDuress = page.lockDuressVerifier;
+                lockVerificationPending = true;
+                try {
+                    const [normalPinOk, duressPinOk] = await Promise.all([
+                        verifyPagePin(pin, expectedHash, expectedSalt),
+                        expectedDuress ? verifyPageDuressPin(pin, expectedDuress) : Promise.resolve(false)
+                    ]);
+                    if (!isCurrentPageLock(page, expectedHash, expectedSalt) || page.lockDuressVerifier !== expectedDuress || !form.isConnected) return;
+                    if (normalPinOk) {
+                        if (!(await upgradeLegacyPagePin(page, pin, expectedHash, expectedSalt))) return;
+                        if (!form.isConnected) return;
+                        const openDuressSetup = setupDuressAfterUnlock;
+                        setupDuressAfterUnlock = false;
+                        unlockedPageIds.add(page.id);
+                        startAutoLockTimer(page.id, page.lockAutoLock);
+                        hideLockedPageScreen();
+                        // Reload the page content now that it's unlocked
+                        const primaryEditor = getPrimaryEditor();
+                        if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                        renderTagsContainer();
+                        updatePageTemporaryMeta(page);
+                        updateWordCount();
+                        renderPagesList();
+                        reopenLinkedPdfForNotePage(page);
+                        notifyNotePageLoaded(page.id);
+                        try { input.value = ''; } catch (err) {}
+                        if (openDuressSetup) {
+                            requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
+                        }
+                    } else if (duressPinOk) {
+                        // No trigger-time confirmation by design: the destructive
+                        // behavior was explicitly acknowledged during setup.
+                        input.value = '';
+                        input.disabled = true;
+                        if (!performPageDuressDeletion(page)) {
+                            input.disabled = false;
+                            errorEl.textContent = 'Page was not removed because local recovery cleanup could not be verified.';
+                            input.focus();
+                        }
+                    } else {
+                        errorEl.textContent = 'Incorrect PIN. Please try again.';
+                        input.value = '';
+                        // Trigger shake
+                        input.classList.add('pin-shake');
+                        setTimeout(() => input.classList.remove('pin-shake'), 400);
                         input.focus();
                     }
-                } else {
-                    errorEl.textContent = 'Incorrect PIN. Please try again.';
-                    input.value = '';
-                    // Trigger shake
-                    input.classList.add('pin-shake');
-                    setTimeout(() => input.classList.remove('pin-shake'), 400);
-                    input.focus();
-                }
+                } catch (error) {
+                    reportError(error, { where: 'pageLock:unlock' });
+                    errorEl.textContent = 'PIN verification could not finish. The page remains locked.';
+                } finally { lockVerificationPending = false; }
             });
 
             const lockScreenRemoveBtn = document.getElementById('lockScreenRemoveBtn');
             lockScreenRemoveBtn && lockScreenRemoveBtn.addEventListener('click', async () => {
+                if (lockVerificationPending) return;
                 const pin = input.value;
                 errorEl.textContent = '';
                 input.classList.remove('pin-shake');
@@ -51640,26 +51156,36 @@ function getActiveEditor() {
                     return;
                 }
 
-                const ok = await verifyPagePin(pin, page.lockHash, page.lockSalt);
-                if (ok) {
-                    removePageLock(page.id);
-                    hideLockedPageScreen();
-                    const primaryEditor = getPrimaryEditor();
-                    if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
-                    renderTagsContainer();
-                    updatePageTemporaryMeta(page);
-                    updateWordCount();
-                    renderPagesList();
-                    reopenLinkedPdfForNotePage(page);
-                    try { input.value = ''; } catch (err) {}
-                    showToast('PIN protection removed.');
-                } else {
-                    errorEl.textContent = 'Incorrect PIN. Please try again.';
-                    input.value = '';
-                    input.classList.add('pin-shake');
-                    setTimeout(() => input.classList.remove('pin-shake'), 400);
-                    input.focus();
-                }
+                const expectedHash = page.lockHash;
+                const expectedSalt = page.lockSalt;
+                lockVerificationPending = true;
+                try {
+                    const ok = await verifyPagePin(pin, expectedHash, expectedSalt);
+                    if (!isCurrentPageLock(page, expectedHash, expectedSalt) || !form.isConnected) return;
+                    if (ok) {
+                        removePageLock(page.id);
+                        hideLockedPageScreen();
+                        const primaryEditor = getPrimaryEditor();
+                        if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                        renderTagsContainer();
+                        updatePageTemporaryMeta(page);
+                        updateWordCount();
+                        renderPagesList();
+                        reopenLinkedPdfForNotePage(page);
+                        notifyNotePageLoaded(page.id);
+                        try { input.value = ''; } catch (err) {}
+                        showToast('PIN protection removed.');
+                    } else {
+                        errorEl.textContent = 'Incorrect PIN. Please try again.';
+                        input.value = '';
+                        input.classList.add('pin-shake');
+                        setTimeout(() => input.classList.remove('pin-shake'), 400);
+                        input.focus();
+                    }
+                } catch (error) {
+                    reportError(error, { where: 'pageLock:remove' });
+                    errorEl.textContent = 'PIN verification could not finish. The page remains locked.';
+                } finally { lockVerificationPending = false; }
             });
         }
 
@@ -51814,24 +51340,7 @@ function getActiveEditor() {
                 const pageId = _lockModalTargetPageId;
                 closeModal_();
                 if (!pageId) return;
-                const confirmed = await showCustomConfirmDialog({
-                    title: 'Remove PIN protection',
-                    message: 'Are you sure you want to remove the PIN from this page? Anyone can then open it without a PIN.',
-                    confirmText: 'Remove PIN',
-                    confirmVariant: 'danger'
-                });
-                if (confirmed) {
-                    removePageLock(pageId);
-                    showToast('PIN protection removed.');
-                    // If this is the current page, refresh its display
-                    if (pageId === currentPageId) {
-                        const page = pages.find(p => p.id === pageId);
-                        if (page) {
-                            const primaryEditor = getPrimaryEditor();
-                            if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
-                        }
-                    }
-                }
+                await confirmPageLockRemoval(pageId);
             });
         }
 
@@ -51859,7 +51368,8 @@ function getActiveEditor() {
             document.body.classList.remove('modal-open');
             _lockModalTargetPageId = null;
 
-            await setPageLock(pageId, pin);
+            const saved = await setPageLock(pageId, pin);
+            if (!saved) { showToast('PIN protection was not changed. Reopen lock settings and try again.'); return; }
             // If currently viewing this page, show the lock screen
             if (pageId === currentPageId) {
                 const page = pages.find(p => p.id === pageId);
@@ -52343,36 +51853,6 @@ function getActiveEditor() {
 <ul><li></li></ul>
 <h3>Done</h3>
 <div class="checklist-item"><input type="checkbox" checked><span contenteditable="true">Completed task</span></div>`
-            },
-            journal: {
-                name: 'Daily Journal',
-                icon: PAGE_ICONS.JOURNAL,
-                description: 'Capture intention, gratitude, and learning with a repeatable daily structure.',
-                sections: ['Morning intention', 'Focus blocks', 'Events and notes', 'Gratitude', 'Evening reflection'],
-                category: 'general',
-                connectsTo: ['createsTasks'],
-                studentPriority: 5,
-                suggestedTitle: () => `Journal - ${formatTemplateDate()}`,
-                starterTasks: [
-                    { title: 'Write evening reflection', dueOffsetDays: 0, priority: 'medium', difficulty: 'easy', category: 'personal' },
-                    { title: 'Run weekly journal review', scheduleType: 'weekly', weeklyDays: [0], priority: 'low', difficulty: 'easy', category: 'personal' }
-                ],
-                content: () => `<h2>Daily Journal</h2>
-<p><strong>Date:</strong> ${formatTemplateDate(new Date(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-<h3>Morning Intention</h3>
-<p>What matters most today?</p>
-<h3>Focus Blocks</h3>
-<table><thead><tr><th>Block</th><th>Goal</th><th>Outcome</th></tr></thead><tbody>
-<tr><td>AM</td><td></td><td></td></tr>
-<tr><td>PM</td><td></td><td></td></tr></tbody></table>
-<h3>Events and Notes</h3>
-<p><br></p>
-<h3>Gratitude</h3>
-<ul><li></li><li></li><li></li></ul>
-<h3>Evening Reflection</h3>
-<p><strong>What went well:</strong> </p>
-<p><strong>What to improve:</strong> </p>
-<p><strong>Carry-forward item:</strong> </p>`
             },
             weekly: {
                 name: 'Weekly Review',
@@ -53516,6 +52996,16 @@ function getActiveEditor() {
                     }
                     ])
                 ];
+                if (!isSystemPage) actionItems.splice(actionItems.length - 1, 0, {
+                    className: 'fas fa-columns',
+                    title: 'Split with another page',
+                    onClick: () => openPageInSplitView(page.id)
+                });
+                if (!isSystemPage) actionItems.splice(actionItems.length - 1, 0, {
+                    className: 'fas fa-folder-open',
+                    title: 'Move to space',
+                    onClick: () => openMovePageToSpace(page.id)
+                });
                 actionItems.forEach((action) => {
                     iconsWrap.appendChild(makeActionIcon(action.className, action.title, action.onClick));
                 });
@@ -53632,6 +53122,7 @@ function getActiveEditor() {
             activeSpaceId = (appSettings && appSettings.activeSpaceId) || 'default';
             if (!spaces.find(s => s.id === activeSpaceId)) activeSpaceId = 'default';
             ensureHelpPagesForAllSpaces();
+            renderSpacesCurrentDisplay();
             // Load Cram Hub sessions (Section 31)
             cramSessions = Array.isArray(appData && appData.cramSessions) ? appData.cramSessions : [];
             // Part 5 — trash + focus history
@@ -54485,9 +53976,9 @@ function getActiveEditor() {
 
         function computeSutraDriveSyncState() {
             const meta = loadSutraDriveSyncMetadata();
-            if (!meta.enabled) return 'disabled';
             if (!isSutraDriveOAuthOriginSupported()) return 'needs-config';
             if (!getSutraGoogleDriveClientId()) return 'needs-config';
+            if (!meta.enabled) return 'disabled';
             if (sutraDriveSyncRuntime.syncInProgress) return sutraDriveSyncRuntime.state || 'syncing-upload';
             if (meta.duplicateWarning || sutraDriveSyncRuntime.conflictRemote) return 'conflict';
             if (meta.remoteMissing) return 'error';
@@ -54573,6 +54064,7 @@ function getActiveEditor() {
 
             const byId = (id) => document.getElementById(id);
             const enabled = meta.enabled === true;
+            const configured = isSutraDriveOAuthOriginSupported() && !!getSutraGoogleDriveClientId();
             const hasToken = hasSutraDriveAccessToken();
             const unlocked = !!sutraDriveSyncRuntime.derivedKey;
             const busy = sutraDriveSyncRuntime.syncInProgress || state === 'authorizing' || state === 'unlocking';
@@ -54598,7 +54090,16 @@ function getActiveEditor() {
             if (buttons.lock) buttons.lock.hidden = !enabled || !unlocked;
             if (buttons.disconnect) buttons.disconnect.hidden = !enabled;
             if (buttons.deleteCloud) buttons.deleteCloud.hidden = !enabled || !hasToken;
-            Object.values(buttons).forEach(btn => { if (btn) btn.disabled = busy; });
+            Object.entries(buttons).forEach(([name, btn]) => {
+                if (!btn) return;
+                const localAction = ['downloadLocal', 'lock', 'disconnect'].includes(name);
+                btn.disabled = busy || btn.hidden || (!configured && !localAction);
+                if (name === 'syncNow') btn.disabled = btn.disabled || !hasToken || !unlocked || !navigator.onLine;
+            });
+            if (buttons.connect) {
+                buttons.connect.textContent = configured ? 'Connect Google Drive' : 'Google Drive unavailable';
+                buttons.connect.title = configured ? '' : getSutraDriveStatusMessage('needs-config');
+            }
             const stayRow = byId('sutraDriveStayUnlockedRow');
             const stayToggle = byId('sutraDriveStayUnlockedToggle');
             if (stayRow) stayRow.hidden = !enabled;
@@ -54713,7 +54214,10 @@ function getActiveEditor() {
                 modal.classList.add('active');
                 try { document.body.classList.add('modal-open'); } catch (error) {}
                 validate();
-                setTimeout(() => { try { passInput.focus(); } catch (error) {} }, 30);
+                setTimeout(() => {
+                    if (resolved || !modal.classList.contains('active') || modal.contains(document.activeElement)) return;
+                    try { passInput.focus(); } catch (error) {}
+                }, 30);
             });
         }
 
@@ -55515,6 +55019,11 @@ function getActiveEditor() {
         }
 
         function lockSutraDriveSync() {
+            // A previously scheduled local save must not reopen the unlock
+            // prompt after the user deliberately locks this session.
+            if (sutraDriveSyncRuntime.debounceTimer) clearTimeout(sutraDriveSyncRuntime.debounceTimer);
+            sutraDriveSyncRuntime.debounceTimer = null;
+            sutraDriveSyncRuntime.queuedUpload = false;
             sutraDriveSyncRuntime.derivedKey = null;
             clearSutraDrivePersistedKey();
             updateSutraDriveSyncUi();
@@ -56106,11 +55615,15 @@ function getActiveEditor() {
                 .trim();
         }
 
-        function sanitizeAssistantChatMessage(raw) {
+        function sanitizeAssistantChatMessage(raw, options = {}) {
             if (!raw || typeof raw !== 'object') return null;
             const role = String(raw.role || '').toLowerCase();
             if (!['user', 'assistant', 'notice', 'error'].includes(role)) return null;
-            const content = stripAssistantHiddenPayloads(raw.content || raw.text || '');
+            // Active proposals must survive the save-before-render seam. Durable
+            // history and exports still use the default payload-stripped form.
+            const content = options.preserveProposals === true && role === 'assistant'
+                ? String(raw.content || raw.text || '').replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim()
+                : stripAssistantHiddenPayloads(raw.content || raw.text || '');
             if (!content) return null;
             const out = { role, content };
             if (['external_sourced_fact', 'workspace_fact', 'saved_memory_preference', 'deterministic_calculation', 'deterministic_inference', 'inference', 'recommendation', 'proposed_action', 'generative_suggestion'].includes(raw.claimType)) out.claimType = raw.claimType;
@@ -56136,8 +55649,9 @@ function getActiveEditor() {
             if (raw.restoredFromBackup === true) out.restoredFromBackup = true;
             if (raw.favorite === true) out.favorite = true;
             if (raw.partial === true) out.partial = true;
-            if (Array.isArray(raw.sources) && raw.sources.length) {
-                out.sources = raw.sources.map(source => {
+            const sourceRows = Array.isArray(raw.sources) && raw.sources.length ? raw.sources : raw.receipt && raw.receipt.sources;
+            if (Array.isArray(sourceRows) && sourceRows.length) {
+                out.sources = sourceRows.map(source => {
                     try {
                         if (window.SutraAssistantCore && typeof window.SutraAssistantCore.normalizeSource === 'function') {
                             return window.SutraAssistantCore.normalizeSource(source);
@@ -56697,7 +56211,7 @@ function getActiveEditor() {
                 masteryRecords: cloneSerializable(appData && appData.masteryRecords, []),
                 confidenceObservations: cloneSerializable(appData && appData.confidenceObservations, []),
                 studentDecisionState: cloneSerializable(appData && appData.studentDecisionState, getDefaultAppData().studentDecisionState),
-                assistantPermissions: cloneSerializable(appData && appData.assistantPermissions, getDefaultAppData().assistantPermissions),
+                assistantPermissions: cloneSerializable(appData && appData.assistantPermissions, { ...getDefaultAppData().assistantPermissions, mode: 'off' }),
                 assistantMemory: cloneSerializable(appData && appData.assistantMemory, getDefaultAppData().assistantMemory),
                 syncAuditLog: cloneSerializable(appData && appData.syncAuditLog, []),
                 workspaceMeta: cloneSerializable(appData && appData.workspaceMeta, getDefaultAppData().workspaceMeta),
@@ -57388,8 +56902,8 @@ function getActiveEditor() {
         }
 
         // True only if the page CSP's connect-src already permits this origin. The
-        // hosted build pins exact Supabase origins (no wildcards allowed by the CSP
-        // guard), so a BYO origin that isn't pinned will be blocked by the browser
+        // hosted build permits reviewed origins and bounded host families,
+        // so a BYO origin outside that policy will be blocked by the browser
         // before any request leaves — we detect that up front and explain it.
         function sutraCloudOriginAllowedByCsp(url) {
             try {
@@ -57457,7 +56971,7 @@ function getActiveEditor() {
                 return { ok: false, status: 'service-role', message: 'That looks like a service_role / secret key. Never paste it into Sutra — use the public anon key only.' };
             }
             if (!sutraCloudOriginAllowedByCsp(cleanUrl)) {
-                return { ok: false, status: 'csp-blocked', message: 'This build’s security policy (CSP) does not allow that Supabase origin. Custom Supabase needs a self-hosted build with your project ref added to the app CSP. Official Sutra Cloud works in the hosted version.' };
+                return { ok: false, status: 'csp-blocked', message: 'This build’s security policy (CSP) does not allow that Supabase origin. Hosted *.supabase.co projects are supported; other origins need a self-hosted build with the destination added to the CSP.' };
             }
             try {
                 const resp = await fetch(`${cleanUrl}/auth/v1/settings`, { headers: { apikey: String(anonKey).trim() } });
@@ -58124,7 +57638,7 @@ function getActiveEditor() {
             description: 'Your own (or the official) Supabase project. Encrypted backups in private Storage with Row Level Security.',
             icon: 'fa-database',
             requiresCustomCredentials: true,
-            cspNote: 'A custom Supabase project ref must be in the app CSP; in the hosted build only the configured project works (others need a self-hosted build).',
+            cspNote: 'Hosted *.supabase.co projects are permitted by the app CSP. Other Supabase origins need a self-hosted build with the destination added to the policy.',
             instructions: [
                 'Create a Supabase project and run supabase/schema.sql.',
                 'Enable email auth (one-time code).',
@@ -58775,6 +58289,7 @@ function getActiveEditor() {
                 const m = loadSutraCloudMeta();
                 m.lastBackupAt = new Date().toISOString();
                 m.lastError = '';
+                sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
                 if (options.auto) m.lastAutoBackupAt = m.lastBackupAt;
                 if (options.auto) m.lastAutoBackupHash = options.workspaceHash || '';
                 persistSutraCloudMeta();
@@ -58786,7 +58301,7 @@ function getActiveEditor() {
                 return { uploaded: true };
             } catch (error) {
                 const m = loadSutraCloudMeta();
-                m.lastError = error && error.message ? error.message : 'Backup failed.';
+                m.lastError = 'Backup failed. Check the destination connection and storage; details are in diagnostics.';
                 persistSutraCloudMeta();
                 // Record in the diagnostics ring buffer too (context carries no
                 // passphrase/credentials) so an exported report shows the failure.
@@ -59006,9 +58521,8 @@ function getActiveEditor() {
             if (!sutraCloudAutoReady() || meta.autoBackup.frequency !== 'daily') return;
             const now = Date.now();
             const schedule = getSutraCloudDailySchedule(meta, now);
-            // Recheck the clock at least once a minute, including after sleep or
-            // timezone changes. Failed/offline/unchanged attempts never spin.
-            const delay = schedule.due ? retryDelay : Math.min(60000, schedule.nextAt - now);
+            // Recheck calendar time; a due slot respects failure backoff.
+            const delay = schedule.due ? Math.max(retryDelay, (sutraCloudRuntime.autoBackupRetryAt || 0) - now) : Math.min(60000, schedule.nextAt - now);
             sutraCloudAutoTimer = setTimeout(async () => {
                 sutraCloudAutoTimer = null;
                 try { await runSutraCloudAutoBackup('daily'); }
@@ -59019,8 +58533,9 @@ function getActiveEditor() {
         }
 
         async function runSutraCloudAutoBackup(expectedFrequency) {
-            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy || !navigator.onLine
-                || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+            if (!sutraCloudAutoReady() || !navigator.onLine) return { skipped: true, reason: 'not-ready' };
+            if (Date.now() < (sutraCloudRuntime.autoBackupRetryAt || 0)) return { skipped: true, reason: 'backoff' };
+            if (sutraCloudRuntime.busy || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true, reason: 'busy' };
             // Without an atomic cross-tab lock, keep automatic backup paused.
             // Manual backups remain available without opening the Sync database.
             if (!navigator.locks) return { skipped: true, reason: 'locks-unavailable' };
@@ -59029,7 +58544,8 @@ function getActiveEditor() {
                     if (!lock) return { skipped: true, reason: 'lock-held' };
                     sutraCloudMeta = null;
                     const meta = loadSutraCloudMeta();
-                    if (!sutraCloudAutoReady() || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+                    if (!sutraCloudAutoReady()) return { skipped: true, reason: 'not-ready' };
+                    if (sutraCloudRuntime.busy || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true, reason: 'busy' };
                     const frequency = meta.autoBackup.frequency;
                     if (expectedFrequency && frequency !== expectedFrequency) return { skipped: true, reason: 'schedule-changed' };
                     if (frequency === 'daily' && !getSutraCloudDailySchedule(meta).due) return { skipped: true, reason: 'not-due' };
@@ -59042,6 +58558,7 @@ function getActiveEditor() {
                     const currentMeta = loadSutraCloudMeta();
                     if (!sutraCloudAutoReady() || JSON.stringify(currentMeta.autoBackup) !== scheduleKey) return { skipped: true, reason: 'schedule-changed' };
                     if (!hash || currentMeta.lastAutoBackupHash === hash) {
+                        sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
                         if (hash && frequency === 'daily') {
                             // A check is not a successful backup. Keep its receipt
                             // separate so unchanged work is not rehashed every minute.
@@ -59051,13 +58568,18 @@ function getActiveEditor() {
                         }
                         return { skipped: true, reason: 'unchanged' };
                     }
-                    return await sutraCloudBackupNow({
+                    const result = await sutraCloudBackupNow({
                         passphrase: sutraCloudRuntime.backupPassphrase,
                         auto: true, silent: true, label: 'Auto backup', workspaceHash: hash, autoScheduleKey: scheduleKey
                     });
+                    if (result && result.uploaded) sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
+                    return result;
                 });
             } catch (error) {
-                loadSutraCloudMeta().lastError = error.message || 'Automatic backup failed.';
+                const failures = sutraCloudRuntime.autoBackupFailures = Math.min(6, (sutraCloudRuntime.autoBackupFailures || 0) + 1);
+                sutraCloudRuntime.autoBackupRetryAt = Date.now() + Math.min(1800000, 60000 * 2 ** (failures - 1));
+                loadSutraCloudMeta().lastError = 'Automatic backup failed. Retrying with increasing delays; local saving continues.';
+                if (window.SutraReportError) window.SutraReportError(error, { where: 'sutraCloud:autoBackup' }, 'warning');
                 persistSutraCloudMeta();
                 updateSutraCloudUi();
                 return { error: true };
@@ -59066,9 +58588,15 @@ function getActiveEditor() {
 
         function scheduleSutraCloudAutoBackup(delayMs = 60000) {
             if (sutraCloudAutoTimer) clearTimeout(sutraCloudAutoTimer);
-            sutraCloudAutoTimer = setTimeout(() => {
+            sutraCloudAutoTimer = setTimeout(async () => {
                 sutraCloudAutoTimer = null;
-                runSutraCloudAutoBackup('change');
+                const result = await runSutraCloudAutoBackup('change');
+                // A save during another upload still needs its own snapshot.
+                // Recheck transient contention at most once a minute; ordinary
+                // failures, unchanged work, and disabled schedules do not loop.
+                if (result && result.skipped && ['busy', 'lock-held'].includes(result.reason)
+                    && !sutraCloudAutoTimer && sutraCloudAutoReady()
+                    && loadSutraCloudMeta().autoBackup.frequency === 'change') scheduleSutraCloudAutoBackup(60000);
             }, delayMs);
         }
 
@@ -59102,6 +58630,7 @@ function getActiveEditor() {
                     }
                 });
                 window.addEventListener('pageshow', () => maybeSutraCloudAutoBackup('pageshow'));
+                window.addEventListener('online', () => { sutraCloudRuntime.autoBackupRetryAt = 0; maybeSutraCloudAutoBackup('online'); });
             } catch (e) { /* noop */ }
         }
 
@@ -59698,6 +59227,7 @@ function getActiveEditor() {
             const changed = !meta.autoBackup.enabled || frequency !== meta.autoBackup.frequency || dailyTime !== meta.autoBackup.dailyTime;
             meta.autoBackup = { ...meta.autoBackup, enabled, frequency, dailyTime,
                 dailyScheduleStartedAt: changed ? new Date().toISOString() : meta.autoBackup.dailyScheduleStartedAt };
+            if (changed || !enabled) sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
             if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
             persistSutraCloudMeta();
             updateSutraCloudUi();
@@ -62365,7 +61895,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             sutra2WorkspaceFields.forEach(key => {
                 if (Object.prototype.hasOwnProperty.call(data, key)) importedSutra2Fields[key] = data[key];
                 else if (workspace && Object.prototype.hasOwnProperty.call(workspace, key)) importedSutra2Fields[key] = workspace[key];
-                else importedSutra2Fields[key] = defaults[key];
+                else importedSutra2Fields[key] = key === 'assistantPermissions' ? { ...defaults[key], mode: 'off' } : defaults[key];
             });
 
             pages = normalizePagesCollection(importedPages);
@@ -62534,7 +62064,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 appSettings.customization.installedPlugins = importedPluginsApi.markForReviewOnImport(appSettings.customization.installedPlugins);
             }
             appSettings.preferences = normalizeWorkspacePreferences(
-                { ...settingsDefaults.preferences, ...(importedSettingsSource.preferences || {}) },
+                { ...settingsDefaults.preferences, ...(importedSettingsSource.preferences || {}),
+                    assistant: { contextDepth: 'currentView', chatMemoryMode: 'stateless', chatMemoryDepth: 10, ...(importedSettingsSource.preferences?.assistant || {}) } },
                 getLegacyPreferenceSeed({ ...settingsDefaults, ...importedSettingsSource })
             );
             if (localSyncPreference) {
@@ -62701,7 +62232,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             persistAppData();
             try { updateAtelierDataHealthUi(); } catch (err) { /* non-critical */ }
             try { syncOnboardingStatusUi(); } catch (err) { /* non-critical */ }
-            if (!options.silent) showToast('Workspace imported successfully!');
+            if (!options.silent && !options.deferSuccessToast) showToast('Workspace imported successfully!');
         }
 
         // ----------------------------------------------------------------------
@@ -63001,16 +62532,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     return page;
                 },
                 movePageToSpace(pageId, spaceId) {
-                    const page = pages.find(item => item && item.id === pageId);
-                    const target = spaces.find(space => space && space.id === spaceId);
-                    if (!page || !target || isHelpDocsPage(page)) return null;
-                    cleanupPinnedNotePageRefs();
-                    page.spaceId = target.id;
-                    page.updatedAt = new Date().toISOString();
-                    cleanupPinnedNotePageRefs();
-                    persistAppData();
-                    renderPagesList();
-                    return page;
+                    return movePageToSpace(pageId, spaceId);
                 },
                 togglePinPage: (pageId, spaceId) => toggleNotePagePin(pageId, spaceId || activeSpaceId || 'default'),
                 getPinnedNoteIds: (spaceId) => getPinnedNoteIdsForSpace(spaceId || activeSpaceId || 'default'),
@@ -63468,6 +62990,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 try { sutraSyncRuntime.engine.setVaultKey(null); } catch (error) {}
                 try { sutraSyncRuntime.engine.stop(); } catch (error) {}
             }
+            mountSutraRevokedScreen('This device was revoked. Sutra is securely removing local user data.', { allowReuse: false });
             try { await persistenceCommitQueue; } catch (error) {}
             try { workspaceCoordinator.close(); } catch (error) {}
             try { workspaceDb.close(); } catch (error) {}
@@ -63485,7 +63008,6 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             } catch (error) {}
             try { courseAttachmentCache.clear(); } catch (error) {}
             _importAttachmentWrites = [];
-            mountSutraRevokedScreen('This device was revoked. Sutra is securely removing local user data.');
         }
 
         function clearSutraRevokedInMemoryData(options = {}) {
@@ -63565,24 +63087,43 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         async function performVerifiedSutraRevocationWipe(transport) {
             if (sutraRevocationWipePromise) return sutraRevocationWipePromise;
             const channel = getSutraSyncBroadcastChannel();
-            try { window.SutraRevocationWipe.writeGuard(null, 'verified'); } catch (error) {}
-            try { if (channel) channel.postMessage({ type: 'revoke-wipe-start' }); } catch (error) {}
             sutraRevocationWipePromise = (async () => {
-                await enterSutraRevocationLock();
+                // Conceal and block this tab immediately, even while another tab
+                // owns the wipe lock. Retain failures without an unhandled promise.
+                const lockBarrier = enterSutraRevocationLock().then(
+                    () => ({ ok: true }), error => ({ ok: false, error })
+                );
                 const run = async () => {
-                    await window.SutraRevocationWipe.wipe({ preserveSessionUntilAcknowledged: true });
-                    const acknowledged = await transport.acknowledgeDeviceWipe({ at: new Date().toISOString() });
-                    if (!acknowledged || acknowledged.ok === false) {
-                        throw new Error('Local data was removed, but the server could not record the wipe acknowledgement.');
+                    try {
+                        const guard = window.SutraRevocationWipe.readGuard();
+                        const alreadyAcknowledged = guard && (guard.status === 'complete' || guard.status === 'complete-unverified');
+                        if (!alreadyAcknowledged) {
+                            window.SutraRevocationWipe.writeGuard(null, 'verified');
+                            try { if (channel) channel.postMessage({ type: 'revoke-wipe-start' }); } catch (error) {}
+                        }
+                        const locked = await lockBarrier;
+                        if (!locked.ok) throw locked.error;
+                        // A queued, independently verified tab must not turn a
+                        // completed origin wipe back into a new cleaning pass.
+                        if (!alreadyAcknowledged) {
+                            await window.SutraRevocationWipe.wipe({ preserveSessionUntilAcknowledged: true });
+                            const acknowledged = await transport.acknowledgeDeviceWipe({ at: new Date().toISOString() });
+                            if (!acknowledged || acknowledged.ok === false) {
+                                throw new Error('Local data was removed, but the server could not record the wipe acknowledgement.');
+                            }
+                        }
+                        window.SutraRevocationWipe.finalize();
+                        sutraRevocationGuard = window.SutraRevocationWipe.readGuard();
+                        clearSutraRevokedInMemoryData();
+                        try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
+                        mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
+                            ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                            : 'Local Sutra user data has been removed from this browser.');
+                        return true;
+                    } catch (error) {
+                        try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', error && error.message); } catch (guardError) {}
+                        throw error;
                     }
-                    window.SutraRevocationWipe.finalize();
-                    sutraRevocationGuard = window.SutraRevocationWipe.readGuard();
-                    clearSutraRevokedInMemoryData();
-                    try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
-                    mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
-                        ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
-                        : 'Local Sutra user data has been removed from this browser.');
-                    return true;
                 };
                 try {
                     if (navigator.locks && typeof navigator.locks.request === 'function') {
@@ -63590,10 +63131,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     }
                     return await run();
                 } catch (error) {
-                    try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', error && error.message); } catch (guardError) {}
+                    // A failed lock acquisition must not erase an existing
+                    // completion. If no guard exists, retain a recovery sentinel.
+                    try {
+                        if (!window.SutraRevocationWipe.readGuard()) {
+                            window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', 'Secure cleanup could not acquire its browser lock.');
+                        }
+                    } catch (guardError) {}
                     clearSutraRevokedInMemoryData({ preserveAuth: true });
                     sutraRevocationWipePromise = null;
-                    mountSutraRevokedScreen('Cleanup is incomplete. Sutra remains locked and will not show or save workspace data.');
+                    mountSutraRevokedScreen('Cleanup is incomplete. Sutra remains locked and will not show or save workspace data.', { allowReuse: false });
                     throw error;
                 }
             })();
@@ -63636,18 +63183,28 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     } else if (message && message.type === 'revoke-wipe-start') {
                         enterSutraRevocationLock().catch(() => {});
                     } else if (message && message.type === 'revoke-wipe-complete') {
-                        let followerCleanupComplete = true;
-                        try { window.SutraRevocationWipe.finalize(); } catch (error) {
-                            followerCleanupComplete = false;
-                            try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', 'A tab could not clear its session data.'); } catch (guardError) {}
+                        const finishFollower = () => {
+                            let followerCleanupComplete = true;
+                            try { window.SutraRevocationWipe.finalize(); } catch (error) {
+                                followerCleanupComplete = false;
+                                try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', error && error.message || 'A tab could not clear its session data.'); } catch (guardError) {}
+                            }
+                            clearSutraRevokedInMemoryData();
+                            const followerGuard = window.SutraRevocationWipe ? window.SutraRevocationWipe.readGuard() : null;
+                            mountSutraRevokedScreen(!followerCleanupComplete
+                                ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
+                                : (followerGuard && followerGuard.status === 'complete-unverified'
+                                    ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                                    : 'Local Sutra user data has been removed from this browser.'), { allowReuse: followerCleanupComplete });
+                        };
+                        if (navigator.locks && typeof navigator.locks.request === 'function') {
+                            navigator.locks.request('sutra-revoke-wipe-v1', { mode: 'exclusive' }, finishFollower).catch(() => {
+                                clearSutraRevokedInMemoryData();
+                                mountSutraRevokedScreen('Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.', { allowReuse: false });
+                            });
+                        } else {
+                            finishFollower();
                         }
-                        clearSutraRevokedInMemoryData();
-                        const followerGuard = window.SutraRevocationWipe ? window.SutraRevocationWipe.readGuard() : null;
-                        mountSutraRevokedScreen(!followerCleanupComplete
-                            ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
-                            : (followerGuard && followerGuard.status === 'complete-unverified'
-                                ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
-                                : 'Local Sutra user data has been removed from this browser.'));
                     }
                 };
             } catch (error) {
@@ -63936,8 +63493,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     if (!document.hidden && sutraSyncRuntime.engine) sutraSyncRuntime.engine.noteLocalChange();
                 });
                 setInterval(() => {
-                    if (sutraSyncRuntime.engine) sutraSyncRuntime.engine.noteLocalChange();
-                }, 5 * 60 * 1000);
+                    if (!document.hidden && sutraSyncRuntime.engine) sutraSyncRuntime.engine.noteLocalChange();
+                }, 2 * 60 * 1000);
             } catch (error) { /* non-critical */ }
         }
 
@@ -64147,8 +63704,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const list = document.createElement('ul');
             list.className = 'sync-guarantees';
             const rows = [
-                ['Synced to cloud', status.enabled ? formatSutraSyncTime(status.lastSyncAt) : 'Sync is off']
+                ['Synced to cloud (this session)', !status.enabled ? 'Sync is off'
+                    : status.lastSyncAt ? formatSutraSyncTime(status.lastSyncAt) : 'No successful cycle recorded this session']
             ];
+            if (status.lastErrorStage) rows.push(['Verification stopped at', status.lastErrorStage]);
+            if (status.lastErrorReference) rows.push(['Diagnostic reference', status.lastErrorReference]);
             if (status.enabled && status.outboxDepth > 0) rows.push(['Waiting to upload', String(status.outboxDepth) + ' change(s)']);
             if (status.enabled && status.conflictsPending > 0) rows.push(['Conflicts to review', String(status.conflictsPending)]);
             if (status.enabled && status.assetsPending > 0) rows.push(['Attachments still transferring', String(status.assetsPending)]);
@@ -64176,7 +63736,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (locked) locked.hidden = !(status.enabled && status.state === 'locked');
             if (running) running.hidden = !isRunning;
             const pauseBtn = sutraSyncEl('sutraSyncPauseBtn');
-            if (pauseBtn) pauseBtn.textContent = status.state === 'paused' ? 'Resume' : 'Pause';
+            if (pauseBtn) pauseBtn.textContent = status.state === 'encryption-error' ? 'Retry verification'
+                : status.state === 'paused' ? 'Resume' : 'Pause';
+            const syncNowBtn = sutraSyncEl('sutraSyncNowBtn');
+            if (syncNowBtn) syncNowBtn.disabled = status.state === 'encryption-error' || status.state === 'paused' || status.state === 'syncing';
             const signInHint = sutraSyncEl('sutraSyncSignInHint');
             if (signInHint) {
                 const cfg = getSutraCloudConfig();
@@ -64558,14 +64121,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 sutraSyncSetError('sutraSyncRunningError', '');
                 try {
                     const outcome = await window.SutraSync.syncNow();
-                    if (outcome && outcome.error) sutraSyncSetError('sutraSyncRunningError', String(outcome.error.message || outcome.error));
+                    if (outcome && outcome.error) sutraSyncSetError('sutraSyncRunningError', getSutraSyncStatus().lastError || 'Sync could not finish.');
+                    else if (outcome && outcome.skipped) showToast(outcome.reason === 'stale-tab'
+                        ? 'Reload this tab before syncing its newer saved workspace.' : 'Sync did not run. Check the Sync status and resume when ready.');
                     else showToast('Synced.');
                 } catch (error) { sutraSyncSetError('sutraSyncRunningError', error && error.message ? error.message : String(error)); }
                 updateSutraSyncUi();
             });
             on('sutraSyncPauseBtn', () => {
                 const status = getSutraSyncStatus();
-                if (status.state === 'paused') window.SutraSync.resume();
+                if (status.state === 'paused' || status.state === 'encryption-error') window.SutraSync.resume();
                 else window.SutraSync.pause();
                 updateSutraSyncUi();
             });
@@ -64937,13 +64502,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function importSpreadsheetFile(file) {
             // Pinned + vendored locally (see importDocxFile note above).
-            const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.18.5', 'XLSX', { local: true });
+            const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.20.3', 'XLSX', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
-            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            const workbook = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true });
             const sheetNames = workbook.SheetNames || [];
             if (!sheetNames.length) return '<p>(No sheets found)</p>';
+            const formulaReport = await window.SutraOfficeInterop.fillMissingFormulaResults(workbook,
+                /\.xlsx$/i.test(String(file.name || '')) ? { xlsxSource: arrayBuffer } : undefined);
 
             const blocks = [];
+            if (formulaReport.calculated) blocks.push('<p>Missing formula results were calculated locally. Imported notes are a static snapshot; use Sheets to keep formulas editable.</p>');
+            if (formulaReport.unavailable) blocks.push(`<p>${formulaReport.unavailable} formula result(s) could not be calculated. Their formulas are shown instead of blank cells.</p>`);
             sheetNames.slice(0, 8).forEach(sheetName => {
                 const sheet = workbook.Sheets[sheetName];
                 blocks.push(`<h3>${escapeHtml(sheetName)}</h3>`);
@@ -65219,22 +64788,18 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 return false;
             }
             try {
-                importWorkspacePayload(snap.payload);
-                // Await durable attachment writes BEFORE the reload below — a reload
-                // mid-write would drop any blob still only in the session cache.
-                let attachmentResult = { ok: true, failed: [], total: 0 };
-                try { attachmentResult = await flushImportedAttachmentWrites(); }
-                catch (e) { attachmentResult = { ok: false, failed: [], total: 0 }; }
-                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('snapshot-restore');
-                if (!attachmentResult.ok) {
-                    const n = attachmentResult.failed.length || attachmentResult.total;
-                    showToast(`Restored, but ${n} attachment${n === 1 ? '' : 's'} could not be saved durably — free up space and restore again. Reloading…`, { durationMs: 5000 });
-                } else {
-                    showToast('Workspace restored. Reloading…');
-                }
-                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, attachmentResult.ok ? 700 : 1600);
+                importWorkspacePayload(snap.payload, { deferSuccessToast: true });
+                // Do not reload or announce success before both durable stores finish.
+                await flushWorkspaceRestoreWrites('snapshot-restore');
+                showToast('Workspace restored. Reloading…');
+                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, 700);
                 return true;
-            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); return false; }
+            } catch (e) {
+                if (window.SutraReportError) window.SutraReportError(e, { where: 'snapshot:restore' }, 'warning');
+                showToast(e && e.code === 'restore-incomplete' ? e.message
+                    : 'Restore did not finish. Recovered content may be present but is not confirmed saved. Keep the original backup and Before restore snapshot, resolve storage errors, and try again.', { durationMs: 10000 });
+                return false;
+            }
         }
         function restoreNoteFromWorkspaceSnapshot(snapId, pageId) {
             const snap = getWorkspaceSnapshots().find(s => s && s.id === snapId);
@@ -65374,6 +64939,44 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return { ...imported, encrypted: false, legacyUnencrypted: true };
         }
 
+        async function flushWorkspaceRestoreWrites(reason) {
+            let attachmentResult = { ok: true, failed: [], total: 0 };
+            try { attachmentResult = await flushImportedAttachmentWrites(); }
+            catch (error) { attachmentResult = { ok: false, failed: [], total: 0 }; }
+            // JSON recovery files and local snapshots can contain file metadata
+            // without embedded bytes. An empty write queue does not prove those
+            // attachments exist, and the session cache is not durable storage.
+            const requiredFiles = (courseWorkspace.files || []).filter(file => file && file.storageType === 'indexeddb');
+            let storedKeys = new Set();
+            if (requiredFiles.length) {
+                try { storedKeys = new Set(await cwListStoredBlobKeys()); }
+                catch (error) {
+                    if (window.SutraReportError) window.SutraReportError(error, { where: 'restore:attachment-readback' }, 'warning');
+                }
+            }
+            const missingFiles = requiredFiles.filter(file => !file.blobKey || !storedKeys.has(String(file.blobKey)));
+            requiredFiles.forEach(file => { file.missingBlob = !file.blobKey || !storedKeys.has(String(file.blobKey)); });
+            const attachmentFailed = !attachmentResult.ok || missingFiles.length > 0;
+            let saveFailed = false;
+            try {
+                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow(reason);
+            } catch (error) {
+                saveFailed = true;
+                if (window.SutraReportError) window.SutraReportError(error, { where: 'restore:save' }, 'warning');
+                recordPersistenceFailure(new Error('Workspace restore could not confirm local saving.'), { reason: 'import-save', phase: 'import-save', kind: 'indexeddb' });
+            }
+            if (attachmentFailed || saveFailed) {
+                const n = attachmentResult.failed.length || attachmentResult.total;
+                const missing = !attachmentResult.ok ? `${n || 'Some'} attachments could not be saved. ` : '';
+                const unavailable = missingFiles.length ? `${missingFiles.length} required attachment${missingFiles.length === 1 ? '' : 's'} could not be verified in storage. ` : '';
+                const saving = saveFailed ? 'Local saving could not be confirmed. ' : '';
+                const error = new Error(`Workspace restore incomplete: ${missing}${unavailable}${saving}Recovered content is available in this session; keep the original backup, free up space, and import again.`);
+                error.code = 'restore-incomplete';
+                if (attachmentFailed) recordPersistenceFailure(error, { reason: 'attachment-restore', phase: 'import-save', kind: 'attachment' });
+                throw error;
+            }
+        }
+
         async function applyValidatedWorkspaceImport(workspacePayload, options = {}) {
             validateWorkspacePayloadForImport(workspacePayload);
             const interactiveRestore = options.skipConflictCheck !== true;
@@ -65459,25 +65062,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         return false;
                     }
                     if (typeof options.canApplyNow === 'function' && options.canApplyNow() === false) return false;
-                    importWorkspacePayload(workspacePayload);
+                    importWorkspacePayload(workspacePayload, { deferSuccessToast: true });
                     return true;
                 });
                 if (!applied) return false;
             } else {
-                importWorkspacePayload(workspacePayload);
+                importWorkspacePayload(workspacePayload, { deferSuccessToast: true });
             }
             // Durability gate: block on the imported attachment blob writes so we
             // never report a successful restore while file bytes are only in the
             // in-memory session cache (an immediate reload would lose them).
-            let attachmentResult = { ok: true, failed: [], total: 0 };
-            try { attachmentResult = await flushImportedAttachmentWrites(); }
-            catch (error) { attachmentResult = { ok: false, failed: [], total: 0 }; }
-            try {
-                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('import-workspace');
-            } catch (error) {
-                recordPersistenceFailure(error, { reason: 'import-save', phase: 'import-save', kind: 'indexeddb' });
-                throw error;
-            }
+            await flushWorkspaceRestoreWrites('import-workspace');
             const restored = serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
             if (!isWorkspacePayload(restored)) throw new Error('Workspace restore verification failed.');
             if (options.legacyUnencrypted) {
@@ -65485,14 +65080,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
             if (Array.isArray(options.warnings) && options.warnings.length) {
                 showToast(`Imported with ${options.warnings.length} warning${options.warnings.length === 1 ? '' : 's'}.`);
-            }
-            // Honest reporting: the workspace + attachment metadata are restored,
-            // but some file bytes did not reach durable storage (quota / IndexedDB
-            // failure). Tell the student exactly how many, instead of a silent
-            // "success" that loses attachments on the next reload.
-            if (!attachmentResult.ok) {
-                const n = attachmentResult.failed.length || attachmentResult.total;
-                showToast(`Imported, but ${n} attachment${n === 1 ? '' : 's'} could not be saved to durable storage — free up space and re-import to recover ${n === 1 ? 'it' : 'them'}. Everything else is restored.`, { durationMs: 7000 });
+            } else if (!options.legacyUnencrypted) {
+                showToast('Workspace imported successfully!');
             }
             return true;
         }
@@ -66025,7 +65614,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Flatten all emojis for search
         function getAllEmojis() {
-            let all = [];
+            let all = Object.keys(window.emojiSearchKeywordMap || {});
             Object.values(emojiCategories).forEach(arr => {
                 all = all.concat(arr);
             });
@@ -66193,6 +65782,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
                     // Curated keyword aliases for common icon intent.
                     const searchTerms = {
+                        'red': ['\u2764\uFE0F', '\u{1F534}', '\u{1F4D5}', '\u{1F6A9}'],
                         'heart': ['\u2764\uFE0F', '\u{1F9E1}', '\u{1F49B}', '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F90D}', '\u{1F90E}', '\u{1F495}', '\u{1F49E}', '\u{1F493}', '\u{1F497}', '\u{1F496}'],
                         'love': ['\u2764\uFE0F', '\u{1F49B}', '\u{1F49C}', '\u{1F495}', '\u{1F496}', '\u{1F497}', '\u{1F498}', '\u{1F49D}', '\u{1F618}', '\u{1F970}'],
                         'star': ['\u2B50', '\u{1F31F}', '\u2728', '\u{1F4AB}', '\u{1F320}'],
@@ -66291,6 +65881,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         ? allEmojis.filter(emoji => {
                             const tokens = keywordMap[emoji];
                             if (!Array.isArray(tokens) || tokens.length === 0) return false;
+                            const words = qRaw.split(/[\s_-]+/).filter(Boolean);
+                            const combined = tokens.join(' ').toLowerCase();
+                            if (words.length > 1) return words.every(word => combined.includes(word));
                             return tokens.some(token => {
                                 const rawToken = String(token || '').toLowerCase();
                                 if (!rawToken) return false;
@@ -66311,11 +65904,22 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         ...matchedByGlyph,
                         ...matchedByKeyword
                     ]);
-                    const filteredInCategory = emojis.filter(emoji => candidateSet.has(emoji));
+                    const queryWords = qRaw.split(/[\s_-]+/).filter(Boolean);
+                    const extraTerms = new Map();
+                    [...Object.entries(searchTerms), ...Object.entries(emojiCategories)].forEach(([term, list]) => {
+                        const label = term.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+                        list.forEach(emoji => extraTerms.set(emoji, (extraTerms.get(emoji) || '') + ' ' + label));
+                    });
+                    const matchesQuery = emoji => {
+                        if (queryWords.length < 2) return candidateSet.has(emoji);
+                        const words = ((keywordMap && keywordMap[emoji]) || []).join(' ').toLowerCase() + ' ' + (extraTerms.get(emoji) || '');
+                        return queryWords.every(word => words.includes(word));
+                    };
+                    const filteredInCategory = emojis.filter(matchesQuery);
                     if (filteredInCategory.length > 0 || currentEmojiCategory === 'All') {
                         emojis = filteredInCategory;
                     } else {
-                        emojis = allEmojis.filter(emoji => candidateSet.has(emoji));
+                        emojis = allEmojis.filter(matchesQuery);
                     }
                 }
             }
@@ -66333,7 +65937,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     option.type = 'button';
                     option.className = 'emoji-option';
                     option.textContent = emoji;
-                    option.setAttribute('aria-label', `Use ${emoji} as page icon`);
+                    const names = (window.emojiSearchKeywordMap || {})[emoji];
+                    option.setAttribute('aria-label', `Use ${names && names.length ? names.slice(0, 3).join(', ') + ' ' : ''}${emoji} as page icon`);
                     option.addEventListener('click', () => setPageIcon(emoji));
                     fragment.appendChild(option);
                 });
@@ -67321,6 +66926,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             };
             return {
                 getPage: pageForMirror,
+                isHelpDocument: () => isHelpDocsPage(pageForMirror()),
                 activateComment(id) {
                     setActiveEditorPane(mirror.id === 'editorSecondary' ? 'secondary' : 'primary');
                     focusCommentThread(id);
@@ -68367,6 +67973,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function loadPageContentIntoEditor(editor, page) {
             if (!editor || !page) return;
+            delete editor.dataset.pageId;
             if (!isPageContentAuthorized(page)) {
                 disposeDrawingControllersForEditor(editor);
                 editor.contentEditable = 'false';
@@ -68375,7 +67982,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     : editor.id === 'editorSecondary' && notesSecondaryEditorV2?.isMounted() ? notesSecondaryEditorV2 : null;
                 if (modern) {
                     try {
-                        modern.setContent('');
+                        // A lock is a document boundary: discard the old undo
+                        // history as well as its rendered and mirrored plaintext.
+                        modern.loadDocument('');
                     } catch (err) { /* privacy surface is already cleared */ }
                 }
                 return;
@@ -68429,6 +68038,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Render this page's document background (if any) behind the note surface.
             applyDocumentBackgroundForEditor(editor, page);
             renderComments();
+            editor.dataset.pageId = String(page.id || '');
         }
 
         /* ====================================================================
@@ -71345,6 +70955,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 scrollContainer.scrollTop = nextTop;
             }
 
+            // Move keyboard navigation with the reading position, without
+            // letting browser focus scroll the heading behind the toolbar.
+            if (isHelpDocsPage(getPageForEditor(editor))) {
+                targetEl.setAttribute('tabindex', '-1');
+                targetEl.focus({ preventScroll: true });
+            }
+
             return true;
         }
 
@@ -71365,9 +70982,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 if (tooltip.contains(e.target)) return; // Clicked inside tooltip
 
                 const anchorBtn = e.target && e.target.closest ? e.target.closest('button[data-editor-anchor]') : null;
-                if (anchorBtn && editor.contains(anchorBtn)) {
+                const anchorEditor = anchorBtn && anchorBtn.closest('#editor, #editorSecondary, #editorV2Host, #editorV2SecondaryHost');
+                if (anchorEditor && (anchorEditor === editor || isHelpDocsPage(getPageForEditor(anchorEditor)))) {
                     const targetId = anchorBtn.getAttribute('data-editor-anchor') || '';
-                    if (navigateEditorAnchorTarget(targetId, editor)) {
+                    if (navigateEditorAnchorTarget(targetId, anchorEditor)) {
                         e.preventDefault();
                         e.stopPropagation();
                         tooltip.classList.remove('active');
@@ -71593,6 +71211,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // ==================== SLASH COMMANDS ====================
         const slashCommands = [
+            ...['grammar', 'spelling', 'rephrase'].map(id => ({ id, icon: 'fa-wand-magic-sparkles', title: '/' + id, desc: 'Edit only selected or explicitly entered text', writingCommand: true })),
             { id: 'ai', icon: 'fa-wand-magic-sparkles', title: 'Sutra Assistant writing help', desc: 'Open the Assistant with a writing prompt', action: () => { const input = document.getElementById('chatInput'); if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') window.flowAssistant.askFlow(input && input.value || 'Help me improve the writing in this note while preserving my meaning.', { send: false }); else showToast('Sutra Assistant is unavailable.'); } },
             { id: 'assistant', icon: 'fa-robot', title: 'Sutra Assistant general help', desc: 'Open the Assistant mini panel', action: () => { const input = document.getElementById('chatInput'); if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') window.flowAssistant.askFlow(input && input.value || '', { send: false }); else showToast('Sutra Assistant is unavailable.'); } },
             { id: 'h1', icon: 'fa-heading', title: 'Heading 1', desc: 'Large section heading', action: () => formatBlock('h1') },
@@ -71633,6 +71252,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         let slashMenuSelectedIndex = 0;
         let slashTriggerRange = null;
         let slashFilterText = '';
+        let slashWritingSelection = false;
         let slashCommandExecuting = false;
         
         function initSlashCommands() {
@@ -71640,6 +71260,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             
             editor.addEventListener('keydown', handleSlashKeydown);
             editor.addEventListener('input', handleSlashInput);
+            document.getElementById('slashMenu').addEventListener('mousedown', event => event.preventDefault());
         }
         
         function handleSlashInput(e) {
@@ -71674,7 +71295,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function handleSlashKeydown(e) {
+            const selection = window.getSelection();
+            const editor = document.getElementById('editor');
+            if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && selection && selection.rangeCount && !selection.isCollapsed) {
+                const selected = selection.getRangeAt(0);
+                if (editor && editor.isContentEditable && editor.contains(selected.commonAncestorContainer)) {
+                    e.preventDefault(); slashWritingSelection = true; slashTriggerRange = selected.cloneRange();
+                    showSlashMenu(); renderSlashMenuItems(getFilteredCommands()); return;
+                }
+            }
             if (!slashMenuVisible) return;
+            if (slashWritingSelection && (/^[a-z]$/i.test(e.key) || e.key === 'Backspace')) {
+                e.preventDefault();
+                slashFilterText = e.key === 'Backspace' ? slashFilterText.slice(0, -1) : slashFilterText + e.key.toLowerCase();
+                slashMenuSelectedIndex = 0; renderSlashMenuItems(getFilteredCommands()); return;
+            }
             
             const filteredCommands = getFilteredCommands();
             
@@ -71731,8 +71366,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function getFilteredCommands() {
-            if (!slashFilterText) return slashCommands;
-            return slashCommands.filter(cmd => 
+            const candidates = slashWritingSelection ? slashCommands.filter(cmd => cmd.writingCommand) : slashCommands;
+            if (!slashFilterText) return candidates;
+            return candidates.filter(cmd =>
                 cmd.title.toLowerCase().includes(slashFilterText) ||
                 cmd.id.toLowerCase().includes(slashFilterText)
             );
@@ -71762,7 +71398,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function hideSlashMenu(cleanupEditor = false) {
             // On explicit cancel (Escape), remove the "/" and any typed filter text
             // so they don't end up as stray content in the note.
-            if (cleanupEditor && slashTriggerRange) {
+            if (cleanupEditor && !slashWritingSelection && slashTriggerRange) {
                 try {
                     const sel = window.getSelection();
                     if (sel && sel.rangeCount) {
@@ -71779,6 +71415,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             slashMenuVisible = false;
             slashTriggerRange = null;
             slashFilterText = '';
+            slashWritingSelection = false;
         }
         
         function renderSlashMenuItems(commands) {
@@ -71793,8 +71430,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             
             container.innerHTML = commands.map((cmd, index) => `
                 <div class="slash-menu-item ${index === slashMenuSelectedIndex ? 'selected' : ''}" 
-                     onclick="executeSlashCommand(slashCommands.find(c => c.id === '${cmd.id}'))"
-                     onmouseenter="slashMenuSelectedIndex = ${index}; renderSlashMenuItems(getFilteredCommands());">
+                     onclick="executeSlashCommand(slashCommands.find(c => c.id === '${cmd.id}'))">
                     <div class="slash-menu-item-icon">
                         <i class="fas ${cmd.icon}"></i>
                     </div>
@@ -71804,6 +71440,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     </div>
                 </div>
             `).join('');
+            container.querySelectorAll('.slash-menu-item').forEach((item, index) => {
+                item.addEventListener('mouseenter', () => {
+                    slashMenuSelectedIndex = index;
+                    container.querySelectorAll('.slash-menu-item').forEach((row, rowIndex) => row.classList.toggle('selected', rowIndex === index));
+                });
+            });
             menu.scrollTop = previousScrollTop;
             const selected = container.querySelector('.slash-menu-item.selected');
             if (selected) {
@@ -71817,10 +71459,58 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
         }
         
+        async function openClassicWritingCommand(command, range, selected) {
+            const editor = document.getElementById('editor');
+            const pageId = currentPageId;
+            const page = pages.find(item => item.id === pageId);
+            const writing = window.SutraWritingCommands;
+            if (!editor || !page || !range || !writing || !canWritePageContent(page)) return;
+            const baseline = editor.innerHTML;
+            const original = range.toString();
+            if (selected && (!original.trim() || range.cloneContents().querySelector('*')
+                || range.startContainer.parentElement?.closest('a, code, pre') || range.endContainer.parentElement?.closest('a, code, pre'))) {
+                showToast('Select ordinary text within one paragraph, without links, code, or embedded items.'); return;
+            }
+            if (!selected && !/^\/[a-z]*$/i.test(original)) return;
+            const scope = selected ? null : writing.captureClassicNote(editor, range);
+            const isCurrent = () => currentPageId === pageId && pages.find(item => item.id === pageId) === page
+                && editor === document.getElementById('editor') && editor.isContentEditable && !workspaceImportInProgress
+                && canWritePageContent(page) && baseline === editor.innerHTML
+                && editor.contains(range.startContainer) && editor.contains(range.endContainer) && range.toString() === original;
+            const result = await writing.open(command, { text: selected ? original : (scope?.text || ''), isCurrent, scopeLabel: scope?.scopeLabel, validateDraft: scope?.validateDraft });
+            if (!result || !isCurrent()) return;
+            noteUndoManager.cancelPendingPushes();
+            noteUndoManager.push(editor);
+            editor.focus();
+            const selection = window.getSelection();
+            const changes = scope ? scope.replacements(result.text) : [{ range, text: result.text }];
+            let applied = true;
+            for (const change of changes) {
+                selection.removeAllRanges(); selection.addRange(change.range);
+                if (!document.execCommand('insertText', false, change.text)) { applied = false; break; }
+            }
+            noteUndoManager.push(editor);
+            if (!applied) { if (editor.innerHTML !== baseline) noteUndoManager.undo(editor); showToast('Could not apply the draft. Restored the original text.'); return; }
+            queueSaveForEditor(editor);
+            updateWordCount();
+        }
+
         async function executeSlashCommand(command) {
             // Insert-once guard: ignore re-entrant calls (e.g. Enter + click racing) so a
             // command never fires twice and duplicates a block.
             if (slashCommandExecuting) return;
+            if (command && command.writingCommand) {
+                const selection = window.getSelection();
+                if (!slashTriggerRange || !selection || !selection.rangeCount) return;
+                const range = slashTriggerRange.cloneRange();
+                const selected = slashWritingSelection;
+                if (!selected) range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset);
+                hideSlashMenu(); slashCommandExecuting = true;
+                try { await openClassicWritingCommand(command.id, range, selected); }
+                catch (error) { showToast('Writing help could not open. Your text was left unchanged.'); }
+                finally { slashCommandExecuting = false; }
+                return;
+            }
             // Remove the slash and any filter text, leaving the caret where the slash was so
             // the command inserts at the expected position.
             if (slashTriggerRange) {
@@ -73054,6 +72744,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function setModelForProvider(provider, model) {
             const map = getModelMap();
             map[provider] = String(model || '').trim();
+            // An explicit dropdown selection replaces an older custom override.
+            setCustomModelForProvider(provider, '');
+            if (provider === getCurrentChatProvider()) {
+                if (chatCustomModelInput) chatCustomModelInput.value = '';
+                if (chatModelSelect) chatModelSelect.value = map[provider];
+            }
             if (window.SutraSafeStorage) window.SutraSafeStorage.set(CHAT_MODEL_MAP_KEY, JSON.stringify(map), { importance: 'optional' });
             else { try { localStorage.setItem(CHAT_MODEL_MAP_KEY, JSON.stringify(map)); } catch (e) { /* optional */ } }
         }
@@ -73080,14 +72776,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const config = CHAT_PROVIDER_CONFIG[provider];
             if (!config) return [];
             const cacheKey = `chat_models_cache_${provider}`;
-            let list = [];
+            let list = null;
             try {
-                const parsed = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+                const raw = localStorage.getItem(cacheKey);
+                const parsed = raw == null ? null : JSON.parse(raw);
                 if (Array.isArray(parsed)) list = parsed;
             } catch (error) {
                 console.warn(`Unable to parse cached models for ${provider}`, error);
             }
-            const merged = [...(config.models || []), ...list]
+            // A successful live catalog replaces seed IDs, including removals.
+            const merged = (list === null ? (config.models || []) : list)
                 .map(model => String(model || '').trim())
                 .filter(Boolean);
             return Array.from(new Set(merged))
@@ -73151,7 +72849,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         // accepts a reasoning/thinking control, and offers exactly the levels
         // that model supports. Hidden (and inert) for everything else, so the
         // request is sent unchanged when there is no real control to expose.
-        const REASONING_LEVEL_LABELS = { auto: 'Auto', off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High' };
+        const REASONING_LEVEL_LABELS = { auto: 'Auto', off: 'Off', none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Maximum' };
         // `els` defaults to the floating panel's row/select/note; the full-screen
         // tab's model picker passes its OWN elements so both surfaces share this
         // one implementation instead of drifting apart with separate copies.
@@ -73167,6 +72865,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 : { supported: false, levels: [], supportsOff: false };
             if (!caps || !caps.supported) {
                 row.setAttribute('hidden', '');
+                if (row.id === 'asstReasoningRow') {
+                    document.getElementById('asstReasoningMenu').hidden = true;
+                    document.getElementById('asstReasoningTrigger').setAttribute('aria-expanded', 'false');
+                }
                 if (note) note.setAttribute('hidden', '');
                 return;
             }
@@ -73174,15 +72876,48 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const choices = ['auto'].concat(caps.supportsOff ? ['off'] : [], caps.levels);
             const current = String(getWorkspacePreference('assistant.reasoningEffort', 'auto') || 'auto').toLowerCase();
             const effective = choices.indexOf(current) !== -1 ? current : 'auto';
-            select.replaceChildren(...choices.map(level => {
+            if (select.tagName === 'SELECT') select.replaceChildren(...choices.map(level => {
                 const opt = document.createElement('option');
                 opt.value = level;
                 opt.textContent = REASONING_LEVEL_LABELS[level] || level;
                 return opt;
             }));
             select.value = effective;
+            if (row.id === 'asstReasoningRow') {
+                const trigger = document.getElementById('asstReasoningTrigger');
+                const label = REASONING_LEVEL_LABELS[effective] || effective;
+                document.getElementById('asstReasoningValue').textContent = label;
+                trigger.setAttribute('aria-label', 'Thinking effort: ' + label);
+                trigger.setAttribute('aria-expanded', 'false');
+                document.getElementById('asstReasoningMenu').hidden = true;
+                document.getElementById('asstReasoningOptions').replaceChildren(...choices.map(level => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'asst-reasoning-option';
+                    button.dataset.effort = level;
+                    button.setAttribute('role', 'menuitemradio');
+                    button.setAttribute('aria-checked', String(level === effective));
+                    button.tabIndex = level === effective ? 0 : -1;
+                    const text = document.createElement('span');
+                    text.textContent = REASONING_LEVEL_LABELS[level] || level;
+                    const check = document.createElement('i');
+                    check.className = 'fas fa-check';
+                    check.setAttribute('aria-hidden', 'true');
+                    button.append(text, check);
+                    return button;
+                }));
+            }
             row.removeAttribute('hidden');
             if (note) note.removeAttribute('hidden');
+        }
+
+        function formatAssistantAttachmentProblems(gate) {
+            const problems = gate && Array.isArray(gate.problems) ? gate.problems : [];
+            return problems.slice(0, 4).map(problem => {
+                if (typeof problem === 'string') return problem;
+                const item = problem || {};
+                return (item.name || 'Attachment') + ': ' + (item.plan && (item.plan.reason || item.plan.label) || 'incompatible with the selected model');
+            }).join('\n') || 'Unsupported attachment. Remove the file or select a compatible model.';
         }
 
         function normalizeModelIdFromGeminiName(value) {
@@ -73192,34 +72927,52 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function fetchProviderModels(provider, apiKey) {
             const config = CHAT_PROVIDER_CONFIG[provider];
-            if (!config || !apiKey) return [];
+            if (!config) return [];
+            if (provider === 'local') {
+                const local = getWorkspacePreference('assistant.localEndpoint', {}) || {};
+                const base = String(local.baseUrl || '').trim().replace(/\/+$/, '');
+                if (!base) throw new Error('Configure the local endpoint base URL first.');
+                const response = await fetch(base + '/models', { method: 'GET', headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+                return (Array.isArray(data.data) ? data.data : Array.isArray(data.models) ? data.models : [])
+                    .map(item => String(item && (item.id || item.name) || '').trim()).filter(Boolean);
+            }
             // Providers with no model-listing API (e.g. Perplexity) ship a static
             // list in config.models — return it so "Refresh" still works.
             if (!String(config.modelsEndpoint || '').trim()) {
                 return Array.isArray(config.models) ? config.models.slice() : [];
             }
-            if (provider === 'gemini') {
-                const url = `${config.modelsEndpoint}?key=${encodeURIComponent(apiKey)}&pageSize=200`;
-                const resp = await fetch(url, { method: 'GET' });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
-                return (Array.isArray(data.models) ? data.models : [])
-                    .filter(model => Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'))
-                    .map(model => normalizeModelIdFromGeminiName(model.name))
-                    .filter(Boolean);
-            }
-
-            if (provider === 'anthropic') {
-                const resp = await fetch(config.modelsEndpoint, {
-                    method: 'GET',
-                    headers: {
-                        'anthropic-version': '2023-06-01',
-                        'x-api-key': apiKey
+            if (!apiKey) return [];
+            if (provider === 'gemini' || provider === 'anthropic') {
+                const models = [];
+                const seen = new Set();
+                let cursor = '';
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 20000);
+                try {
+                    for (let page = 0; page < 100; page += 1) {
+                        const url = new URL(config.modelsEndpoint);
+                        const headers = provider === 'gemini'
+                            ? { 'x-goog-api-key': apiKey }
+                            : { 'anthropic-version': '2023-06-01', 'x-api-key': apiKey, 'anthropic-dangerous-direct-browser-access': 'true' };
+                        url.searchParams.set(provider === 'gemini' ? 'pageSize' : 'limit', provider === 'gemini' ? '1000' : '100');
+                        if (cursor) url.searchParams.set(provider === 'gemini' ? 'pageToken' : 'after_id', cursor);
+                        const resp = await fetch(url.toString(), { method: 'GET', headers, signal: controller.signal });
+                        const data = await resp.json();
+                        if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+                        const rows = provider === 'gemini' ? (data.models || []) : (data.data || []);
+                        if (!Array.isArray(rows)) throw new Error('Provider returned an invalid model list.');
+                        models.push(...rows.filter(model => provider !== 'gemini' || (Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent')))
+                            .map(model => provider === 'gemini' ? normalizeModelIdFromGeminiName(model.name) : String(model.id || '').trim()).filter(Boolean));
+                        const next = provider === 'gemini' ? String(data.nextPageToken || '') : (data.has_more ? String(data.last_id || '') : '');
+                        if (!next && !(provider === 'anthropic' && data.has_more)) return Array.from(new Set(models));
+                        if (!next || seen.has(next)) throw new Error('Provider model pagination did not advance.');
+                        seen.add(next);
+                        cursor = next;
                     }
-                });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
-                return (Array.isArray(data.data) ? data.data : []).map(model => String(model?.id || '').trim()).filter(Boolean);
+                    throw new Error('Provider model list exceeded the pagination limit.');
+                } finally { clearTimeout(timeout); }
             }
 
             const headers = { Authorization: `Bearer ${apiKey}` };
@@ -73232,16 +72985,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
             const modelRows = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
             const all = modelRows.map(model => String(model?.id || '').trim()).filter(Boolean);
-            if (provider === 'openai') {
-                return all.filter(model => /gpt|o\d|omni|mini|nano/i.test(model));
-            }
             return all;
         }
 
-        async function refreshModelsForCurrentProvider() {
+        async function refreshModelsForCurrentProvider(options = {}) {
             const provider = getCurrentChatProvider();
             const apiKey = getProviderApiKey(provider);
-            if (!apiKey) {
+            if (!apiKey && provider !== 'local') {
+                if (options.automatic === true) return;
                 showToast(`Save a ${CHAT_PROVIDER_CONFIG[provider].label} API key in Settings first`);
                 openProviderKeySettings();
                 return;
@@ -73252,15 +73003,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
             try {
                 const fetched = await fetchProviderModels(provider, apiKey);
+                cacheModels(provider, fetched);
+                if (provider !== getCurrentChatProvider()) return;
+                renderModelOptions(provider);
+                syncReasoningControl(provider);
                 if (fetched.length) {
-                    cacheModels(provider, fetched);
-                    renderModelOptions(provider);
-                    showToast(`Loaded ${fetched.length} models for ${CHAT_PROVIDER_CONFIG[provider].label}`);
-                } else {
+                    if (options.automatic !== true) showToast(`Loaded ${fetched.length} models for ${CHAT_PROVIDER_CONFIG[provider].label}`);
+                } else if (options.automatic !== true) {
                     showToast(`No models returned by ${CHAT_PROVIDER_CONFIG[provider].label}`);
                 }
             } catch (error) {
-                showToast(`Model refresh failed: ${error.message}`);
+                if (options.automatic !== true) showToast(`Model refresh failed: ${error.message}`);
             } finally {
                 if (refreshChatModelsBtn) {
                     refreshChatModelsBtn.disabled = false;
@@ -73325,6 +73078,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const activeProvider = getCurrentChatProvider();
                 populateKeyInputsFromStorage();
                 syncProviderUi(activeProvider);
+                refreshModelsForCurrentProvider({ automatic: true });
                 try { if (window.flowAssistant && typeof window.flowAssistant.refresh === 'function') window.flowAssistant.refresh(); } catch (e) { /* non-critical */ }
                 playAssistantOpenSparkles();
                 setTimeout(()=> chatInput.focus(), 120);
@@ -73352,16 +73106,6 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             chatInfo.style.display = 'none';
             // reset z-index so styles revert to CSS defaults
             chatInfo.style.zIndex = '';
-        }
-
-        // basic HTML-escaping to avoid accidental injection
-        function escapeHtml(unsafe) {
-            return unsafe
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
         }
 
         function isSafeHtmlEmbedUrl(rawUrl) {
@@ -73795,7 +73539,10 @@ ${cspMeta}
                     return `<a href="#" class="sutra-cite" role="button" data-cite-kind="${escapeHtml(String(kind).toLowerCase())}" data-cite-id="${escapeHtml(id)}" title="Open in Sutra"><span class="sutra-cite-mark" aria-hidden="true">↗</span>${label}</a>`;
                 });
                 s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
-                s = s.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>');
+                s = s.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/g).map(part => /^<a\b/.test(part) ? part : part.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, raw => {
+                    const url = raw.replace(/[.,;:!?]+$/, '');
+                    return '<a href="' + url + '" target="_blank" rel="noreferrer noopener">' + url + '</a>' + raw.slice(url.length);
+                })).join('');
                 return s;
             }
 
@@ -74050,10 +73797,12 @@ ${cspMeta}
         function saveConvo() {
             const current = ensureCurrentConversation();
             const now = new Date().toISOString();
-            const cleaned = (Array.isArray(convo) ? convo : [])
+            convo = (Array.isArray(convo) ? convo : [])
+                .map(message => sanitizeAssistantChatMessage(message, { preserveProposals: true }))
+                .filter(Boolean);
+            const cleaned = convo
                 .map(sanitizeAssistantChatMessage)
                 .filter(Boolean);
-            convo = cleaned;
             current.messages = cleaned;
             current.updatedAt = now;
             current.title = current.title && current.title !== 'New chat' ? current.title : inferChatTitle(cleaned);
@@ -74742,6 +74491,15 @@ ${cspMeta}
             kind = String(kind || '').toLowerCase();
             id = String(id || '');
             try {
+                if (kind === 'entity') {
+                    const registry = window.SutraWorkspaceEntityRegistry;
+                    if (registry && typeof registry.open === 'function') {
+                        Promise.resolve(registry.open(decodeURIComponent(id))).then(result => {
+                            if (!result || !result.ok) showToast('This source is no longer available.');
+                        }).catch(error => { if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { source: 'assistant-citation' }); });
+                    }
+                    return;
+                }
                 if (kind === 'page' || kind === 'note') {
                     const p = Array.isArray(pages) ? pages.find(pg => String(pg.id) === id) : null;
                     if (p && typeof loadPage === 'function') { loadPage(p.id); return; }
@@ -74768,81 +74526,22 @@ ${cspMeta}
             });
         } catch (e) { /* no document */ }
 
+        function appendAssistantResponseDetails(host, sections) {
+            const card = window.SutraAssistantCore?.buildResponseDetailsCard?.(sections, { document });
+            if (card) host.appendChild(card);
+            else sections.filter(Boolean).forEach(section => host.appendChild(section));
+        }
+
         function buildAssistantSourcesPanel(rawSources, grounding) {
-            const sources = (Array.isArray(rawSources) ? rawSources : []).filter(source => source && source.noteId).slice(0, 20);
-            if (!sources.length) return null;
-            const details = document.createElement('details');
-            details.className = 'assistant-sources';
-            const summary = document.createElement('summary');
-            summary.className = 'assistant-sources-summary';
-            const status = grounding && grounding.evidenceStatus ? String(grounding.evidenceStatus) : 'supported';
-            summary.textContent = 'Sources used (' + sources.length + ') · ' + (status === 'limited' ? 'limited evidence' : 'grounded in notes');
-            details.appendChild(summary);
-            const list = document.createElement('div');
-            list.className = 'assistant-sources-list';
-            sources.forEach(source => {
-                const live = resolveAssistantReceiptSource('note', source.noteId);
-                const unavailable = !live;
-                const locked = !!(live && live.locked);
-                const item = document.createElement('article');
-                item.className = 'assistant-source-card' + (source.stale || unavailable ? ' is-stale' : '');
-                if (!unavailable && !locked) {
-                    const open = document.createElement('button');
-                    open.type = 'button';
-                    open.className = 'assistant-source-open';
-                    open.textContent = live.title || source.title || 'Untitled note';
-                    open.setAttribute('aria-label', 'Open source note ' + (live.title || source.title || 'Untitled'));
-                    open.addEventListener('click', () => navigateToCitation('page', source.noteId));
-                    item.appendChild(open);
-                } else {
-                    const unavailableLabel = document.createElement('strong');
-                    unavailableLabel.textContent = unavailable ? 'Source no longer available' : (live.title || source.title || 'Locked note');
-                    item.appendChild(unavailableLabel);
+            const core = window.SutraAssistantCore;
+            if (!core || typeof core.buildSourcesPanel !== 'function') return null;
+            return core.buildSourcesPanel(rawSources, grounding, {
+                document, resolveSource: resolveAssistantReceiptSource,
+                openSource: source => navigateToCitation(source.noteId ? 'page' : 'entity', source.noteId || encodeURIComponent(source.key)),
+                excludeSource: id => {
+                    if (window.SutraAssistantChats) window.SutraAssistantChats.excludeSource(id);
                 }
-                if (Array.isArray(source.headingPath) && source.headingPath.length) {
-                    const heading = document.createElement('div');
-                    heading.className = 'assistant-source-heading';
-                    heading.textContent = source.headingPath.join(' › ');
-                    item.appendChild(heading);
-                }
-                if (source.quote && !unavailable && !locked) {
-                    const quote = document.createElement('blockquote');
-                    quote.className = 'assistant-source-quote';
-                    quote.textContent = source.quote;
-                    item.appendChild(quote);
-                }
-                const meta = document.createElement('div');
-                meta.className = 'assistant-source-meta';
-                const reasons = (Array.isArray(source.reasonCodes) ? source.reasonCodes : []).map(reason => String(reason).replace(/_/g, ' ')).slice(0, 3);
-                const bits = [];
-                if (source.updatedAt) {
-                    const parsed = new Date(source.updatedAt);
-                    if (!Number.isNaN(parsed.getTime())) bits.push('Updated ' + parsed.toLocaleDateString());
-                }
-                if (reasons.length) bits.push('Why: ' + reasons.join(', '));
-                if (unavailable) bits.push('Source no longer available');
-                if (locked) bits.push('Locked · body not available to Assistant');
-                if (source.stale) bits.push('May be stale');
-                if (Array.isArray(source.safetyFlags) && source.safetyFlags.length) bits.push('Untrusted instructions ignored');
-                if (source.confidence) bits.push(source.confidence + ' confidence');
-                meta.textContent = bits.join(' · ');
-                item.appendChild(meta);
-                const exclude = document.createElement('button');
-                exclude.type = 'button';
-                exclude.className = 'assistant-source-exclude';
-                exclude.textContent = 'Do not use next time';
-                exclude.setAttribute('aria-label', 'Exclude this source from the next request');
-                exclude.addEventListener('click', () => {
-                    if (!window.SutraAssistantChats || typeof window.SutraAssistantChats.excludeSource !== 'function') return;
-                    window.SutraAssistantChats.excludeSource(source.id);
-                    exclude.disabled = true;
-                    exclude.textContent = 'Excluded from next request';
-                });
-                item.appendChild(exclude);
-                list.appendChild(item);
             });
-            details.appendChild(list);
-            return details;
         }
 
         function buildAssistantClaimBadge(claimType) {
@@ -74943,35 +74642,29 @@ ${cspMeta}
                 const block = Array.isArray(timeBlocks) ? timeBlocks.find(row => row && String(row.id) === sid) : null;
                 return block ? { id: block.id, kind: 'timeline', title: block.name || block.title || 'Timeline block', updatedAt: block.updatedAt || '' } : null;
             }
+            const registry = window.SutraWorkspaceEntityRegistry;
+            if (registry && typeof registry.find === 'function') {
+                const entity = registry.find(kind + ':' + sid);
+                if (entity) return { id: entity.id, kind: entity.type, title: entity.title, updatedAt: entity.dates && entity.dates.updated || '',
+                    locked: !!(entity.privacy && entity.privacy.locked), href: 'sutra://entity/' + encodeURIComponent(entity.key) };
+            }
             return null;
         }
 
         function buildAssistantResponseReceipt(enrichment, meta = {}) {
-            const safety = window.SutraAssistantSafety;
-            if (!safety || typeof safety.normalizeReceipt !== 'function') return null;
-            const ctx = enrichment && enrichment.context || {};
-            const access = ctx.accessReport || {};
-            const attachments = enrichment && Array.isArray(enrichment.attachments) ? enrichment.attachments : [];
-            const messages = enrichment && Array.isArray(enrichment.requestMessages) ? enrichment.requestMessages : [];
-            const budget = enrichment && enrichment.contextBudget;
-            const areas = Array.isArray(access.areasRead) ? access.areasRead : [];
-            const sources = (enrichment && Array.isArray(enrichment.sources) ? enrichment.sources : []).map(source => ({ kind: 'note', id: source.noteId, title: source.title, updatedAt: source.updatedAt, version: source.version, href: 'sutra://page/' + encodeURIComponent(source.noteId || ''), status: source.stale ? 'stale' : 'available' }));
-            const categories = ['message'].concat(areas);
-            if (ctx.selection) categories.push('selected text');
-            if (messages.length > 1) categories.push('recent conversation');
-            if (ctx.memoryUsedIds && ctx.memoryUsedIds.length) categories.push('saved memory snippets');
-            if (attachments.length) categories.push('attachments');
-            return safety.normalizeReceipt({
-                local: meta.local === true, status: meta.status || 'complete', provider: meta.provider || '', model: meta.model || '',
-                workspaceAccess: ctx.depth || getWorkspacePreference('assistant.contextDepth', 'currentView'), selectedTextIncluded: !!ctx.selection,
-                priorConversationIncluded: messages.length > 1, areasInspected: areas, sources, memoryUsedIds: ctx.memoryUsedIds || [],
-                attachments: attachments.map(item => ({ name: item.name, type: item.category || item.mediaType, processingPath: item.processingPlan, status: 'included' })),
-                deterministicEngines: meta.deterministicEngines || (meta.local ? ['Sutra Intelligence'] : []), actionsProposed: meta.actionsProposed || [],
-                dataTransmitted: meta.local !== true && meta.dataTransmitted !== false, transmittedCategories: meta.local ? [] : categories,
-                contextReduced: !!(budget && budget.reduced), reductionReasons: budget && budget.reductionReasons || [],
-                omittedSourceCount: budget && budget.omitted ? budget.omitted.length : (ctx.contextBudget && ctx.contextBudget.omittedSourceCount) || 0,
-                errorCategory: meta.errorCategory || '', partial: meta.partial === true
-            }, resolveAssistantReceiptSource);
+            const core = window.SutraAssistantCore;
+            if (!core || typeof core.buildResponseReceipt !== 'function') return null;
+            return core.buildResponseReceipt(enrichment, meta, {
+                safety: window.SutraAssistantSafety, resolveSource: resolveAssistantReceiptSource,
+                workspaceAccess: getWorkspacePreference('assistant.contextDepth', 'currentView')
+            });
+        }
+
+        function performAssistantChatRequest(requestOptions, context) {
+            const assistant = window.flowAssistant;
+            return assistant && typeof assistant.performWorkspaceInvestigation === 'function'
+                ? assistant.performWorkspaceInvestigation(requestOptions, { ...context, request: performIntelligenceRequest })
+                : performIntelligenceRequest(requestOptions);
         }
 
         function buildAssistantGateReceipt(errorCategory, meta = {}) {
@@ -75023,6 +74716,9 @@ ${cspMeta}
                 };
             }
             if (view.role === 'assistant') {
+                if (rawMessage && rawMessage.claimType === 'proposed_action' && !(view.actions && view.actions.length)) {
+                    view.displayedContent += '\n\n*This saved proposal no longer has an action preview. Regenerate it to review a new proposal. Saved chat history cannot apply changes.*';
+                }
                 try {
                     if (window.flowAssistant && typeof window.flowAssistant.noteAssistantReply === 'function') {
                         window.flowAssistant.noteAssistantReply(view.displayedContent || view.cleanContent || '');
@@ -75030,6 +74726,18 @@ ${cspMeta}
                 } catch (e) { /* non-critical */ }
             }
             return view;
+        }
+
+        function renderAssistantActionReview(host, actions) {
+            try {
+                window.flowAssistant.renderActionCards(host, actions, {});
+            } catch (error) {
+                if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { source: 'assistant-action-review' });
+                const notice = document.createElement('p');
+                notice.className = 'flow-action-error';
+                notice.textContent = 'The action preview could not be displayed. Nothing was applied. Try regenerating the proposal.';
+                host.appendChild(notice);
+            }
         }
 
         function appendMessage(role, text, preStoredThoughts, index, buildOpts) {
@@ -75050,20 +74758,11 @@ ${cspMeta}
                 const answerHost = document.createElement('div');
                 bubble.appendChild(answerHost);
                 const renderedClaimType = flowResult && flowResult.actions && flowResult.actions.length ? 'proposed_action' : (buildOpts && buildOpts.claimType);
-                const claimBadge = buildAssistantClaimBadge(renderedClaimType);
-                if (claimBadge) bubble.appendChild(claimBadge);
-                const memoryBadge = buildAssistantMemoryBadge(buildOpts && buildOpts.memoryUsedIds);
-                if (memoryBadge) bubble.appendChild(memoryBadge);
-                const sourcePanel = buildAssistantSourcesPanel(buildOpts && buildOpts.sources, buildOpts && buildOpts.grounding);
-                if (sourcePanel) bubble.appendChild(sourcePanel);
                 const receipt = buildOpts && buildOpts.receipt;
-                if (receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
-                    bubble.appendChild(window.SutraAssistantSafety.renderReceipt(receipt));
-                }
-                // Progressive-disclosure per-response stats (this session only).
                 const statsChipId = (buildOpts && buildOpts.responseStatsId) || (index != null && Array.isArray(convo) && convo[index] ? convo[index].id : null);
-                const dockedStatsChip = buildIntelligenceStatsChipForId(statsChipId);
-                if (dockedStatsChip) bubble.appendChild(dockedStatsChip);
+                appendAssistantResponseDetails(bubble, [buildAssistantClaimBadge(renderedClaimType), buildAssistantMemoryBadge(buildOpts && buildOpts.memoryUsedIds),
+                    buildAssistantSourcesPanel(buildOpts && buildOpts.sources, buildOpts && buildOpts.grounding),
+                    receipt && window.SutraAssistantSafety?.renderReceipt?.(receipt, { document, resolveSource: resolveAssistantReceiptSource }), buildIntelligenceStatsChipForId(statsChipId)]);
 
                 // actions: insert/copy/save/schedule — context-aware buttons.
                 // Hidden until streaming completes so they don't flash in mid-stream.
@@ -75105,7 +74804,7 @@ ${cspMeta}
                         saveNoteBtn.addEventListener('click', () => {
                             const title = trimmedClean.split('\n')[0].slice(0, 80) || 'Sutra reply';
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedClean })
+                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedClean }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         });
@@ -75121,7 +74820,7 @@ ${cspMeta}
                         taskBtn.title = 'Create a task from this reply';
                         taskBtn.addEventListener('click', () => {
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLine, notes: trimmedClean })
+                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLine, notes: trimmedClean }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         });
@@ -75187,7 +74886,7 @@ ${cspMeta}
                     asstRenderMathIn(answerHost); // typeset any $...$ / $$...$$ LaTeX via KaTeX
                     if (flowResult && flowResult.actions && flowResult.actions.length) {
                         try {
-                            window.flowAssistant.renderActionCards(bubble, flowResult.actions, {});
+                            renderAssistantActionReview(bubble, flowResult.actions);
                         } catch (e) { console.warn('Sutra Assistant action render failed:', e); }
                     }
                     actions.style.visibility = '';
@@ -75300,11 +74999,9 @@ ${cspMeta}
         }
 
         function getActiveModelForProvider(provider) {
-            const customValue = chatCustomModelInput ? String(chatCustomModelInput.value || '').trim() : '';
-            if (customValue) return customValue;
-            const selected = chatModelSelect ? String(chatModelSelect.value || '').trim() : '';
-            if (selected) return selected;
-            return '';
+            // Both Assistant surfaces read the same provider-scoped selection.
+            // Hidden controls may still belong to a different provider.
+            return getSelectedModelForProvider(provider);
         }
 
         // =====================================================================
@@ -75787,6 +75484,10 @@ ${cspMeta}
                         body.generationConfig.thinkingConfig = { thinkingBudget: reasoningPlan.budgetTokens, includeThoughts: false };
                         body.generationConfig.maxOutputTokens = Math.max(body.generationConfig.maxOutputTokens || 0, reasoningPlan.minOutputTokens || 0);
                     }
+                }
+                if (reasoningPlan && reasoningPlan.apply && reasoningPlan.style === 'gemini_thinking_level') {
+                    body.generationConfig.thinkingConfig = { thinkingLevel: reasoningPlan.effort, includeThoughts: false };
+                    body.generationConfig.maxOutputTokens = Math.max(body.generationConfig.maxOutputTokens || 0, reasoningPlan.minOutputTokens || 0);
                 }
             }
             // reasoningPlan is surfaced back so performIntelligenceRequest can
@@ -76811,24 +76512,18 @@ ${cspMeta}
                 guidePage = materializeStudyGuidePage(validated.studyGuide, { ...meta, testId: testEntry ? testEntry.id : '' });
                 if (testEntry) testEntry.guidePageId = guidePage.id;
             }
-            let flashcardDeckResult = null;
-            if (validated.flashcards && validated.flashcards.length
-                && window.flowAssistant && typeof window.flowAssistant.applyAction === 'function') {
-                try {
-                    // Reuse the assistant's existing validated create_review_deck
-                    // action — same review-deck pipeline users already have.
-                    flashcardDeckResult = window.flowAssistant.applyAction({
-                        type: 'create_review_deck',
-                        name: ((validated.studyGuide ? validated.studyGuide.title : payload.name) + ' — Flashcards').slice(0, 120),
-                        cards: validated.flashcards.map(c => ({ front: c.front, back: c.back }))
-                    });
-                } catch (err) { console.warn('Flashcard deck creation failed', err); }
-            }
+            // Generated cards stay a proposal until the user reviews the
+            // output and chooses Apply. Reuse the canonical action-card flow.
+            const flashcardAction = validated.flashcards && validated.flashcards.length ? {
+                type: 'create_review_deck',
+                name: ((validated.studyGuide ? validated.studyGuide.title : payload.name) + ' — Flashcards').slice(0, 120),
+                cards: validated.flashcards.map(c => ({ front: c.front, back: c.back }))
+            } : null;
             persistAppData();
             try { renderPagesList(); } catch (e) { /* non-critical */ }
             try { if (typeof renderTestingHubPracticeSummary === 'function') renderTestingHubPracticeSummary(); } catch (e) { /* non-critical */ }
             recordIntelligenceDiagnostic({ kind: 'study-materials', provider, model, ok: true, validation: qualityReport.ok ? 'ok' : 'quality-warning' });
-            return { ok: true, guidePage, test: testEntry, flashcardDeck: flashcardDeckResult, requestId: result.requestId, qualityReport };
+            return { ok: true, guidePage, test: testEntry, flashcardDeck: null, flashcardAction, requestId: result.requestId, qualityReport };
         }
 
         async function regenerateGeneratedTestQuestion(testId, questionIndex, hooks = {}) {
@@ -77111,7 +76806,18 @@ ${cspMeta}
                 const links = [];
                 if (result.guidePage) links.push(`<button type="button" class="sutra-genmat-open" data-open-guide="${escapeHtml(result.guidePage.id)}">Open study guide</button>`);
                 if (result.test) links.push(`<button type="button" class="sutra-genmat-open" data-open-test="${escapeHtml(result.test.id)}">Open practice test</button>`);
-                setStatus(`<span class="sutra-genmat-ok">Done!</span> ${links.join(' ')}${studyQualityReportHtml(result.qualityReport, result.test && result.test.id)}`);
+                setStatus(`<span class="sutra-genmat-ok">${result.flashcardAction ? 'Ready — review flashcards below.' : 'Done!'}</span> ${links.join(' ')}${studyQualityReportHtml(result.qualityReport, result.test && result.test.id)}`);
+                if (result.flashcardAction) {
+                    const reviewHost = document.createElement('div');
+                    reviewHost.className = 'sutra-genmat-flashcard-review';
+                    const statusHost = body.querySelector('#genmatStatus');
+                    if (statusHost) statusHost.appendChild(reviewHost);
+                    if (window.flowAssistant && typeof window.flowAssistant.renderActionCards === 'function') {
+                        window.flowAssistant.renderActionCards(reviewHost, [result.flashcardAction]);
+                    } else {
+                        reviewHost.textContent = 'Flashcards have not been saved. Reload Sutra to restore Assistant review controls and try again.';
+                    }
+                }
                 body.querySelectorAll('[data-regenerate-test]').forEach(regenerateBtn => {
                     regenerateBtn.addEventListener('click', async () => {
                         if (regenerateBtn.disabled) return;
@@ -77166,7 +76872,7 @@ ${cspMeta}
                     if (modalHandle) modalHandle.close(true);
                     openGeneratedTestRunner(openTestBtn.getAttribute('data-open-test'));
                 });
-                showToast('Study materials saved' + (result.guidePage ? ' — guide added to Notes' : '') + (result.test ? ' — test added to Testing Hub' : ''));
+                showToast((result.guidePage || result.test ? 'Study materials saved' : 'Study materials ready') + (result.guidePage ? ' — guide added to Notes' : '') + (result.test ? ' — test added to Testing Hub' : '') + (result.flashcardAction ? ' — review flashcards before saving' : ''));
             }
 
             modalHandle = openSutraModal({
@@ -77568,6 +77274,10 @@ ${cspMeta}
                 // Deterministic, network-free validation/repair + contrast helpers.
                 validate: (raw, opts) => validateAiThemePayload(raw, opts || {}),
                 contrastRatio: (colors) => getContrastRatio(colors.textPrimary, colors.bgPrimary),
+                buildChatRequest: buildAiThemeChatRequest,
+                parseChatTheme: parseAiThemeChatResponse,
+                renderChatTheme: (text, host, conversationId, history) => renderAiThemeChatResponse(text, host, conversationId, history),
+                openAssistantPrompt: openAssistantThemePrompt,
                 // Preview / apply / UI entry points.
                 preview: startAiThemePreview,
                 revertPreview: revertAiThemePreview,
@@ -77619,7 +77329,7 @@ ${cspMeta}
                     const localEndpointCfg = isLocalProvider ? getWorkspacePreference('assistant.localEndpoint', {}) : null;
                     if (isLocalProvider && !model && localEndpointCfg && localEndpointCfg.model) model = String(localEndpointCfg.model).trim();
                     if (!apiKey && !isLocalProvider) {
-                        return { ok: false, errorCategory: 'auth', errorMessage: `No ${providerConfig.label} API key on file. Add one in Settings ▸ Integrations.` };
+                        return { ok: false, errorCategory: 'auth', errorMessage: `No ${providerConfig.label} API key on file. Add one in Settings ▸ Assistant.` };
                     }
                     if (!model) {
                         return { ok: false, errorCategory: 'unavailable-model', errorMessage: 'Choose a model first (Sutra Assistant panel or Settings).' };
@@ -77793,7 +77503,7 @@ ${cspMeta}
                 none: 'none (just your message)',
                 currentView: 'the view you are on',
                 currentNote: 'the current note',
-                workspace: 'a broad workspace summary'
+                workspace: 'relevant excerpts from permitted workspace areas'
             };
             const body = document.createElement('div');
             body.setAttribute('style', 'font-size:0.9rem;line-height:1.5;');
@@ -77802,12 +77512,17 @@ ${cspMeta}
                 <ul style="margin:0 0 12px;padding-left:20px;">
                     <li><strong>Provider:</strong> ${escapeHtml(detail.providerLabel || 'remote provider')} (remote endpoint)</li>
                     <li><strong>Model:</strong> ${escapeHtml(detail.model || 'selected model')}</li>
-                    ${detail.inlineNote ? '<li><strong>Text included:</strong> your writing instruction and the passage displayed in AI writing help.</li><li>No other notes, prior chats, or attachments are included in this writing request.</li>' : `<li><strong>Context depth:</strong> ${escapeHtml(depthLabels[depth] || depth)}</li><li><strong>Selected text:</strong> ${includeSelection ? 'included when you have a selection' : 'not included by default'}</li><li><strong>Prior chat messages:</strong> ${String(chatMemoryMode).toLowerCase() === 'stateful' ? 'recent visible messages are included' : 'not included in Stateless mode'}</li><li><strong>Attached files</strong> (PDFs, images, or locally-extracted text) are included only when you attach them AND the selected model supports that file type — each file chip shows exactly how it will be processed</li>`}
+                    ${detail.inlineNote ? '<li><strong>Text included:</strong> your writing instruction and the passage displayed in AI writing help.</li><li>No other notes, prior chats, or attachments are included in this writing request.</li>' : `<li><strong>Context depth:</strong> ${escapeHtml(depthLabels[depth] || depth)}</li><li><strong>Selected text:</strong> ${includeSelection ? 'included when you have a selection' : 'not included by default'}</li><li><strong>Prior chat messages:</strong> ${String(chatMemoryMode).toLowerCase() === 'stateful' ? 'recent visible messages and brief older excerpts are included' : 'not included in Stateless mode'}</li><li><strong>Attached files</strong> (PDFs, images, or locally-extracted text) are included only when you attach them AND the selected model supports that file type — each file chip shows exactly how it will be processed</li>`}
                 </ul>
                 <p style="margin:0 0 10px;">Choose your AI provider and model carefully. Sutra Assistant uses the provider and model you select, so response quality, accuracy, speed, availability, and cost may vary. AI can make mistakes. Review suggestions before applying them to your workspace. You remain responsible for the model you choose and for decisions made using its responses.</p>
                 <p style="margin:0 0 10px;">Your API key is stored in this browser's <strong>session storage</strong> (cleared when the tab closes) and is never written into workspace backups. Session storage still relies on this page being free of malicious scripts.</p>
                 <p style="margin:0;opacity:0.85;">Response quality depends on the provider and model you select. Review AI-generated suggestions before applying them.</p>
             `;
+            if (detail.workspaceInvestigation) {
+                const notice = document.createElement('p');
+                notice.textContent = 'This workspace investigation may make up to three provider calls. Only bounded, permitted matches and selected records are sent. Ambiguous matches require your choice; Stop cancels further lookups.';
+                body.appendChild(notice);
+            }
             if (detail.receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
                 const receiptEl = window.SutraAssistantSafety.renderReceipt(detail.receipt, {
                     document, resolveSource: resolveAssistantReceiptSource,
@@ -77915,7 +77630,7 @@ ${cspMeta}
                 Improved: ['First-use AI disclosure now states provider, model, context, privacy, and model-quality responsibilities.', 'Plaintext recovery filenames clearly include UNENCRYPTED.'],
                 Fixed: ['Encrypted .sutra tamper validation rejects malformed envelopes before state mutation.', 'Settings theme panel cleanup, modal contrast, and Assistant reasoning-boundary regressions.'],
                 'Privacy & Security': ['No remote release-note fetch, analytics, or tracking.', 'Assistant chats exclude API keys, hidden prompts, action fences, and provider reasoning.'],
-                Beta: ['Google Drive and Google Docs controls stay disabled unless runtime configuration is present.', 'External integrations remain optional and gated.']
+                Beta: ['Google Drive requires runtime configuration. Live Google Docs, Google Calendar, and Todoist connections are not offered.', 'External integrations remain optional and gated.']
             }
         }];
 
@@ -77982,39 +77697,6 @@ ${cspMeta}
                     permissions: 'drive.appdata only when connected',
                     privacy: 'Encrypted .sutra bytes only',
                     action: driveConfigured ? 'drive' : ''
-                },
-                {
-                    id: 'google-docs-smart-import',
-                    name: 'Google Docs Smart Import',
-                    category: 'Import',
-                    description: driveConfigured ? 'Requires explicit selected-document access before any read.' : 'Not available without Google OAuth configuration. Paste or upload fallback remains available.',
-                    status: driveConfigured ? 'Needs consent' : 'Gated',
-                    configured: driveConfigured,
-                    permissions: 'Read-only selected document when configured',
-                    privacy: 'No broad Drive scan',
-                    action: driveConfigured ? 'google-docs' : ''
-                },
-                {
-                    id: 'google-calendar',
-                    name: 'Google Calendar',
-                    category: 'Calendar',
-                    description: 'Live Google Calendar import is gated locally; .ics import/export remains available.',
-                    status: 'Gated',
-                    configured: false,
-                    permissions: 'No OAuth request in this deployment',
-                    privacy: 'No calendar request before consent',
-                    action: ''
-                },
-                {
-                    id: 'todoist',
-                    name: 'Todoist',
-                    category: 'Tasks',
-                    description: 'Coming soon as import-first, least-privilege task import.',
-                    status: 'Coming soon',
-                    configured: false,
-                    permissions: 'None requested',
-                    privacy: 'No network call',
-                    action: ''
                 }
             ];
         }
@@ -78046,7 +77728,7 @@ ${cspMeta}
                     else if (action === 'ics') {
                         try { triggerCalendarIcsImport(); } catch (_) {}
                     } else if (action === 'drive') {
-                        try { setActiveSettingsCategory('data'); document.getElementById('sutraDriveConnectBtn')?.focus(); } catch (_) {}
+                        try { setActiveSettingsCategory('data', { openDetail: true }); document.getElementById('sutraDriveConnectBtn')?.focus(); } catch (_) {}
                     } else {
                         showToast('This integration is gated in this deployment.');
                     }
@@ -78791,6 +78473,7 @@ ${cspMeta}
                     send: (surface, options) => surface === 'full' ? asstSend() : sendChat(options || {}),
                     cancel: (surface) => {
                         if (surface === 'full') return asstStopRequest();
+                        window.flowAssistant?.cancelWorkspaceInvestigation?.();
                         activeIntelligenceRequests.forEach((entry, id) => {
                             if (entry && entry.kind === 'chat') cancelIntelligenceRequest(id);
                         });
@@ -78872,6 +78555,9 @@ ${cspMeta}
                             : null;
                     }
                 };
+                // Presence-only hints may have rendered before this registry
+                // existed; refresh them once its key checks are available.
+                updateChatKeyBanner();
             } catch (_) {}
         }
 
@@ -78883,6 +78569,16 @@ ${cspMeta}
             if (!chatInput || !messagesEl) return;
             const text = (typeof opts.presetText === 'string' && opts.presetText) ? opts.presetText : chatInput.value.trim();
             if (!text) return;
+            const writing = window.SutraWritingCommands;
+            const writingCommand = writing && writing.parse(text);
+            if (writingCommand) {
+                const originalDraft = chatInput.value;
+                const conversation = convo;
+                const isCurrent = () => chatInput.isConnected && chatInput.value === originalDraft && convo === conversation;
+                const result = await writing.open(writingCommand.command, { text: writingCommand.text, isCurrent });
+                if (result && isCurrent()) { chatInput.value = result.text; chatInput.dispatchEvent(new Event('input', { bubbles: true })); chatInput.focus(); }
+                return;
+            }
             clearChatNotices();
             if (!opts.skipUserPush) {
                 appendMessage('user', text);
@@ -78919,10 +78615,14 @@ ${cspMeta}
                             deterministicEngines: [cmd.localEngine || (cmd.sources && cmd.sources.length ? 'Product Knowledge' : 'Sutra Intelligence')],
                             actionsProposed: cmd.actionsProposed || []
                         });
-                        appendMessage('assistant', reply, null, null, { userText: text, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         convo.push({ role: 'user', content: text });
                         convo.push({ role: 'assistant', content: reply, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         saveConvo();
+                        // Publish after the turn is durable; save health reports
+                        // failures locally, without falling through to a provider.
+                        try { await flushAppSaveNow('assistant-local-turn'); }
+                        catch (error) { console.warn('Local Assistant history save was not confirmed', error); }
+                        appendMessage('assistant', reply, null, null, { userText: text, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         return;
                     }
                 }
@@ -78984,12 +78684,11 @@ ${cspMeta}
             if (window.flowAssistant && typeof window.flowAssistant.validateAttachmentsForSend === 'function') {
                 const gate = window.flowAssistant.validateAttachmentsForSend(provider, selectedModel);
                 if (gate && gate.ok === false) {
-                    const lines = (gate.problems || []).slice(0, 4).map(p =>
-                        `• ${p.name || 'Attachment'}: ${p.plan && (p.plan.reason || p.plan.label) || 'incompatible with the selected model'}`);
+                    const problems = formatAssistantAttachmentProblems(gate);
                     const suggestions = (gate.suggestions || []).map(s => s.hint).filter(Boolean);
                     appendChatNotice(
                         'Message not sent — attached file(s) can\'t be processed by the selected model:\n'
-                        + lines.join('\n')
+                        + problems
                         + (suggestions.length ? `\nCompatible options: ${suggestions.join(' · ')}.` : '')
                         + '\nRemove the attachment or switch models, then send again.');
                     return;
@@ -79012,7 +78711,7 @@ ${cspMeta}
                 const acknowledged = await ensureAiSendDisclosure({
                     providerLabel: providerConfig.label,
                     model: selectedModel,
-                    receipt: preSendReceipt
+                    receipt: preSendReceipt, workspaceInvestigation: flowEnrichment?.workspaceInvestigation === true
                 });
                 if (!acknowledged) {
                     appendChatNotice('Cancelled — nothing was sent to the AI provider.', { receipt: buildAssistantResponseReceipt(flowEnrichment, { local: true, status: 'cancelled', errorCategory: 'cancellation', dataTransmitted: false }) });
@@ -79054,7 +78753,7 @@ ${cspMeta}
                 // explicit processing plans from the capability registry.
                 const flowAttachments = flowEnrichment && Array.isArray(flowEnrichment.attachments) ? flowEnrichment.attachments : [];
 
-                const result = await performIntelligenceRequest({
+                const result = await performAssistantChatRequest({
                     kind: 'chat',
                     provider,
                     providerConfig,
@@ -79082,10 +78781,10 @@ ${cspMeta}
                     },
                     onRequestStarted: (requestId) => {
                         showThinkingIndicator({
-                            onCancel: () => cancelIntelligenceRequest(requestId)
+                            onCancel: () => { window.flowAssistant?.cancelWorkspaceInvestigation?.(); cancelIntelligenceRequest(requestId); }
                         });
                     }
-                });
+                }, { enrichment: flowEnrichment, userText: text, scope: ensureCurrentConversation().scope, messagesHost: messagesEl, isCancelled: () => currentChatId !== sendChatId });
 
                 hideThinkingIndicator();
                 const isStale = currentChatId !== sendChatId;
@@ -79151,7 +78850,7 @@ ${cspMeta}
                 const parsedActions = window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
                     ? window.flowAssistant.parseActions(persistClean, { userText: text }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
-                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
+                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, partial: result.partial === true, actionsProposed: actionTypes });
                 if (isStale) {
                     // Conversation changed mid-flight: persist into the original
                     // conversation's message array, never the visible transcript.
@@ -79267,6 +78966,13 @@ ${cspMeta}
                 get trash() { return trash; },
                 get focusSessions() { return focusSessions; },
                 get currentPageId() { return currentPageId; },
+                getNotesSplitPair: () => getNotesSplitPair(),
+                unpairNotes: () => setSplitViewEnabled(false),
+                openMovePageToSpace: (pageId) => openMovePageToSpace(pageId),
+                openPageInSplitView: (pageId) => openPageInSplitView(pageId),
+                activateSecondaryPane: () => setActiveEditorPane('secondary'),
+                getSecondaryPage: () => isNotesSplitViewVisible() ? pages.find(p => p.id === secondaryPageId) || null : null,
+                createCanvasPane: (paneDocument, paneWindow, resolver) => createCanvasEditorInstance(paneDocument, paneWindow, resolver),
                 get activeSpaceId() { return activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default'; },
                 get activeView() { return activeView; },
                 get unlockedPageIds() { return unlockedPageIds; },
@@ -79365,13 +79071,27 @@ ${cspMeta}
                 getFreeWindowsForDateKey: (dateKey, supplemental, options) => (_origFreeWindows ? _origFreeWindows(dateKey, supplemental, options) : []),
                 addCalendarBlockForTemplate: (payload) => (_origAddCalendarBlock ? _origAddCalendarBlock(payload) : null),
                 importSharedFiles: (files, context) => importSharedFiles(files, context),
-                getStudentPreferences: () => ((appSettings && appSettings.studentPreferences) ? appSettings.studentPreferences : null),
+                reviewStudentPreferences: (values) => {
+                    const allowed = Object.keys(getDefaultWorkspacePreferences().studentPreferences);
+                    const entries = Object.entries(values || {});
+                    if (entries.some(([key]) => !allowed.includes(key))) return { ok: false, message: 'Unknown study setting.' };
+                    if (entries.some(([key]) => settingsDraftValues.has('studentPreferences.' + key))) return { ok: false, message: 'Save or Revert your existing study-settings draft before reviewing these answers.' };
+                    setActiveView('settings');
+                    entries.forEach(([key, value]) => setDraftWorkspacePreference('studentPreferences.' + key, value));
+                    setActiveSettingsCategory('assistant', { clearSearch: true, openDetail: true });
+                    syncWorkspacePreferenceControls(); updateSettingsDraftUi();
+                    document.querySelector('[data-settings-section-group="student-preferences"]')?.scrollIntoView({ block: 'start' });
+                    return { ok: true, message: 'Study settings staged for review. Choose Save Changes to apply, or Revert to discard.' };
+                },
+                getStudentPreferences: () => (appSettings.preferences?.studentPreferences || null),
                 openDeadlineRadar: () => (_origOpenDeadlineRadar ? (_origOpenDeadlineRadar(), true) : undefined),
                 openClassDashboardDrawer: (id) => (_origOpenClassDashboard ? (_origOpenClassDashboard(id), true) : undefined),
                 createWeeklyReviewNote: () => (_origWeeklyReview ? (_origWeeklyReview(), true) : undefined),
                 startFocusSession: (taskId, opts) => (_origStartFocus ? (_origStartFocus(taskId, opts), true) : undefined),
+                searchSettings: (query, options) => searchSettingsForGlobalSearch(query, options),
                 openGlobalSearchPanel: (q) => (_origGlobalSearch ? (_origGlobalSearch(q), true) : undefined),
                 openTaskModal: (taskId, preset) => (_origOpenTaskModal ? (_origOpenTaskModal(taskId, preset), true) : undefined),
+                openDeadlineSource: (item) => openDeadlineSource(item),
                 createTask: (input, options) => createCanonicalTask(input, options),
                 flushAppSaveNow: (reason) => flushAppSaveNow(reason || 'bridge-save'),
                 exportWorkspaceAsAtelier: () => (_origExportAtelier ? (_origExportAtelier(), true) : undefined)
@@ -79430,6 +79150,7 @@ ${cspMeta}
             chatProviderSelect.addEventListener('change', () => {
                 const provider = getCurrentChatProvider();
                 syncProviderUi(provider);
+                refreshModelsForCurrentProvider({ automatic: true });
             });
         }
         if (chatModelSelect) {
@@ -79538,6 +79259,7 @@ ${cspMeta}
             { icon: 'fa-list-check',     label: 'Summarize my notes', prompt: 'Summarize the key points from my current note.', send: true },
             { icon: 'fa-calculator',     label: 'Solve a problem',    prompt: 'Help me solve this step by step: ' },
             { icon: 'fa-feather',        label: 'Improve my writing', prompt: 'Improve the writing in my current note while keeping my voice.', send: true },
+            { icon: 'fa-user', label: 'Get to know me', prompt: 'Help me set up my study preferences', send: true },
             { icon: 'fa-graduation-cap', label: 'Make a study plan',  prompt: 'Build me a study plan for my upcoming assignments and deadlines.', send: true },
             { icon: 'fa-circle-question',label: 'Quiz me',            prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true }
         ];
@@ -79753,7 +79475,13 @@ ${cspMeta}
                 if (finalThoughts && finalThoughts.length) bubble.appendChild(asstBuildThinking(finalThoughts));
                 const answer = document.createElement('div');
                 finalHtml = renderMarkdown(displayedClean || '');
-                if (opts.stream) {
+                const themeRenderResult = window.SutraThemeAI && typeof window.SutraThemeAI.renderChatTheme === 'function'
+                    && window.SutraThemeAI.renderChatTheme(text, answer, currentChatId,
+                        Number.isInteger(opts.index) && opts.index >= 0 ? convo.slice(0, opts.index + 1) : convo);
+                const renderedTheme = themeRenderResult && themeRenderResult.ok === true;
+                if (renderedTheme) {
+                    cleanForActions = answer.textContent || cleanForActions;
+                } else if (opts.stream) {
                     streamHost = answer; // filled by asstStreamInto below
                     answer.className = 'asst-stream-host';
                 } else {
@@ -79762,19 +79490,9 @@ ${cspMeta}
                 }
                 bubble.appendChild(answer);
                 const renderedClaimType = flowResult && flowResult.actions && flowResult.actions.length ? 'proposed_action' : msgObj.claimType;
-                const claimBadge = buildAssistantClaimBadge(renderedClaimType);
-                if (claimBadge) bubble.appendChild(claimBadge);
-                const memoryBadge = buildAssistantMemoryBadge(msgObj.memoryUsedIds);
-                if (memoryBadge) bubble.appendChild(memoryBadge);
-                const sourcePanel = buildAssistantSourcesPanel(msgObj.sources, msgObj.grounding);
-                if (sourcePanel) bubble.appendChild(sourcePanel);
-                if (msgObj.receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
-                    const receiptEl = window.SutraAssistantSafety.renderReceipt(msgObj.receipt, { document, resolveSource: resolveAssistantReceiptSource });
-                    if (receiptEl) bubble.appendChild(receiptEl);
-                }
-                // Progressive-disclosure per-response stats (this session only).
-                const statsChip = buildIntelligenceStatsChipForId(msgObj.id);
-                if (statsChip) bubble.appendChild(statsChip);
+                appendAssistantResponseDetails(bubble, [buildAssistantClaimBadge(renderedClaimType), buildAssistantMemoryBadge(msgObj.memoryUsedIds),
+                    buildAssistantSourcesPanel(msgObj.sources, msgObj.grounding),
+                    msgObj.receipt && window.SutraAssistantSafety?.renderReceipt?.(msgObj.receipt, { document, resolveSource: resolveAssistantReceiptSource }), buildIntelligenceStatsChipForId(msgObj.id)]);
             }
 
             col.appendChild(bubble);
@@ -79830,7 +79548,7 @@ ${cspMeta}
                         actions.appendChild(makeAct('fa-file-circle-plus', 'Save as note', 'Create a new note with this reply as the body', () => {
                             const title = trimmedForActions.split('\n')[0].slice(0, 80) || 'Sutra reply';
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedForActions })
+                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedForActions }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         }));
@@ -79839,7 +79557,7 @@ ${cspMeta}
                     if (firstLineForTask && firstLineForTask.length < 140) {
                         actions.appendChild(makeAct('fa-square-check', 'Create task', 'Create a task from this reply', () => {
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLineForTask, notes: trimmedForActions })
+                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLineForTask, notes: trimmedForActions }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         }));
@@ -79869,7 +79587,7 @@ ${cspMeta}
                 asstStreamInto(streamHost, cleanForActions, finalHtml, () => {
                     asstRenderMathIn(streamHost); // typeset LaTeX once the final HTML is committed
                     if (flowResult && flowResult.actions && flowResult.actions.length) {
-                        try { window.flowAssistant.renderActionCards(bubble, flowResult.actions, {}); } catch (e) { /* non-critical */ }
+                        renderAssistantActionReview(bubble, flowResult.actions);
                     }
                     actions.style.visibility = '';
                     if (typeof opts.onStreamDone === 'function') { try { opts.onStreamDone(); } catch (e) { /* non-critical */ } }
@@ -79878,7 +79596,12 @@ ${cspMeta}
                 renderActionsNow();
                 col.appendChild(actions);
                 if (role === 'assistant' && flowResult && flowResult.actions && flowResult.actions.length) {
-                    try { window.flowAssistant.renderActionCards(bubble, flowResult.actions, {}); } catch (e) { /* non-critical */ }
+                    renderAssistantActionReview(bubble, flowResult.actions);
+                }
+                // Structured theme cards render immediately rather than through
+                // the text streamer, but still complete the pending send.
+                if (role === 'assistant' && opts.stream && typeof opts.onStreamDone === 'function') {
+                    opts.onStreamDone();
                 }
             }
 
@@ -80221,6 +79944,10 @@ ${cspMeta}
 
         // ── Topbar (title + model chip + export/clear) ───────────────────────
         function asstUpdateTopbar() {
+            syncReasoningControl(getCurrentChatProvider(), {
+                row: document.getElementById('asstReasoningRow'),
+                select: document.getElementById('asstReasoningSelect')
+            });
             const current = chatStore.conversations.find(c => c && c.id === currentChatId);
             if (asstCache.topbarTitle) {
                 asstCache.topbarTitle.textContent = (current && current.title) ? current.title : 'New chat';
@@ -80374,7 +80101,9 @@ ${cspMeta}
 
         // ── Model / provider picker popover ──────────────────────────────────
         function asstCloseModelPicker() {
-            document.getElementById('asstModelPop')?.remove();
+            const pop = document.getElementById('asstModelPop');
+            if (pop && typeof pop.disposeModelRefresh === 'function') pop.disposeModelRefresh();
+            pop?.remove();
             if (asstCache.modelBtn) asstCache.modelBtn.setAttribute('aria-expanded', 'false');
         }
         function asstOpenModelPicker() {
@@ -80394,6 +80123,7 @@ ${cspMeta}
             provLabel.textContent = 'Provider';
             pop.appendChild(provLabel);
             const provSel = document.createElement('select');
+            provSel.setAttribute('aria-label', 'AI provider');
             const curProvider = getCurrentChatProvider();
             Object.keys(CHAT_PROVIDER_CONFIG).forEach(key => {
                 const opt = document.createElement('option');
@@ -80416,6 +80146,7 @@ ${cspMeta}
             modSearch.setAttribute('aria-label', 'Search models');
             pop.appendChild(modSearch);
             const modSel = document.createElement('select');
+            modSel.setAttribute('aria-label', 'Model');
             pop.appendChild(modSel);
 
             const fillModels = (provider) => {
@@ -80477,14 +80208,19 @@ ${cspMeta}
             refreshRow.appendChild(refreshBtn);
             pop.appendChild(refreshRow);
 
-            const doRefresh = async () => {
+            let refreshSequence = 0;
+            const doRefresh = async (automatic = false) => {
                 const provider = provSel.value;
-                if (provider === 'local') {
-                    if (typeof showToast === 'function') showToast('Local models come from your endpoint — type the model ID below.');
-                    return;
-                }
+                const request = ++refreshSequence;
+                refreshBtn.disabled = false;
+                refreshIcon.classList.remove('fa-spin');
+                const config = CHAT_PROVIDER_CONFIG[provider];
+                const live = provider === 'local' || !!config.modelsEndpoint;
+                if (!live) { refreshLabel.textContent = 'Built-in catalog — provider has no model-list API'; return; }
                 const apiKey = getProviderApiKey(provider);
-                if (!apiKey) {
+                if (!apiKey && provider !== 'local') {
+                    refreshLabel.textContent = 'Add an API key to load current models';
+                    if (automatic) return;
                     if (typeof showToast === 'function') showToast('Add a ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' API key first.');
                     asstCloseModelPicker();
                     try { openProviderKeySettings(); } catch (e) { /* non-critical */ }
@@ -80495,42 +80231,47 @@ ${cspMeta}
                 refreshLabel.textContent = 'Loading…';
                 try {
                     const fetched = await fetchProviderModels(provider, apiKey);
+                    cacheModels(provider, fetched);
+                    if (!pop.isConnected || request !== refreshSequence || provider !== provSel.value) return;
                     if (fetched && fetched.length) {
-                        cacheModels(provider, fetched);
                         if (typeof renderModelOptions === 'function' && provider === getCurrentChatProvider()) renderModelOptions(provider);
                         fillModels(provider);
                         refreshLabel.textContent = 'Loaded ' + fetched.length + ' models';
-                        if (typeof showToast === 'function') showToast('Loaded ' + fetched.length + ' ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' models.');
+                        if (!automatic && typeof showToast === 'function') showToast('Loaded ' + fetched.length + ' ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' models.');
                     } else {
                         refreshLabel.textContent = 'No models returned';
-                        if (typeof showToast === 'function') showToast('No models returned by ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + '.');
+                        fillModels(provider);
                     }
                 } catch (err) {
+                    if (!pop.isConnected || request !== refreshSequence || provider !== provSel.value) return;
                     refreshLabel.textContent = 'Refresh failed';
-                    if (typeof showToast === 'function') showToast('Model refresh failed: ' + (err && err.message ? err.message : 'unknown error'));
+                    if (!automatic && typeof showToast === 'function') showToast('Model refresh failed: ' + (err && err.message ? err.message : 'unknown error'));
                 } finally {
-                    refreshIcon.classList.remove('fa-spin');
-                    refreshBtn.disabled = false;
-                    setTimeout(() => { if (refreshLabel.isConnected) refreshLabel.textContent = 'Refresh model list'; }, 2500);
+                    if (request === refreshSequence) {
+                        refreshIcon.classList.remove('fa-spin');
+                        refreshBtn.disabled = false;
+                    }
                 }
             };
-            refreshBtn.addEventListener('click', doRefresh);
+            refreshBtn.addEventListener('click', () => doRefresh(false));
 
             provSel.addEventListener('change', () => {
                 const next = provSel.value;
                 try { syncProviderUi(next); } catch (e) { setCurrentChatProvider(next); }
                 modSearch.value = '';
+                customInput.value = getSelectedCustomModel(next) || '';
                 fillModels(next);
                 asstUpdateTopbar();
-                // Auto-refresh if this provider has a key but no cached models yet.
-                try {
-                    if (next !== 'local' && getProviderApiKey(next) && !getCachedModels(next).length) doRefresh();
-                } catch (e) { /* non-critical */ }
+                syncReasoningControl(next, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
+                doRefresh(true);
             });
             modSel.addEventListener('change', () => {
                 const provider = provSel.value;
                 const model = String(modSel.value || '').trim();
-                if (model) { try { setModelForProvider(provider, model); } catch (e) { /* non-critical */ } }
+                if (model) {
+                    setModelForProvider(provider, model);
+                    customInput.value = '';
+                }
                 if (chatModelSelect && provider === getCurrentChatProvider()) { try { chatModelSelect.value = model; } catch (e) {} }
                 asstUpdateTopbar();
                 syncReasoningControl(provider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
@@ -80588,14 +80329,9 @@ ${cspMeta}
                 const value = String(reasoningSel.value || 'auto').toLowerCase();
                 setWorkspacePreference('assistant.reasoningEffort', value, { refresh: false });
                 if (chatReasoningSelect) { try { chatReasoningSelect.value = value; } catch (e) {} }
+                asstUpdateTopbar();
             });
             syncReasoningControl(curProvider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
-
-            // First-open convenience: if the current provider has a key but the
-            // dropdown is empty, pull the list immediately so it's never blank.
-            try {
-                if (curProvider !== 'local' && getProviderApiKey(curProvider) && !getCachedModels(curProvider).length) doRefresh();
-            } catch (e) { /* non-critical */ }
 
             const savedNote = document.createElement('p');
             savedNote.className = 'asst-model-pop-hint';
@@ -80617,6 +80353,18 @@ ${cspMeta}
             pop.appendChild(hint);
 
             topbar.appendChild(pop);
+            // Refresh even when cached models exist. Stop polling on close and
+            // while hidden; opening the picker is the network opt-in surface.
+            const autoRefresh = () => {
+                if (pop.isConnected && pop.getClientRects().length && !document.hidden && !refreshBtn.disabled) doRefresh(true);
+            };
+            const modelRefreshTimer = setInterval(autoRefresh, 5 * 60 * 1000);
+            document.addEventListener('visibilitychange', autoRefresh);
+            pop.disposeModelRefresh = () => {
+                clearInterval(modelRefreshTimer);
+                document.removeEventListener('visibilitychange', autoRefresh);
+                document.removeEventListener('click', dismiss, true);
+            };
             if (asstCache.modelBtn) asstCache.modelBtn.setAttribute('aria-expanded', 'true');
             const dismiss = (e) => {
                 if (!pop.contains(e.target) && e.target !== asstCache.modelBtn && !asstCache.modelBtn.contains(e.target)) {
@@ -80625,6 +80373,7 @@ ${cspMeta}
                 }
             };
             setTimeout(() => document.addEventListener('click', dismiss, true), 0);
+            autoRefresh();
         }
 
         // ── Context attachment helpers ───────────────────────────────────────
@@ -80769,7 +80518,7 @@ ${cspMeta}
                 const label = currentPage ? (currentPage.title || 'Current note') : 'Current note';
                 const content = (currentPage ? 'Note: ' + label + '\n\n' : '') + (noteText || '(empty note)');
                 asstPendingContext = asstPendingContext.filter(c => c.id !== 'current-note');
-                asstPendingContext.push({ id: 'current-note', icon: 'fa-file-lines', label, content });
+                asstPendingContext.push({ id: 'current-note', noteId: currentPage?.id, icon: 'fa-file-lines', label, content });
                 asstRenderContextBar();
             }));
 
@@ -80808,6 +80557,9 @@ ${cspMeta}
 
         // ── Slash commands, @-mentions, and image attachments ───────────────
         const ASST_SLASH_COMMANDS = [
+            { cmd: '/theme', icon: 'fa-palette', desc: 'Create and refine a theme with preview', prompt: '/theme ' },
+            { cmd: '/theme off', icon: 'fa-comment', desc: 'Return this theme chat to ordinary Assistant', prompt: '/theme off' },
+            ...['grammar', 'spelling', 'rephrase'].map(command => ({ cmd: '/' + command, icon: 'fa-feather', desc: 'Edit only the passage you supply', prompt: '/' + command + ' ' })),
             { cmd: '/summarize', icon: 'fa-list-check', desc: 'Summarize the current note', prompt: 'Summarize the key points from my current note.', send: true },
             { cmd: '/quiz',      icon: 'fa-circle-question', desc: 'Quiz me on the current note', prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true },
             { cmd: '/explain',   icon: 'fa-lightbulb', desc: 'Explain a concept simply', prompt: 'Explain this concept to me simply, with an example: ' },
@@ -80930,7 +80682,7 @@ ${cspMeta}
             }
             const id = 'note-' + page.id;
             asstPendingContext = asstPendingContext.filter(c => c.id !== id);
-            asstPendingContext.push({ id, icon: 'fa-file-lines', label, content: 'Note: ' + label + '\n\n' + (text || '(empty note)') });
+            asstPendingContext.push({ id, noteId: page.id, icon: 'fa-file-lines', label, content: 'Note: ' + label + '\n\n' + (text || '(empty note)') });
             asstRenderContextBar();
         }
 
@@ -81049,6 +80801,7 @@ ${cspMeta}
         }
         function asstStopRequest() {
             asstStream.cancelled = true;
+            window.flowAssistant?.cancelWorkspaceInvestigation?.();
             if (asstActiveRequestId) { try { cancelIntelligenceRequest(asstActiveRequestId); } catch (e) { /* settled */ } }
         }
 
@@ -81060,6 +80813,32 @@ ${cspMeta}
             asstCloseInputPopups();
             const text = input.value.trim();
             if (!text) return;
+            const writing = window.SutraWritingCommands;
+            const writingCommand = writing && writing.parse(text);
+            if (writingCommand) {
+                const originalDraft = input.value;
+                const conversation = convo;
+                const isCurrent = () => input.isConnected && asstCache.input === input && input.value === originalDraft
+                    && convo === conversation && activeView === 'assistantview';
+                const result = await writing.open(writingCommand.command, { text: writingCommand.text, isCurrent });
+                if (result && isCurrent()) { input.value = result.text; asstAutosize(); asstUpdateSendDisabled(); input.focus(); }
+                return;
+            }
+            const themeChatRequest = window.SutraThemeAI && typeof window.SutraThemeAI.buildChatRequest === 'function'
+                ? window.SutraThemeAI.buildChatRequest(text, convo) : null;
+            if (themeChatRequest && themeChatRequest.errorMessage) {
+                asstNotice(themeChatRequest.errorMessage);
+                return;
+            }
+            if (themeChatRequest && themeChatRequest.disabled) {
+                convo.push({ role: 'user', content: text }, { role: 'assistant', content: 'Theme creation is off for this chat. Your saved theme is unchanged.' });
+                saveConvo();
+                input.value = '';
+                asstAutosize();
+                asstUpdateSendDisabled();
+                asstRenderAll();
+                return;
+            }
             input.value = '';
             asstAutosize();
             asstUpdateSendDisabled();
@@ -81070,6 +80849,7 @@ ${cspMeta}
             // Snapshot the chips for display in the sent bubble — asstClearContext()
             // below wipes asstPendingContext, so this must be captured first.
             const contextTags = asstPendingContext.map(c => ({ icon: c.icon, label: c.label }));
+            const contextNoteId = asstPendingContext.find(c => c.noteId)?.noteId;
             asstClearContext(); // clear chips immediately for responsiveness
 
             // Optimistically show the user's turn (ephemeral until gates pass).
@@ -81080,7 +80860,7 @@ ${cspMeta}
             }
 
             let lockedPageAccess = { ok: true, needed: false, ticket: null };
-            if (window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+            if (!themeChatRequest && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
                 lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(text);
                 if (!lockedPageAccess || lockedPageAccess.ok !== true) {
                     window.flowAssistant.consumeLockedPageAccess();
@@ -81090,7 +80870,7 @@ ${cspMeta}
             }
             // Command layer — natural-language commands run locally, no model call.
             try {
-                if (window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
+                if (!themeChatRequest && window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
                     const cmd = window.flowAssistant.handleOutgoing(text);
                     if (cmd && cmd.handled) {
                         // Local Help / Memory manager render their own interactive
@@ -81108,21 +80888,28 @@ ${cspMeta}
                         });
                         convo.push({ role: 'assistant', content: cmd.message || 'Done.', sources: cmd.sources, grounding: cmd.grounding, claimType: cmd.claimType || (cmd.sources && cmd.sources.length ? 'workspace_fact' : 'deterministic_inference'), memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         saveConvo();
+                        // Save failures remain in the handled local-command path.
+                        try { await flushAppSaveNow('assistant-local-turn'); }
+                        catch (error) { console.warn('Local Assistant history save was not confirmed', error); }
                         asstRenderAll();
                         return;
                     }
                 }
             } catch (e) { /* fall through to model */ }
 
-            await asstSendCore(text, sendText, { pushUser: true, contextTags, lockedAccessChecked: true, lockedPageAccessTicket: lockedPageAccess.ticket });
+            await asstSendCore(text, sendText, { pushUser: true, contextTags, contextNoteId, lockedAccessChecked: true, lockedPageAccessTicket: lockedPageAccess.ticket });
         }
 
         // Shared send pipeline. `displayText` is what the user sees/persists,
         // `sendText` is what the model receives (may carry a context block).
         // opts.pushUser=false is used by Regenerate (user turn already present).
         async function asstSendCore(displayText, sendText, opts = {}) {
+            const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
+            const themeCandidate = window.SutraThemeAI && typeof window.SutraThemeAI.buildChatRequest === 'function'
+                ? window.SutraThemeAI.buildChatRequest(displayText, conversationSnapshot) : null;
+            const themeChatRequest = themeCandidate && themeCandidate.active ? themeCandidate : null;
             let lockedPageAccess = { ok: true, needed: false, ticket: opts.lockedPageAccessTicket || null };
-            if (!opts.lockedAccessChecked && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+            if (!themeChatRequest && !opts.lockedAccessChecked && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
                 lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(displayText);
                 if (!lockedPageAccess || lockedPageAccess.ok !== true) {
                     window.flowAssistant.consumeLockedPageAccess();
@@ -81130,7 +80917,6 @@ ${cspMeta}
                     return;
                 }
             }
-            const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
             const provider = getCurrentChatProvider();
             const providerConfig = CHAT_PROVIDER_CONFIG[provider];
             const isLocalProvider = provider === 'local';
@@ -81173,14 +80959,22 @@ ${cspMeta}
                 if (window.flowAssistant && typeof window.flowAssistant.validateAttachmentsForSend === 'function') {
                     const gate = window.flowAssistant.validateAttachmentsForSend(provider, selectedModel);
                     if (gate && gate.ok === false) {
-                        asstNotice('Attachment can\'t be sent to ' + (providerConfig.label || provider) + ': ' + (gate.problems && gate.problems.length ? gate.problems.join(' ') : 'unsupported file.'));
+                        asstNotice('Attachment can\'t be sent to ' + (providerConfig.label || provider) + ':\n' + formatAssistantAttachmentProblems(gate) + '\nRemove the attachment or switch models, then send again.');
                         return;
                     }
                 }
-            } catch (e) { /* non-blocking */ }
+            } catch (e) {
+                asstNotice('Could not check the attachment. Remove it or reload Sutra before sending.');
+                return;
+            }
 
-            const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
-                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
+            const flowEnrichment = themeChatRequest ? {
+                systemPrompt: themeChatRequest.systemPrompt,
+                requestMessages: themeChatRequest.messages,
+                sources: [], attachments: [],
+                context: { depth: 'none', accessReport: { areasRead: [] }, memoryUsedIds: [] }
+            } : (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
+                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: opts.contextNoteId ? { ...ensureCurrentConversation().scope, type: 'note', noteId: String(opts.contextNoteId) } : ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
             try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
             const preSendReceipt = buildAssistantResponseReceipt(flowEnrichment, {
@@ -81188,7 +80982,7 @@ ${cspMeta}
             });
             // First remote request privacy disclosure (local endpoints skip this).
             if (!isLocalProvider) {
-                const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model: selectedModel, receipt: preSendReceipt });
+                const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model: selectedModel, receipt: preSendReceipt, workspaceInvestigation: flowEnrichment?.workspaceInvestigation === true });
                 if (!acknowledged) {
                     asstNotice('Cancelled — nothing was sent to the AI provider.', { receipt: buildAssistantResponseReceipt(flowEnrichment, { local: true, status: 'cancelled', errorCategory: 'cancellation', dataTransmitted: false }) });
                     return;
@@ -81197,6 +80991,7 @@ ${cspMeta}
 
             // Gates passed — persist the user turn (just what user typed), then re-render.
             if (opts.pushUser) {
+                if (opts.contextNoteId) ensureCurrentConversation().scope = { ...ensureCurrentConversation().scope, type: 'note', noteId: String(opts.contextNoteId) };
                 convo.push({ role: 'user', content: displayText, contextTags: (opts.contextTags && opts.contextTags.length) ? opts.contextTags : undefined });
                 saveConvo();
                 asstRenderAll();
@@ -81225,7 +81020,7 @@ ${cspMeta}
                     : [{ role: 'user', content: sendText }];
                 const flowAttachments = flowEnrichment && Array.isArray(flowEnrichment.attachments) ? flowEnrichment.attachments : [];
 
-                const result = await performIntelligenceRequest({
+                const result = await performAssistantChatRequest({
                     kind: 'chat',
                     provider,
                     providerConfig,
@@ -81240,9 +81035,10 @@ ${cspMeta}
                     workspaceAccess: preSendReceipt && preSendReceipt.workspaceAccess,
                     allowedCategories: preSendReceipt && preSendReceipt.transmittedCategories,
                     transmittedCategories: preSendReceipt && preSendReceipt.transmittedCategories,
-                    maxTokens: 2048,
+                    maxTokens: themeChatRequest ? 4096 : 2048,
                     reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto'),
-                    stream: true,
+                    responseMimeType: themeChatRequest ? 'application/json' : undefined,
+                    stream: !themeChatRequest,
                     onDelta: (textSoFar) => {
                         if (currentChatId !== sendChatId) return; // stale — don't touch a transcript the user has left
                         if (!livePlaceholder) {
@@ -81252,7 +81048,7 @@ ${cspMeta}
                         updateAsstLivePlaceholder(livePlaceholder, textSoFar);
                     },
                     onRequestStarted: (rid) => { asstActiveRequestId = rid; }
-                });
+                }, { enrichment: flowEnrichment, userText: sendText, scope: ensureCurrentConversation().scope, messagesHost: asstCache.msgs, isCancelled: () => asstStream.cancelled || currentChatId !== sendChatId });
 
                 asstHideTyping(typing);
                 asstActiveRequestId = null;
@@ -81282,15 +81078,21 @@ ${cspMeta}
                     });
                     return;
                 }
-                try { if (window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
+                try { if (!themeChatRequest && window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
 
                 const assistantText = result.text || '(no response)';
                 const { clean: _splitClean } = splitThinkBlocks(assistantText);
-                const persistClean = _splitClean || assistantText;
-                const parsedActions = window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
+                let persistClean = _splitClean || assistantText;
+                if (themeChatRequest) {
+                    const preparedTheme = window.SutraThemeAI.parseChatTheme(persistClean);
+                    persistClean = preparedTheme && preparedTheme.ok
+                        ? JSON.stringify({ name: preparedTheme.theme.name, description: preparedTheme.theme.description, colors: preparedTheme.theme.colors })
+                        : ((preparedTheme && preparedTheme.errorMessage) || 'The selected model did not return a complete theme. Nothing changed. Try a shorter description or change the model or thinking effort, then send again.');
+                }
+                const parsedActions = !themeChatRequest && window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
                     ? window.flowAssistant.parseActions(persistClean, { userText: displayText || sendText }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
-                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
+                const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, partial: result.partial === true, actionsProposed: actionTypes });
                 const persistMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
                 // Ephemeral per-response stats (session Map keyed by this id).
                 const _respStatsId = registerIntelligenceResponseStats(result, { reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto') });
@@ -81371,6 +81173,60 @@ ${cspMeta}
         function asstInitView() {
             asstCache = asstReadEls();
             if (!asstCache.shell) return; // view markup absent
+            const effortSelect = document.getElementById('asstReasoningSelect');
+            const effortRow = document.getElementById('asstReasoningRow');
+            const effortTrigger = document.getElementById('asstReasoningTrigger');
+            const effortMenu = document.getElementById('asstReasoningMenu');
+            if (effortSelect && effortRow && effortTrigger && effortMenu) {
+                const closeEffortMenu = (restoreFocus) => {
+                    effortMenu.hidden = true;
+                    effortTrigger.setAttribute('aria-expanded', 'false');
+                    if (restoreFocus) effortTrigger.focus();
+                };
+                const openEffortMenu = (last) => {
+                    asstCloseInputPopups();
+                    asstCloseModelPicker();
+                    effortMenu.hidden = false;
+                    effortTrigger.setAttribute('aria-expanded', 'true');
+                    const items = effortMenu.querySelectorAll('[role="menuitemradio"]');
+                    const selected = effortMenu.querySelector('[aria-checked="true"]');
+                    (last ? items[items.length - 1] : selected || items[0])?.focus();
+                };
+                effortTrigger.addEventListener('click', () => effortMenu.hidden ? openEffortMenu(false) : closeEffortMenu(false));
+                effortTrigger.addEventListener('keydown', (event) => {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    openEffortMenu(event.key === 'ArrowUp');
+                });
+                effortMenu.addEventListener('click', (event) => {
+                    const option = event.target.closest('[data-effort]');
+                    if (!option) return;
+                    effortSelect.value = option.dataset.effort;
+                    effortSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    closeEffortMenu(true);
+                });
+                effortMenu.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' || event.key === 'Tab') {
+                        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+                        closeEffortMenu(true);
+                        return;
+                    }
+                    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+                    const items = Array.from(effortMenu.querySelectorAll('[role="menuitemradio"]'));
+                    const current = items.indexOf(document.activeElement);
+                    const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                        : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                    items[index]?.focus();
+                });
+                document.addEventListener('click', (event) => { if (!effortRow.contains(event.target)) closeEffortMenu(false); });
+                document.addEventListener('focusin', (event) => { if (!effortRow.contains(event.target)) closeEffortMenu(false); });
+            }
+            if (effortSelect) effortSelect.addEventListener('change', () => {
+                setWorkspacePreference('assistant.reasoningEffort', effortSelect.value, { refresh: false });
+                syncReasoningControl(getCurrentChatProvider());
+                asstUpdateTopbar();
+            });
             asstRenderChips();
             if (asstCache.newBtn) {
                 asstCache.newBtn.addEventListener('click', () => {
@@ -83235,12 +83091,17 @@ function parseQuickCaptureDate(text, now) {
     const monthNames = MONTHS.concat(Object.keys(MONTH_ABBR));
     const monthIndex = (key) => (MONTHS.indexOf(key) !== -1 ? MONTHS.indexOf(key) : MONTH_ABBR[key]);
     const addDays = (n) => { const d = new Date(base); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return d; };
-    const res = (d, match) => ({ date: quickCaptureLocalISO(d), match });
+    const res = (d, match) => d ? ({ date: quickCaptureLocalISO(d), match }) : null;
+    const calendarDate = (year, month, day) => {
+        const d = new Date(0); d.setFullYear(year, month, day); d.setHours(0, 0, 0, 0);
+        return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day ? d : null;
+    };
     // Month/day with no year -> this year, or next year if it has clearly passed.
     const inferYear = (monthIdx, day) => {
         const todayMid = new Date(base); todayMid.setHours(0, 0, 0, 0);
-        let d = new Date(base.getFullYear(), monthIdx, day); d.setHours(0, 0, 0, 0);
-        if (d.getTime() < todayMid.getTime() - 86400000) d = new Date(base.getFullYear() + 1, monthIdx, day);
+        let d = calendarDate(base.getFullYear(), monthIdx, day);
+        if (!d) return null;
+        if (d.getTime() < todayMid.getTime() - 86400000) d = calendarDate(base.getFullYear() + 1, monthIdx, day);
         return d;
     };
     let m;
@@ -83265,28 +83126,30 @@ function parseQuickCaptureDate(text, now) {
 
     if ((m = lower.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/))) {
         const y = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, day = parseInt(m[3], 10);
-        if (mo >= 0 && mo <= 11 && day >= 1 && day <= 31) { const d = new Date(y, mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+        return res(calendarDate(y, mo, day), m[0]);
     }
     if ((m = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) {
         const mo = parseInt(m[1], 10) - 1, day = parseInt(m[2], 10);
         if (mo >= 0 && mo <= 11 && day >= 1 && day <= 31) {
-            if (m[3]) { let y = parseInt(m[3], 10); if (y < 100) y += 2000; const d = new Date(y, mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+            if (m[3]) { let y = parseInt(m[3], 10); if (y < 100) y += 2000; return res(calendarDate(y, mo, day), m[0]); }
             return res(inferYear(mo, day), m[0]);
         }
+        return null;
     }
 
     let re = new RegExp('\\b(' + monthNames.join('|') + ')\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b');
     if ((m = lower.match(re))) {
         const mo = monthIndex(m[1]), day = parseInt(m[2], 10);
         if (typeof mo === 'number' && day >= 1 && day <= 31) {
-            if (m[3]) { const d = new Date(parseInt(m[3], 10), mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+            if (m[3]) return res(calendarDate(parseInt(m[3], 10), mo, day), m[0]);
             return res(inferYear(mo, day), m[0]);
         }
+        return null;
     }
     re = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(' + monthNames.join('|') + ')\\.?\\b');
     if ((m = lower.match(re))) {
         const mo = monthIndex(m[2]), day = parseInt(m[1], 10);
-        if (typeof mo === 'number' && day >= 1 && day <= 31) return res(inferYear(mo, day), m[0]);
+        return res(inferYear(mo, day), m[0]);
     }
 
     re = new RegExp('\\b(next|this|on|by)?\\s*(' + Object.keys(WD).join('|') + ')\\b');
@@ -83302,8 +83165,11 @@ function parseQuickCaptureDate(text, now) {
         const day = parseInt(m[1], 10);
         if (day >= 1 && day <= 31) {
             const todayMid = new Date(base); todayMid.setHours(0, 0, 0, 0);
-            let d = new Date(base.getFullYear(), base.getMonth(), day); d.setHours(0, 0, 0, 0);
-            if (d.getTime() < todayMid.getTime()) d = new Date(base.getFullYear(), base.getMonth() + 1, day);
+            let d = calendarDate(base.getFullYear(), base.getMonth(), day);
+            if (d && d.getTime() < todayMid.getTime()) {
+                const nextMonth = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+                d = calendarDate(nextMonth.getFullYear(), nextMonth.getMonth(), day);
+            }
             return res(d, m[0]);
         }
     }
@@ -83311,9 +83177,7 @@ function parseQuickCaptureDate(text, now) {
     return null;
 }
 
-// Resolve free text to one of the student's existing Homework courses (hwCourses:v2)
-// using the course name, its significant words, and common student shorthand
-// (math, chem, bio, ...). Returns { id, name } for the most specific match, or null.
+// Match existing course names and shorthand; distinct matches need a choice.
 function resolveQuickCaptureCourse(text) {
     const courses = getQuickCaptureCourses();
     if (!Array.isArray(courses) || courses.length === 0) return null;
@@ -83321,7 +83185,7 @@ function resolveQuickCaptureCourse(text) {
     const padded = ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
     if (padded.trim() === '') return null;
 
-    // Student shorthand -> name stems that must appear in a matching course name.
+    // Shorthand mapped to course-name stems.
     const SHORTHAND = {
         math: ['math', 'calc', 'algebra', 'geometry', 'trig', 'precalc', 'statistic'],
         calc: ['calculus'],
@@ -83341,29 +83205,39 @@ function resolveQuickCaptureCourse(text) {
         music: ['music', 'band', 'orchestra', 'choir', 'chorus']
     };
 
-    let best = null;
+    const matches = [];
     courses.forEach(course => {
         if (!course || course.id === undefined || course.id === null) return;
         const name = String(course.name || '').toLowerCase();
         if (!name.trim()) return;
         const candidates = new Set();
-        candidates.add(name.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim());
+        const fullName = name.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const aliases = new Set([fullName]);
+        candidates.add(fullName);
         name.split(/[^a-z0-9]+/).forEach(w => { if (w.length >= 3) candidates.add(w); });
         Object.keys(SHORTHAND).forEach(short => {
             SHORTHAND[short].forEach(stem => {
-                if (name.indexOf(stem) !== -1) { candidates.add(short); candidates.add(stem); }
+                if (name.indexOf(stem) !== -1) {
+                    candidates.add(short); candidates.add(stem);
+                    aliases.add(short); aliases.add(stem);
+                }
             });
         });
-        let localScore = 0;
+        let localScore = 0, token = '';
         candidates.forEach(tok => {
             if (!tok || tok.length < 3) return;
-            if (padded.indexOf(' ' + tok + ' ') !== -1) localScore = Math.max(localScore, tok.length);
+            if (padded.indexOf(' ' + tok + ' ') !== -1 && tok.length > localScore) { localScore = tok.length; token = tok; }
         });
-        if (localScore > 0 && (!best || localScore > best.score)) {
-            best = { id: String(course.id), name: String(course.name || ''), score: localScore };
-        }
+        if (localScore > 0) matches.push({ id: String(course.id), name: String(course.name || ''), score: localScore, token,
+            exact: token === fullName, strong: aliases.has(token) });
     });
-    return best ? { id: best.id, name: best.name } : null;
+    // Exact names beat incidental words; explicit names/aliases retain ambiguity.
+    const meaningful = matches.some(course => course.exact) ? matches.filter(course => course.exact || course.strong) : matches;
+    const distinct = meaningful.filter(course => !meaningful.some(other => other.score > course.score
+        && (' ' + other.token + ' ').includes(' ' + course.token + ' ')
+        && !padded.replace(new RegExp('\\b' + other.token + '\\b', 'g'), ' ').includes(' ' + course.token + ' ')));
+    if (distinct.length > 1) return { ambiguous: true, candidates: distinct.map(course => ({ id: course.id, name: course.name })) };
+    return distinct.length ? { id: distinct[0].id, name: distinct[0].name } : null;
 }
 
 function parseQuickCaptureText(text, options) {
@@ -83394,47 +83268,60 @@ function parseQuickCaptureText(text, options) {
 
     // Natural-language due date (today/tomorrow, weekdays + abbreviations,
     // "in N days", "next week", explicit + month-name dates) — see parseQuickCaptureDate.
+    // Parse deadline fields from the due clause, not descriptive event dates.
+    const deadlineClause = working.match(/\bdue\s+(?:(?:on|by|at)\s+)?(.+)$/i);
+    const deadlineStart = deadlineClause ? deadlineClause.index + deadlineClause[0].length - deadlineClause[1].length : 0;
+    // A following note is not part of the deadline. Preserve the comma in
+    // month/day/year dates and comma-separated clocks, but stop before notes.
+    const temporalText = deadlineClause ? deadlineClause[1].split(/[;\n]|,(?!\s*(?:\d{4}\b|(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\d{1,2}:\d{2}\b|noon\b|midnight\b|night\b)))/i, 1)[0] : working;
+    let temporalRemainder = temporalText;
+    function removeTemporalMatch(match) {
+        const pattern = new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        if (!deadlineClause) { working = working.replace(pattern, ' '); return; }
+        const next = temporalRemainder.replace(pattern, ' ');
+        working = working.slice(0, deadlineStart) + next + working.slice(deadlineStart + temporalRemainder.length);
+        temporalRemainder = next;
+    }
     const sharedDateParser = window.SutraStudentDateParser;
     const sharedTimeParsed = sharedDateParser && typeof sharedDateParser.parseNaturalTime === 'function'
-        ? sharedDateParser.parseNaturalTime(working)
+        ? sharedDateParser.parseNaturalTime(temporalText)
         : null;
     const sharedDuration = sharedDateParser && typeof sharedDateParser.parseDurationMinutes === 'function'
         ? sharedDateParser.parseDurationMinutes(working)
         : null;
-    const dateParsed = parseQuickCaptureDate(working, new Date());
+    const dateParsed = parseQuickCaptureDate(temporalText, new Date());
+    const deadlineNightIntent = !!deadlineClause && /\b(?:night|tonight|tn|eod|end of day)\b/i.test(temporalText);
     const tonightDateIntent = dateParsed && (dateParsed.kind === 'tonight'
         || /\b(tonight|tn|eod|end of day)\b/i.test(String(dateParsed.match || '')));
     if (dateParsed && dateParsed.date) {
         out.dueDate = dateParsed.date;
         if (dateParsed.timeHint) out.dueTime = String(dateParsed.timeHint);
         if (dateParsed.match) {
-            const dateRe = new RegExp(dateParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            working = working.replace(dateRe, ' ').replace(/\s+/g, ' ').trim();
+            removeTemporalMatch(dateParsed.match);
         }
     }
 
-    // Time parse e.g. "6pm", "18:00", "3:30pm".
     let explicitTimeSpecified = false;
-    const timeMatch = working.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+    const timeMatch = sharedTimeParsed && sharedTimeParsed.time ? null
+        : temporalText.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(\d{1,2}):(\d{2})\b/i);
     if (timeMatch) {
-        let h = parseInt(timeMatch[1], 10);
-        const min = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+        let h = parseInt(timeMatch[1] || timeMatch[4], 10);
+        const min = parseInt(timeMatch[2] || timeMatch[5] || '0', 10);
         const suffix = (timeMatch[3] || '').toLowerCase();
         if (suffix === 'pm' && h < 12) h += 12;
         if (suffix === 'am' && h === 12) h = 0;
         if (h >= 0 && h <= 23 && min >= 0 && min <= 59 && (suffix || timeMatch[0].includes(':'))) {
             out.dueTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
             explicitTimeSpecified = true;
-            working = working.replace(timeMatch[0], ' ').replace(/\s+/g, ' ').trim();
+            removeTemporalMatch(timeMatch[0]);
         }
     } else if (sharedTimeParsed && sharedTimeParsed.time) {
         out.dueTime = String(sharedTimeParsed.time);
-        explicitTimeSpecified = !(sharedTimeParsed.kind === 'evening' && tonightDateIntent);
+        explicitTimeSpecified = sharedTimeParsed.kind !== 'evening';
         // Phrases such as "after school" may already have been removed by the
         // date parser; replacing a missing match is harmless and keeps titles clean.
         if (sharedTimeParsed.match) {
-            const timeRe = new RegExp(sharedTimeParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            working = working.replace(timeRe, ' ').replace(/\s+/g, ' ').trim();
+            removeTemporalMatch(sharedTimeParsed.match);
         }
     }
     if (sharedDuration && sharedDuration.minutes) {
@@ -83501,7 +83388,10 @@ function parseQuickCaptureText(text, options) {
     // Resolve to an existing Homework course; an unclassified ("task") capture that
     // names a real course is almost always homework, so promote it.
     const courseMatch = resolveQuickCaptureCourse(working);
-    if (courseMatch) {
+    if (courseMatch && courseMatch.ambiguous) {
+        out.courseCandidates = courseMatch.candidates;
+        if (out.type === 'task') out.type = 'homework';
+    } else if (courseMatch) {
         out.courseId = courseMatch.id;
         out.courseName = courseMatch.name;
         // A named real course means coursework. Promote a plain task, and also a weak
@@ -83514,9 +83404,10 @@ function parseQuickCaptureText(text, options) {
         if (classMatch) out.classHint = classMatch[1].trim();
     }
 
-    if (tonightDateIntent && !explicitTimeSpecified && (out.type === 'homework' || captureType === 'homework')) {
-        // “Tonight” on an assignment means end of the local day, not the
-        // generic evening estimate used for calendar/study-block intents.
+    const homeworkNightIntent = !!out.dueDate && /\bnight\b/i.test(temporalText);
+    if ((tonightDateIntent || deadlineNightIntent || homeworkNightIntent) && !explicitTimeSpecified
+        && (deadlineNightIntent || out.type === 'homework' || out.type === 'test' || out.type === 'college' || captureType === 'homework')) {
+        // Night deadlines use end of day; study blocks keep evening time.
         out.dueTime = '23:59';
     }
 
@@ -83712,8 +83603,8 @@ function syncQuickCaptureCourseField(parsed, modal) {
         opt.textContent = label;
         select.appendChild(opt);
     };
-    addOption('', 'No class');
-    courses.forEach(c => addOption(String(c.id), String(c.name || 'Class')));
+    addOption('', 'No class or activity');
+    courses.forEach(c => addOption(String(c.id), String(c.name || 'Class') + (c.type === 'misc' ? ' · Activity' : '')));
     addOption('__new__', '＋ New class…');
 
     const validValues = new Set(['', '__new__', ...courses.map(c => String(c.id))]);
@@ -83721,6 +83612,7 @@ function syncQuickCaptureCourseField(parsed, modal) {
     if (userTouched && validValues.has(previousValue)) chosen = previousValue;
     else if (parsed.courseId && validValues.has(String(parsed.courseId))) chosen = String(parsed.courseId);
     select.value = chosen;
+    if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(select);
 
     const isNew = chosen === '__new__';
     if (newInput) {
@@ -83729,9 +83621,10 @@ function syncQuickCaptureCourseField(parsed, modal) {
     }
     if (help) {
         if (isNew) help.textContent = 'Type a name for the new class.';
-        else if (chosen) help.textContent = 'Sutra matched this from your text — change it if needed.';
-        else if (courses.length === 0) help.textContent = 'No classes yet — pick “＋ New class…” to create one.';
-        else help.textContent = 'Pick the class this belongs to (optional).';
+        else if (chosen) help.textContent = userTouched ? 'Using your selected class or activity.' : 'Sutra matched this from your text — change it if needed.';
+        else if (parsed.courseCandidates && parsed.courseCandidates.length && !userTouched) help.textContent = 'Multiple matches: ' + parsed.courseCandidates.map(course => course.name).join(', ') + '. Choose a class or activity, or explicitly choose no class.';
+        else if (courses.length === 0) help.textContent = 'No classes or activities yet — pick “＋ New class…” to create a class.';
+        else help.textContent = 'Pick the class or activity this belongs to (optional).';
     }
 
     let selectedCourse = null;
@@ -83773,6 +83666,18 @@ function openQuickCaptureModal(prefillText, options) {
     setCaptureLabels(requestedType);
 
     // Fresh open -> let the parser's match drive the course picker until the user edits it.
+    // This modal is reused after both Cancel and Save; no prior draft details
+    // belong to the next capture. Apply requested type/course and prefill below.
+    if (notesInput) notesInput.value = '';
+    dateInput.value = '';
+    timeInput.value = '';
+    apSubjectSelect.value = '';
+    if (courseSelect) courseSelect.value = '';
+    if (newCourseInput) { newCourseInput.value = ''; newCourseInput.hidden = true; }
+    if (prioritySelect) prioritySelect.value = 'medium';
+    if (difficultySelect) difficultySelect.value = 'medium';
+    if (estimateInput) estimateInput.value = '';
+    modal.querySelectorAll('.quick-capture-details').forEach(details => { details.open = false; });
     if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
     if (typeSelect.dataset) typeSelect.dataset.manualType = '';
     if (!requestedType) typeSelect.value = 'task';
@@ -83923,7 +83828,9 @@ function openQuickCaptureModal(prefillText, options) {
 
     if (requestedType) {
         typeSelect.value = requestedType;
-        if (typeSelect.dataset) typeSelect.dataset.manualType = requestedType;
+        // Add task is a starting point, not a manual choice to ignore "hw".
+        // Explicit dropdown changes still pin the destination in onchange.
+        if (typeSelect.dataset) typeSelect.dataset.manualType = requestedType === 'task' ? '' : requestedType;
         syncQuickCaptureApSubjectField({ type: requestedType }, modal);
         syncQuickCaptureCourseField({ type: requestedType, courseId: requestedCourseId, classHint: '' }, modal);
         if (requestedCourseId && courseSelect && Array.from(courseSelect.options).some(option => option.value === requestedCourseId)) {
@@ -84064,6 +83971,12 @@ function submitQuickCapture() {
     const difficulty = String((difficultySelect && difficultySelect.value) || parsedCapture.difficulty || 'medium');
     const estimateMinutes = Math.max(0, Math.round(Number((estimateInput && estimateInput.value) || parsedCapture.estimateMinutes) || 0));
     const captureNotes = String((notesInput && notesInput.value) || '').trim();
+    const destination = modal.querySelector('#quickCaptureCourse');
+    if (type !== 'task' && parsedCapture.courseCandidates && destination && destination.dataset.userTouched !== '1') {
+        showToast('Choose a class or activity for these multiple matches, or choose no class.');
+        destination.focus();
+        return;
+    }
 
     try {
         switch (type) {
@@ -84676,33 +84589,15 @@ function globalSearchAll(query) {
 
     // Settings and data-safety surfaces.
     try {
-        [
-            { id: 'settings-data', title: 'Settings: Data & backups', context: 'Backup Health, export, restore, diagnostics', category: 'data' },
-            { id: 'settings-assistant', title: 'Settings: Assistant', context: 'Context, confirmation, providers, memory', category: 'assistant' },
-            { id: 'settings-customization', title: 'Settings: Glass & appearance', context: 'Themes, density, custom CSS', category: 'appearance' },
-            { id: 'settings-school', title: 'Settings: School schedule', context: 'Weekly, A/B, rotating cycle schedule setup', category: 'academic' }
-        ].forEach(row => {
-            if (results.settings.length >= MAX) return;
-            const haystack = `${row.title} ${row.context}`.toLowerCase();
-            if (haystack.includes(q)) {
-                results.settings.push({
-                    id: row.id,
-                    title: row.title,
-                    context: row.context,
-                    action: () => {
-                        try {
-                            setActiveView('settings');
-                            if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory(row.category, { skipSearch: false });
-                        } catch (err) {}
-                    }
-                });
-            }
-        });
+        if (window.flowAtelier && typeof window.flowAtelier.searchSettings === 'function') {
+            results.settings = window.flowAtelier.searchSettings(query, { limit: MAX });
+        }
     } catch (err) {}
 
     // Rank every category by relevance so the best matches surface first.
     try {
         Object.keys(results).forEach(cat => {
+            if (cat === 'settings') return; // The shared Settings ranker owns intent relevance.
             results[cat].sort((a, b) =>
                 sutraFuzzyScore((b.title || '') + ' ' + (b.context || ''), q)
                 - sutraFuzzyScore((a.title || '') + ' ' + (a.context || ''), q));
@@ -84907,6 +84802,7 @@ function collectGlobalSearchRecords(query) {
                         metadata: { context: String(hit.context || '') },
                         timestamp: 0,
                         prematched: true,
+                        settingsSearchScore: pair[1] === 'setting' ? hit.settingsSearchScore : undefined,
                         action: typeof hit.action === 'function' ? hit.action : null
                     });
                 });
@@ -85006,7 +84902,6 @@ function getCommandPaletteCommands() {
         { id: 'add-college-scholarship', label: 'Add scholarship', hint: 'New scholarship in College', hidden: modeHides('collegeapp'), run: () => { closeCommandPalette(); try { setActiveView('collegeapp'); showCollegeAppPage('scholarships'); addCollegeAppRow('scholarships'); } catch (err) {} } },
         { id: 'add-life-goal', label: 'Add life goal', hint: 'New SMART goal in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('goals'); } catch (err) {} } },
         { id: 'add-life-habit', label: 'Add habit', hint: 'New habit in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('habits'); } catch (err) {} } },
-        { id: 'life-daily-checkin', label: 'Daily check-in', hint: 'Log mood, stress, and sleep', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); const m = document.getElementById('lifeCheckInMood'); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (m) m.focus(); } catch (err) {} } },
         { id: 'add-business-project', label: 'Add business project', hint: 'New project in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('project'); } catch (err) {} } },
         { id: 'add-business-invoice', label: 'Add invoice', hint: 'New invoice in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('invoice'); } catch (err) {} } },
         { id: 'add-business-meeting', label: 'Add meeting', hint: 'New meeting in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('meeting'); } catch (err) {} } },
@@ -85380,8 +85275,12 @@ function createWeeklyReviewNote() {
 function computeApBattlePlan() {
     const aps = (typeof apStudyWorkspace !== 'undefined' && apStudyWorkspace) ? apStudyWorkspace : null;
     if (!aps) return { subject: null, recommendation: 'Add an AP subject to start planning.' };
-    const subjects = Array.isArray(aps.subjects) ? aps.subjects : [];
-    if (subjects.length === 0) return { subject: null, recommendation: 'Add an AP subject to start planning.' };
+    const allSubjects = Array.isArray(aps.subjects) ? aps.subjects : [];
+    if (allSubjects.length === 0) return { subject: null, recommendation: 'Add an AP subject to start planning.' };
+    const hub = typeof window !== 'undefined' && window.flowAtelier ? window.flowAtelier.testingHub : null;
+    const taken = hub && hub.takenExams && typeof hub.takenExams === 'object' ? hub.takenExams : {};
+    const subjects = allSubjects.filter(subject => subject && !(Object.hasOwn(taken, 'ap:' + subject.id) && taken['ap:' + subject.id]));
+    if (!subjects.length) return { subject: null, completed: true, recommendation: 'All current AP exams are marked taken. Review their results in Testing Hub.' };
 
     // Pick the subject with the soonest exam date, else the first.
     const now = new Date();
@@ -85435,8 +85334,8 @@ function renderApBattlePlan() {
     if (!plan.subject) {
         host.innerHTML = `
             <div class="eyebrow">AP Battle Plan</div>
-            <h3>No AP subjects yet</h3>
-            <p>Add an AP subject to see a tailored study recommendation.</p>`;
+            <h3>${plan.completed ? 'AP prep complete' : 'No AP subjects yet'}</h3>
+            <p>${escapeHtml(plan.recommendation)}</p>`;
         return;
     }
     const countdown = plan.daysLeft == null ? 'Exam date not set' : `${plan.daysLeft} day${plan.daysLeft === 1 ? '' : 's'} to exam`;
@@ -85704,23 +85603,7 @@ function closeClassDashboardDrawer() {
 
 // ---------- "Schedule this" for Deadline Radar items ----------
 function scheduleDeadlineItemAsBlock(item) {
-    if (!item || typeof timeBlocks === 'undefined') return;
-    try {
-        const d = item.due instanceof Date ? item.due : new Date(item.due);
-        if (isNaN(d)) return;
-        const iso = d.toISOString().slice(0, 10);
-        const defaultStart = (item.source === 'apexam') ? '09:00' : '18:00';
-        timeBlocks.push({
-            id: (typeof generateId === 'function' ? generateId() : `b${Date.now()}`),
-            date: iso,
-            start: defaultStart,
-            end: (function(){ const [h,m] = defaultStart.split(':').map(Number); const nh=(h+1)%24; return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`; })(),
-            name: `Prep: ${item.title || ''}`,
-            category: item.source === 'apexam' ? 'study' : 'general'
-        });
-        saveTimeBlocks && saveTimeBlocks();
-        if (typeof showToast === 'function') showToast('Prep block scheduled.');
-    } catch (err) { console.warn(err); }
+    return scheduleGenericItemAsBlock(item && { ...item, category: item.category || (item.source === 'apexam' ? 'study' : 'general'), dueTime: item.dueTime || (item.source === 'apexam' ? '09:00' : '18:00') });
 }
 
 // ---------- Generic "Schedule this" for any item w/ due date + title ----------
@@ -85728,11 +85611,31 @@ function scheduleGenericItemAsBlock(item) {
     if (!item || typeof timeBlocks === 'undefined') return false;
     try {
         const raw = item.dueDate || item.due || item.date || '';
-        const d = raw ? new Date(`${String(raw).slice(0,10)}T00:00:00`) : new Date();
+        const now = new Date();
+        const d = raw instanceof Date ? new Date(raw) : raw ? new Date(String(raw).slice(0,10) + 'T00:00:00') : new Date(now);
         if (isNaN(d)) return false;
-        const iso = d.toISOString().slice(0, 10);
-        const start = item.dueTime || '18:00';
-        const end = (function(t){ const [h,m] = String(t).split(':').map(Number); const nh=(Number(h||0)+1)%24; return `${String(nh).padStart(2,'0')}:${String(Number(m||0)).padStart(2,'0')}`; })(start);
+        let iso = quickCaptureLocalISO(d), start = item.dueTime || '18:00';
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start)) return false;
+        let minutes = Number(start.slice(0, 2)) * 60 + Number(start.slice(3));
+        const today = quickCaptureLocalISO(now);
+        let shifted = false;
+        if (iso <= today) {
+            const earliest = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 15) * 15;
+            shifted = iso < today || minutes < earliest;
+            iso = today;
+            minutes = Math.max(minutes, earliest);
+            if (minutes > 1379) {
+                d.setFullYear(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                iso = quickCaptureLocalISO(d); minutes = 18 * 60;
+            }
+        }
+        if (minutes + 60 >= 1440) {
+            if (typeof showToast === 'function') showToast('Choose an earlier prep time so the block fits within one day.');
+            return false;
+        }
+        const formatTime = value => String(Math.floor(value / 60)).padStart(2, '0') + ':' + String(value % 60).padStart(2, '0');
+        start = formatTime(minutes);
+        const end = formatTime(minutes + 60);
         const source = String(item.source || '');
         const sourceId = String(item.sourceId || item.id || '').replace(/^(?:task|hw):/, '');
         const linkage = source === 'task' && sourceId
@@ -85749,7 +85652,7 @@ function scheduleGenericItemAsBlock(item) {
         });
         saveTimeBlocks && saveTimeBlocks();
         if (activeView === 'timeline' && typeof renderTimeline === 'function') { try { renderTimeline(); } catch (err) {} }
-        if (typeof showToast === 'function') showToast('Prep block scheduled.');
+        if (typeof showToast === 'function') showToast(shifted ? 'Prep block scheduled for ' + iso + ' at ' + start + '; the earlier time has passed.' : 'Prep block scheduled.');
         return true;
     } catch (err) { console.warn(err); return false; }
 }
@@ -85767,6 +85670,10 @@ function parseHomeworkPasteText(text) {
 
     const parseDateAnywhere = (str) => {
         const s = String(str || '');
+        const calendarKey = (year, month, day) => {
+            const d = new Date(0); d.setFullYear(year, month - 1, day); d.setHours(0, 0, 0, 0);
+            return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day ? quickCaptureLocalISO(d) : '';
+        };
         // One shared local-date policy for portal pastes and Quick Capture.
         // It covers phrases such as "next Friday", "this weekend", and
         // "after school" before the legacy portal-format fallbacks below.
@@ -85777,22 +85684,18 @@ function parseHomeworkPasteText(text) {
             if (shared && shared.date) return shared.date;
         } catch (err) { /* retain legacy parser */ }
         const m1 = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-        if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+        if (m1) return calendarKey(Number(m1[1]), Number(m1[2]), Number(m1[3]));
         const m2 = s.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
         if (m2) {
-            const mm = String(Math.max(1, Math.min(12, Number(m2[1])))).padStart(2, '0');
-            const dd = String(Math.max(1, Math.min(31, Number(m2[2])))).padStart(2, '0');
             let yy = m2[3] ? Number(m2[3]) : now.getFullYear();
             if (yy < 100) yy += 2000;
-            return `${yy}-${mm}-${dd}`;
+            return calendarKey(yy, Number(m2[1]), Number(m2[2]));
         }
         const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
         const m3 = s.toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:,\s*(\d{4}))?/);
         if (m3) {
-            const mm = String(months.indexOf(m3[1]) + 1).padStart(2, '0');
-            const dd = String(Math.max(1, Math.min(31, Number(m3[2])))).padStart(2, '0');
             const yy = m3[3] ? Number(m3[3]) : now.getFullYear();
-            return `${yy}-${mm}-${dd}`;
+            return calendarKey(yy, months.indexOf(m3[1]) + 1, Number(m3[2]));
         }
         // LOCAL dates, never UTC: toISOString() rolled evening pastes in
         // western timezones one day forward ("Due Tomorrow" pasted at 9pm EDT
@@ -86698,6 +86601,7 @@ const FS_DEFAULT_DURATION_SECONDS = 25 * 60;
 let _fsSession = null;
 let _fsIntervalId = null;
 let _fsKeyboardBound = false;
+let _fsOverlayRevision = 0;
 
 function _fsTimerCommand(action, seconds) {
     var detail = { action: action, seconds: seconds, result: null };
@@ -86750,6 +86654,7 @@ function _fsNormalizeSession(raw) {
 function _fsOpenOverlay() {
     const overlay = document.getElementById('focusSessionOverlay');
     if (!overlay) return;
+    const revision = ++_fsOverlayRevision;
 
     _fsSyncFromCanonicalTimer();
     _fsPopulateUI();
@@ -86760,18 +86665,24 @@ function _fsOpenOverlay() {
 
     // Trigger CSS transition on next frame
     requestAnimationFrame(function() {
+        if (revision !== _fsOverlayRevision) return;
         requestAnimationFrame(function() {
+            if (revision !== _fsOverlayRevision) return;
             overlay.classList.add('fs-visible');
         });
     });
 
     // Focus the play button for keyboard users
     var playBtn = document.getElementById('fsPlayBtn');
-    if (playBtn) setTimeout(function() { try { playBtn.focus(); } catch (e) {} }, 120);
+    if (playBtn) setTimeout(function() {
+        if (revision !== _fsOverlayRevision) return;
+        try { playBtn.focus(); } catch (e) {}
+    }, 120);
 }
 
 function _fsCloseOverlay(reason) {
     // Closing the full-screen view must not alter the canonical sidebar timer.
+    const revision = ++_fsOverlayRevision;
 
     // Flush notes before closing
     var notesArea = document.getElementById('fsNotesTextarea');
@@ -86785,6 +86696,7 @@ function _fsCloseOverlay(reason) {
     if (overlay) {
         overlay.classList.remove('fs-visible');
         setTimeout(function() {
+            if (revision !== _fsOverlayRevision) return;
             overlay.setAttribute('hidden', '');
             overlay.setAttribute('aria-hidden', 'true');
         }, 450);
@@ -87080,7 +86992,10 @@ function startFocusSession(taskId, opts) {
     // If there is already a matching session, reuse its context but always
     // refresh it from the one timer. This also makes the sidebar launch button
     // a pure full-screen view of the timer the student already configured.
-    if (_fsSession && _fsSession.id && (!taskId || _fsSession.taskId === taskId)) {
+    var resumeContext = !taskId && !opts.title && !opts.note;
+    var sameContext = _fsSession && (taskId ? _fsSession.taskId === taskId
+        : !_fsSession.taskId && _fsSession.taskTitle === opts.title && _fsSession.taskNote === (opts.note || ''));
+    if (_fsSession && _fsSession.id && (resumeContext || sameContext)) {
         _fsSyncFromCanonicalTimer();
         if (opts.autostart) _fsApplyTimerSnapshot(_fsTimerCommand('start'));
         _fsOpenOverlay();

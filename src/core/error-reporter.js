@@ -55,20 +55,97 @@
     }
   }
 
-  // Defense-in-depth: strip anything that looks like a provider credential
-  // before it lands in the exportable diagnostics ring buffer. Error messages,
-  // stacks, and location.href can contain a provider endpoint — notably Gemini,
-  // which carries the API key in the URL (`?key=...`) rather than a header.
-  // Diagnostics are user-exportable, so a leaked key here would ride along.
+  // Defense-in-depth: strip credentials before they reach any diagnostic sink.
+  // Error messages, stacks, context, and location.href can carry credentials as
+  // fields, query parameters, or request headers. Diagnostics are user-exportable.
+  function normalizeFieldName(name) {
+    var normalized = String(name == null ? '' : name).replace(/\+/g, ' ');
+    if (normalized.length > 128) return '';
+    try {
+      // Each successful percent-decoding layer shortens the label. Bound the
+      // loop by its original length so deeply encoded aliases still terminate.
+      var maxDecodePasses = normalized.length;
+      for (var i = 0; i < maxDecodePasses; i++) {
+        var decoded = decodeURIComponent(normalized);
+        if (decoded === normalized) break;
+        normalized = decoded;
+      }
+    } catch (e) { /* malformed encoding is not a sensitive-name alias */ }
+    return normalized.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function isSensitiveFieldName(name) {
+    var normalized = normalizeFieldName(name);
+    if (!normalized) return false;
+    return normalized === 'key'
+      || /(?:passphrases?|passwords?|secrets?|credentials?|authorization|cookies?|tokens?|apikeys?)$/.test(normalized)
+      || /(?:recovery|vault|wrapped|session|private|encryption|signing|wrapping)keys?$/.test(normalized)
+      || /(?:openai|anthropic|claude|google|gemini|groq|xai|grok|openrouter|mistral|together|deepseek|perplexity|nvidia|cohere|azure|provider)keys?$/.test(normalized);
+  }
+
+  function findCredentialValueEnd(text, start, fieldName) {
+    var first = text.charAt(start);
+    if (first === '"' || first === "'") {
+      for (var quoted = start + 1; quoted < text.length; quoted++) {
+        var current = text.charAt(quoted);
+        if (current === '\\') { quoted += 1; continue; }
+        if (current === first) return { end: quoted + 1, quote: first };
+        if (current === '\n' || current === '\r') return { end: quoted, quote: first };
+      }
+      return { end: text.length, quote: first };
+    }
+
+    var normalized = normalizeFieldName(fieldName);
+    var allowSpaces = /(?:passphrase|password|secret|authorization|cookie|recoverykey|vaultkey|wrappedkey|privatekey|sessionkey)$/.test(normalized);
+    var end = start;
+    while (end < text.length) {
+      var ch = text.charAt(end);
+      if (ch === '&' || ch === '#' || ch === ',' || ch === ';' || ch === '\n' || ch === '\r' || ch === '}' || ch === ']') break;
+      if (!allowSpaces && /\s/.test(ch)) break;
+      end += 1;
+    }
+    while (end > start && /\s/.test(text.charAt(end - 1))) end -= 1;
+    return { end: end, quote: '' };
+  }
+
+  function scrubLabeledValues(value) {
+    // Capture bounded field labels followed by `:` or `=`. The value boundary
+    // is scanned linearly so quoted passphrases and multi-word header values
+    // are redacted without a backtracking-heavy expression.
+    var labels = /(^|[?&#\s,;:{(\[])(["']?)([a-z0-9_%+.\- \t]{1,96}?)\2[ \t]*[:=]/gi;
+    var result = '';
+    var copiedThrough = 0;
+    var match;
+    while ((match = labels.exec(value))) {
+      var fieldName = match[3];
+      if (!isSensitiveFieldName(fieldName)) {
+        // Revisit only the final delimiter of an ordinary label; it can expose
+        // a credential label, as in `Error:passphrase=...` or `Error: passphrase=...`.
+        labels.lastIndex = match.index + match[0].length - 1;
+        continue;
+      }
+      var valueStart = labels.lastIndex;
+      while (valueStart < value.length && /[ \t]/.test(value.charAt(valueStart))) valueStart += 1;
+      var valueEnd = findCredentialValueEnd(value, valueStart, fieldName);
+      if (valueEnd.end <= valueStart) continue;
+      result += value.slice(copiedThrough, valueStart);
+      if (valueEnd.quote) result += valueEnd.quote + '[redacted]' + valueEnd.quote;
+      else result += '[redacted]';
+      copiedThrough = valueEnd.end;
+      labels.lastIndex = valueEnd.end;
+    }
+    return copiedThrough ? result + value.slice(copiedThrough) : value;
+  }
+
   var SECRET_SCRUBBERS = [
     [/([?&](?:key|api[_-]?key|access_token|token)=)[^&#\s"']+/gi, '$1[redacted]'],
     [/\bBearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer [redacted]'],
     [/\bAIza[0-9A-Za-z._\-]{10,}/g, 'AIza[redacted]'],
-    [/\b(sk|gsk|xai|pplx|sess)[-_][A-Za-z0-9]{6,}/gi, '$1-[redacted]']
+    [/\b(sk|gsk|xai|pplx|sess|nvapi)[-_][A-Za-z0-9_-]{6,}/gi, '$1-[redacted]']
   ];
   function scrubSecrets(value) {
     if (typeof value !== 'string' || !value) return value;
-    var out = value;
+    var out = scrubLabeledValues(value);
     try {
       for (var i = 0; i < SECRET_SCRUBBERS.length; i++) {
         out = out.replace(SECRET_SCRUBBERS[i][0], SECRET_SCRUBBERS[i][1]);
@@ -76,12 +153,19 @@
     } catch (e) { /* regex is static; never let scrubbing throw */ }
     return out;
   }
-  function scrubDeep(value) {
+  function scrubDeep(value, depth) {
+    depth = depth || 0;
+    if (depth > 12) return '[unserializable]';
     if (typeof value === 'string') return scrubSecrets(value);
-    if (Array.isArray(value)) return value.map(scrubDeep);
+    if (Array.isArray(value)) return value.map(function (item) { return scrubDeep(item, depth + 1); });
     if (value && typeof value === 'object') {
-      var out = {};
-      try { Object.keys(value).forEach(function (k) { out[k] = scrubDeep(value[k]); }); } catch (e) { return value; }
+      var out = Object.create(null);
+      try {
+        Object.keys(value).forEach(function (k) {
+          var sensitive = isSensitiveFieldName(k);
+          out[scrubSecrets(k)] = sensitive ? '[redacted]' : scrubDeep(value[k], depth + 1);
+        });
+      } catch (e) { return '[unserializable]'; }
       return out;
     }
     return value;
@@ -115,7 +199,7 @@
     if (typeof context === 'string') return { where: context };
     if (typeof context === 'object') {
       // Shallow, defensive copy of plain fields only.
-      var out = {};
+      var out = Object.create(null);
       try {
         Object.keys(context).forEach(function (k) {
           var v = context[k];
@@ -159,9 +243,9 @@
    */
   function reportError(error, context, severity) {
     try {
-      var info = normalizeError(error);
-      var ctx = normalizeContext(context);
-      var sev = severity || 'error';
+      var info = scrubDeep(normalizeError(error));
+      var ctx = scrubDeep(normalizeContext(context));
+      var sev = ['debug', 'info', 'warning', 'error', 'critical'].indexOf(severity) >= 0 ? severity : 'error';
 
       // Dedupe identical (message+where) bursts so a render loop can't flood.
       var dedupeKey = sev + '|' + info.message + '|' + (ctx.where || ctx.feature || '');
@@ -191,7 +275,7 @@
         if (DEV) {
           var fn = sev === 'warning' || sev === 'info' || sev === 'debug' ? 'warn' : 'error';
           if (sev === 'debug' && console.debug) fn = 'debug';
-          (console[fn] || console.log).call(console, tag, loc, info.message, error, ctx);
+          (console[fn] || console.log).call(console, tag, loc, info.message, scrubDeep(info), scrubDeep(ctx));
         } else if (sev === 'critical' || sev === 'error') {
           (console.error || console.log).call(console, tag, loc, info.message);
         }
@@ -205,13 +289,13 @@
 
       // Broadcast for any listener (e.g. a diagnostics panel) without coupling.
       try {
-        window.dispatchEvent(new CustomEvent('sutra:error-reported', { detail: entry }));
+        window.dispatchEvent(new CustomEvent('sutra:error-reported', { detail: scrubDeep(entry) }));
       } catch (e) { /* CustomEvent always present in supported browsers */ }
 
-      return entry;
+      return scrubDeep(entry);
     } catch (fatal) {
       // The reporter itself must never break a caller.
-      try { (console.error || console.log).call(console, '[Sutra:reporter-failed]', fatal); } catch (e) {}
+      try { (console.error || console.log).call(console, '[Sutra:reporter-failed]', scrubDeep(normalizeError(fatal))); } catch (e) {}
       return null;
     }
   }
@@ -242,9 +326,9 @@
     return {
       generatedAt: now(),
       schema: 'sutra-diagnostics@1',
-      environment: env,
+      environment: scrubDeep(env),
       entryCount: entries.length,
-      entries: entries.slice()
+      entries: scrubDeep(entries)
     };
   }
 
@@ -312,7 +396,7 @@
   window.SutraDiagnostics = {
     report: reportError,
     guard: guard,
-    getEntries: function () { return entries.slice(); },
+    getEntries: function () { return scrubDeep(entries); },
     buildReport: buildReport,
     exportText: exportText,
     download: download,

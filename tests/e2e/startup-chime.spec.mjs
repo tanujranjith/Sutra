@@ -53,16 +53,29 @@ test('turning the chime OFF is preserved across a reload (returning-user choice 
   // wait for it to be ATTACHED (it is manipulated via evaluate, not clicked).
   await page.waitForSelector('#view-settings [data-pref-path="startup.playSound"]', { state: 'attached' });
 
-  // Turn the toggle off through the real change handler, then Save Changes.
+  // Establish a real saved ON baseline first. Fresh workspaces already default
+  // OFF, so setting OFF without this transition would create no staged change.
+  await page.evaluate(() => {
+    const cb = document.querySelector('#view-settings [data-pref-path="startup.playSound"]');
+    cb.checked = true;
+    cb.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
+  await page.locator('#settingsApplyBtn').click();
+  await expect(page.locator('#settingsStatusPill')).toHaveAttribute('data-state', 'saved');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
+
+  // Turn the returning user's saved ON choice off through the real change
+  // handler, then confirm Save Changes before checking reload persistence.
   await page.evaluate(() => {
     const cb = document.querySelector('#view-settings [data-pref-path="startup.playSound"]');
     cb.checked = false;
     cb.dispatchEvent(new Event('change', { bubbles: true }));
-    const save = document.getElementById('settingsApplyBtn') || document.getElementById('settingsApplyBtnTop');
-    if (save) save.click();
   });
+  await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
+  await page.locator('#settingsApplyBtn').click();
+  await expect(page.locator('#settingsStatusPill')).toHaveAttribute('data-state', 'saved');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('0');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('startup-chime-opt-out-e2e'));
 
   // Reload: normalize must preserve the persisted OFF choice (not re-default to ON).
   await page.reload();
@@ -84,10 +97,11 @@ test('an explicit startup-chime opt-in is preserved across reload', async ({ pag
     const checkbox = document.querySelector('#view-settings [data-pref-path="startup.playSound"]');
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-    (document.getElementById('settingsApplyBtn') || document.getElementById('settingsApplyBtnTop'))?.click();
   });
+  await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
+  await page.locator('#settingsApplyBtn').click();
+  await expect(page.locator('#settingsStatusPill')).toHaveAttribute('data-state', 'saved');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('startup-chime-opt-in-e2e'));
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });

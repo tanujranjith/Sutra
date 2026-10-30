@@ -402,13 +402,23 @@
         if (mode !== 'stateful') return [];
         const depth = normalizeChatMemoryDepth(options.chatMemoryDepth != null ? options.chatMemoryDepth : getChatMemoryDepth(), 10);
         const source = Array.isArray(conversation) ? conversation : [];
-        return source.slice(-depth).map(entry => {
+        // A small extractive recap uses existing chat only: no extra AI call,
+        // hidden durable summary or invented facts. Keep each original role.
+        const recap = source.slice(-depth - 4, -depth).map(entry => {
+            const text = String(entry && entry.content || '').trim();
+            if (!text) return null;
+            return {
+                role: String(entry.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user',
+                content: '[Earlier message excerpt; newer messages take priority] ' + text.slice(0, 180) + (text.length > 180 ? '…' : '')
+            };
+        }).filter(Boolean);
+        return recap.concat(source.slice(-depth).map(entry => {
             const role = String(entry && entry.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
             return {
                 role,
                 content: String(entry && entry.content || '').trim()
             };
-        }).filter(entry => entry.content);
+        }).filter(entry => entry.content));
     }
 
     function buildRequestMessages(userText, conversation, options = {}) {
@@ -425,19 +435,49 @@
         return !!(node && (node === element || element.contains(node)));
     }
 
-    function getEditorSelection() {
+    function assistantPageWithinScope(pageId, options) {
+        if (!pageId) return false;
+        const scope = options && (options.scope || options.conversationScope) || {};
+        const id = String(pageId);
+        if (scope.type === 'note' || scope.type === 'page') {
+            const target = scope.noteId || scope.pageId || scope.id;
+            if (!target || String(target) !== id) return false;
+        }
+        const excluded = [].concat(scope.excludedNoteIds || [], scope.excludedSourceIds || []).map(String);
+        if (excluded.some(value => value === id || value === 'note:' + id
+            || value.startsWith(id + ':') || value.startsWith('note:' + id + ':'))) return false;
+        return true;
+    }
+
+    // Editor unlock permits editing only. Assistant context needs its own
+    // page-scoped ticket, and an unknown owner must never be treated as public.
+    function assistantPageContextAllowed(pageId, options) {
+        const b = bridge({ diagnose: false });
+        if (!assistantPageWithinScope(pageId, options) || !b || !Array.isArray(b.pages)) return false;
+        const page = b.pages.find(item => item && String(item.id) === String(pageId));
+        if (!page) return false;
+        return !page.isLocked || currentLockedPageAccessIds(options).includes(String(page.id));
+    }
+
+    function getEditorSelection(options) {
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return '';
             const text = String(sel.toString() || '').trim();
             if (!text) return '';
             const range = sel.getRangeAt(0);
+            const b = bridge({ diagnose: false });
+            const pageId = b && b.currentPageId;
             const v2Host = document.getElementById('editorV2Host');
-            if (v2Host && rangeInsideElement(range, v2Host)) return text;
+            if (v2Host && rangeInsideElement(range, v2Host)) {
+                if (v2Host.hidden || !v2Host.dataset.pageId || String(v2Host.dataset.pageId) !== String(pageId)) return '';
+                return assistantPageContextAllowed(pageId, options) ? text : '';
+            }
             const editor = document.getElementById('editor');
             if (!editor) return '';
             if (!rangeInsideElement(range, editor)) return '';
-            return text;
+            if (editor.hidden || !editor.dataset.pageId || String(editor.dataset.pageId) !== String(pageId)) return '';
+            return assistantPageContextAllowed(pageId, options) ? text : '';
         } catch (e) { return ''; }
     }
 
@@ -472,9 +512,12 @@
         try {
             syncActiveV2NoteForContext();
             const b = bridge();
-            const pageId = b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null);
+            const scope = options && (options.scope || options.conversationScope) || {};
+            const scopedId = scope.type === 'note' || scope.type === 'page' ? (scope.noteId || scope.pageId || scope.id) : null;
+            const pageId = scopedId || (b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null));
             const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
             if (!pageId) return null;
+            if (!assistantPageWithinScope(pageId, options)) return null;
             const page = pages.find(p => p && p.id === pageId);
             if (!page) return null;
             const assistantAccessIds = currentLockedPageAccessIds(options);
@@ -493,17 +536,20 @@
                 };
             }
             if (page.slides && Array.isArray(page.slides.slides)) {
-                const deck = window.SutraSlides && typeof window.SutraSlides.getContext === 'function'
-                    ? window.SutraSlides.getContext()
-                    : null;
-                const slideText = deck && Array.isArray(deck.slides)
-                    ? deck.slides.map(slide => [slide.title, slide.speakerNotes].concat((slide.elements || []).map(element => element.text || element.alt || '')).join(' ')).join(' ')
-                    : '';
+                // The live Slides editor can still belong to a different page
+                // during navigation or when this request has a note scope. Read
+                // this already-authorized page's canonical deck instead.
+                const slideText = page.slides.slides.slice(0, 10).map(slide => {
+                    if (!slide || typeof slide !== 'object') return '';
+                    const elements = Array.isArray(slide.elements) ? slide.elements.slice(0, 10) : [];
+                    return [String(slide.title || '').slice(0, 300), String(slide.speakerNotes || '').slice(0, 500)]
+                        .concat(elements.map(element => String(element && (element.text || element.alt) || '').slice(0, 240))).join(' ');
+                }).join(' ');
                 return {
                     id: page.id,
                     title: page.title || 'Untitled presentation',
                     type: 'slides',
-                    slideCount: deck ? deck.slideCount : page.slides.slides.length,
+                    slideCount: page.slides.slides.length,
                     excerpt: truncate(slideText, 800),
                     wordCount: slideText ? slideText.trim().split(/\s+/).length : 0,
                     classLinkId: page.classLinkId || '',
@@ -513,7 +559,6 @@
                     examDate: page.examDate || ''
                 };
             }
-            const latestVersion = Array.isArray(page.versions) && page.versions.length ? page.versions[page.versions.length - 1] : null;
             const tmp = document.createElement('div');
             setUserHtml(tmp, String(page.content || page.body || ''));
             const text = (tmp.textContent || '').replace(/\s+/g, ' ').trim();
@@ -523,7 +568,7 @@
                 tags: Array.isArray(page.tags) ? page.tags.map(t => t.name || t).filter(Boolean) : [],
                 excerpt: truncate(text, 800),
                 wordCount: text ? text.split(/\s+/).length : 0,
-                versionId: String(page.versionId || (latestVersion && latestVersion.id) || (Array.isArray(page.versions) ? page.versions.length : '')),
+                versionId: String(page.versionId || page.version || (Array.isArray(page.versions) ? page.versions.length : '')),
                 contentHash: window.SutraNotePatchSystem && typeof window.SutraNotePatchSystem.hash === 'function'
                     ? window.SutraNotePatchSystem.hash(String(page.content || page.body || ''))
                     : '',
@@ -538,21 +583,25 @@
         } catch (e) { return null; }
     }
 
-    function getCanvasContextSummary() {
+    function getCanvasContextSummary(options) {
         try {
             const api = (window.SutraCanvas && typeof window.SutraCanvas.getContext === 'function') ? window.SutraCanvas : null;
-            if (api) return api.getContext();
-            const note = getActiveNoteSummary();
+            if (api) {
+                const context = api.getContext();
+                return context && assistantPageContextAllowed(context.pageId, options) ? context : null;
+            }
+            const note = getActiveNoteSummary(options);
             return note && note.type === 'canvas' ? note : null;
         } catch (e) { return null; }
     }
 
-    function getSlidesContextSummary() {
+    function getSlidesContextSummary(options) {
         try {
-            const note = getActiveNoteSummary();
+            const note = getActiveNoteSummary(options);
             if (!note || note.locked || note.type !== 'slides') return null;
             const api = window.SutraSlides && typeof window.SutraSlides.getContext === 'function' ? window.SutraSlides : null;
-            return api ? api.getContext() : null;
+            const context = api ? api.getContext() : null;
+            return context && String(context.id) === String(note.id) && assistantPageContextAllowed(context.id, options) ? context : null;
         } catch (e) { return null; }
     }
 
@@ -700,11 +749,6 @@
             }
             const habits = Array.isArray(lw.habits) ? lw.habits : [];
             if (habits.length) out.habitCount = habits.length;
-            const checkIns = (lw.wellness && Array.isArray(lw.wellness.checkIns)) ? lw.wellness.checkIns : [];
-            if (checkIns.length) {
-                const latest = checkIns[checkIns.length - 1];
-                out.latestCheckIn = { mood: latest.mood || '', stress: latest.stress };
-            }
             const budgets = (lw.spendingBudgets && typeof lw.spendingBudgets === 'object') ? lw.spendingBudgets : {};
             if (Object.keys(budgets).length) out.budgetCategories = Object.keys(budgets).length;
             return Object.keys(out).length ? out : null;
@@ -825,7 +869,7 @@
             const tabs = api.getTabs() || [];
             const tab = tabs.find(t => t && t.id === id);
             if (!tab) return null;
-            const widgets = (Array.isArray(tab.widgets) ? tab.widgets : []).map(w => {
+            const widgets = (Array.isArray(tab.widgets) ? tab.widgets : []).filter(w => w && !['water', 'eyebreak', 'gratitude'].includes(w.type)).map(w => {
                 const cfg = (w && w.config) || {};
                 const entry = { type: w.type };
                 switch (w.type) {
@@ -895,7 +939,7 @@
         // explicitly overrides via options.includeSelection.
         const includeSelectionPref = getPref('assistant.includeSelectionByDefault', true) !== false;
         const allowSelection = options.includeSelection != null ? options.includeSelection !== false : includeSelectionPref;
-        const selection = allowSelection ? getEditorSelection() : '';
+        const selection = allowSelection ? getEditorSelection(options) : '';
 
         const ctx = {
             schema: 'flow-context/1',
@@ -959,9 +1003,9 @@
         const openNote = getActiveNoteSummary(options);
         if (openNote) ctx.activeNote = openNote;
         if (view === 'notes') {
-            const canvasContext = getCanvasContextSummary();
+            const canvasContext = getCanvasContextSummary(options);
             if (canvasContext) ctx.canvas = canvasContext;
-            const slidesContext = getSlidesContextSummary();
+            const slidesContext = getSlidesContextSummary(options);
             if (slidesContext) ctx.slides = slidesContext;
             if (selection) ctx.selection = truncate(selection, 1500);
         }
@@ -1039,7 +1083,7 @@
     const ACTION_CATALOG = [
         // --- Atomic actions ---
         { type: 'insert_text', desc: 'Insert markdown text into the current note at the caret', risk: 'medium', fields: { text: 'string' } },
-        { type: 'edit_note_patch', desc: 'Propose anchored note edits with note/version/block ids, baseHash, and character ranges. Each hunk is reviewed separately; stale anchors must be rebased or regenerated.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', blockId: 'string?', title: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
+        { type: 'edit_note_patch', desc: 'Propose note edits by quoting exact source HTML from activeNote.patchContent in before. Sutra resolves unique quotes locally; do not count character offsets. Every hunk is reviewed; stale or ambiguous anchors are refused.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', blockId: 'string?', title: 'string?', hunks: '[{id,start?,end?,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
         { type: 'rename_note_heading', desc: 'Rename one or more headings through anchored note hunks. Use exact heading text and offsets from activeNote.patchContent.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
         { type: 'move_note_blocks', desc: 'Move note sections or blocks through anchored hunks that delete the exact original range and insert it at an exact target.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
         { type: 'deduplicate_note', desc: 'Remove duplicated note content through anchored hunks. Never remove merely similar passages.', risk: 'high', fields: { noteId: 'string', versionId: 'string?', baseHash: 'string?', hunks: '[{id,start,end,before,replacement,blockId,label}]', approvedHunkIds: 'string[]?' } },
@@ -1049,7 +1093,7 @@
         { type: 'create_note_backlink', desc: 'Append a clickable sutra:// backlink from one note to another.', risk: 'medium', fields: { fromNoteId: 'string', toNoteId: 'string', label: 'string?' } },
         { type: 'convert_selection_to_fields', desc: 'Replace the current selected content with user-reviewed structured fields while preserving the original facts.', risk: 'high', fields: { text: 'markdown' } },
         { type: 'replace_selection', desc: 'Replace the user\'s currently selected text in the editor', risk: 'high', fields: { text: 'string' } },
-        { type: 'create_task', desc: 'Create a task in the planner', risk: 'medium', fields: { title: 'string', dueDate: 'YYYY-MM-DD?', dueTime: 'HH:MM?', priority: 'low|medium|high?', notes: 'string?', category: 'string?', linkPageId: 'string?' } },
+        { type: 'create_task', desc: 'Create a general task, reminder, or upcoming test/deadline in To-do', risk: 'medium', fields: { title: 'string', dueDate: 'YYYY-MM-DD?', dueTime: 'HH:MM?', priority: 'low|medium|high?', notes: 'string?', category: 'string?', linkPageId: 'string?' } },
         { type: 'create_homework', desc: 'Create a homework assignment', risk: 'medium', fields: { title: 'string', courseName: 'string?', dueDate: 'YYYY-MM-DD?', difficulty: 'easy|medium|hard?' } },
         { type: 'create_timeline_block', desc: 'Schedule a calendar/timeline block', risk: 'medium', fields: { name: 'string', date: 'YYYY-MM-DD', start: 'HH:MM', end: 'HH:MM', category: 'string?', linkTaskId: 'string?', linkHomeworkId: 'string?' } },
         { type: 'create_page', desc: 'Create a new note page', risk: 'medium', fields: { title: 'string', body: 'markdown', tags: 'string[]?', classLinkId: 'string?' } },
@@ -1131,7 +1175,8 @@
         { type: 'delete_memory', desc: 'Forget (permanently delete) an Assistant Memory. Destructive — requires confirmation.', risk: 'high', fields: { id: 'string?', ids: 'string[]?' } },
         { type: 'clear_expired_memories', desc: 'Forget all expired Assistant Memories.', risk: 'medium', fields: {} },
         { type: 'clear_temporary_memories', desc: 'Forget all temporary (auto-expiring) Assistant Memories.', risk: 'medium', fields: {} },
-        { type: 'open_memory_manager', desc: 'Open the Assistant Memory manager UI.', risk: 'low', fields: {} }
+        { type: 'review_study_preferences', desc: 'Open a reviewable Settings draft for study preferences; does not save changes.', risk: 'read_only', fields: { preferences: 'object' } },
+        { type: 'open_memory_manager', desc: 'Open the Assistant Memory manager UI.', risk: 'read_only', fields: {} }
     ];
 
     const ANCHORED_NOTE_ACTION_TYPES = new Set(['edit_note_patch', 'rename_note_heading', 'move_note_blocks', 'deduplicate_note', 'split_note']);
@@ -1297,55 +1342,73 @@
     //             user edits Assistant settings — effectively static per session).
     //   dynamic — the end-of-prompt reminder + the live "Current context" JSON
     //             (tasks/homework/testingHub/memory/etc — changes every turn).
-    function buildSystemPromptParts(context) {
-        const bankText = renderActionsBankText(buildActionsBank());
-        const staticText = [
-            'You are Sutra Assistant, the contextual assistant inside Sutra — a local-first student / creator operating system.',
+    function selectPromptActionBank(userText, conversation = []) {
+        let query = String(userText || '').toLowerCase().replace(/\bfinish\b|\bcheck off\b/g, 'complete').replace(/\blaunch\b/g, 'open');
+        // Short answers refine a pending request; they do not erase its action
+        // schemas. Use retained USER turns only, never a model's capability claim.
+        const clarification = query.length <= 180 && /^(?:separ(?:ate|ately)|seper(?:ate|ately)|both|either|yes|yeah|yep|no\b|two\b|one\b|the (?:first|second)|(?:this|next|on|by)\s+(?:mon|tue|wed|thu|fri|sat|sun|week)|tomorrow\b|today\b|at\s+\d|\d{4}-\d{2}-\d{2})/.test(query.trim());
+        if (clarification) {
+            const recentUsers = (Array.isArray(conversation) ? conversation : []).filter(turn => turn && turn.role === 'user').slice(-6).reverse();
+            for (const turn of recentUsers) {
+                const text = String(turn.content || '').slice(0, 2000).toLowerCase();
+                if (/^\s*(?:cancel|never\s?mind|stop|forget (?:it|that))\b/.test(text)) break;
+                if (/\b(?:add|create|make|write|revise|edit|update|change|mark|complete|remove|move|schedule|reschedule|plan|save|set|log)\b/.test(text)) {
+                    query = text + '\n' + query;
+                    break;
+                }
+            }
+        }
+        // The full catalog remains the local validation/help authority. Only
+        // action requests need its schemas in the provider's prompt.
+        if (!/\b(?:add|create|make|write|draft|rewrite|revise|rephrase|proofread|correct|fix|improve|replace|apply|put|edit|update|change|mark|complete|delete|remove|move|rename|organize|schedule|reschedule|plan|import|export|save|remember|generate|build|set|log|start|stop|archive|duplicate|insert|turn|convert|split|merge|group|arrange|connect|open|undo)\b/.test(query)) return { domains: [], totalActions: 0 };
+        const noteEdit = /\b(?:revise|rewrite|rephrase|proofread|correct|improve|replace|edit)\b/.test(query);
+        const createTodo = /\b(?:add|create|make|put|log|remind)\b/.test(query)
+            && (/\b(?:tasks?|to[ -]?dos?|reminders?|homework|assignments?|deadlines?)\b/.test(query)
+                || (/\b(?:add|log|put)\b/.test(query) && /\b(?:tests?|exams?|quizzes)\b/.test(query)));
+        const stop = new Set('a an the to for of in on my me i you can could please this that with and it some help'.split(' '));
+        const terms = (query.match(/[a-z0-9]+/g) || []).filter(term => term.length > 2 && !stop.has(term));
+        const bank = buildActionsBank();
+        const ranked = bank.domains.flatMap(domain => domain.actions.map(action => {
+            const type = action.type.replace(/_/g, ' ');
+            const text = (type + ' ' + action.description).toLowerCase();
+            const score = terms.reduce((sum, term) => sum + (type.includes(term) ? 4 : text.includes(term) ? 1 : 0), 0)
+                + (noteEdit && action.type === 'edit_note_patch' ? 120 : 0)
+                + (createTodo && action.type === 'create_task' ? 120 : 0)
+                + (createTodo && /\b(?:homework|assignments?)\b/.test(query) && action.type === 'create_homework' ? 110 : 0);
+            return { action, domain, score };
+        })).filter(row => row.score > 0).sort((a, b) => b.score - a.score).slice(0, 12);
+        const domains = bank.domains.map(domain => ({ ...domain, actions: ranked.filter(row => row.domain === domain).map(row => row.action) })).filter(domain => domain.actions.length);
+        return { domains, totalActions: ranked.length };
+    }
+
+    function buildSystemPromptParts(context, userText = '', conversation = []) {
+        const bank = selectPromptActionBank(userText, conversation);
+        const bankText = renderActionsBankText(bank);
+        const staticText = bank.totalActions ? [
+            'You are Sutra Assistant, the contextual assistant in a private, local-first student workspace.',
             ...HARD_AGENT_RULES,
-            'The app has views: today, notes, homework, timeline, review, cramhub, apstudy, collegeapp, life, business, courses, alldue, testing (Testing Hub — AP exams, SAT/ACT/etc., scores, practice tests, mistakes), settings.',
-            'All data stays on the user\'s device. No backend.',
-            '',
-            'You can propose local app actions. When you want the user to change app state, append a single fenced block at the end of your reply:',
-            '```flow-actions',
-            '[ { "type": "create_task", "title": "Draft outline", "dueDate": "2026-05-26", "priority": "high" } ]',
-            '```',
-            'Rules for action proposals:',
-            '- Use only the action types in the Actions Bank below.',
-            '- One JSON array per block. Include a "label" field on each action that is a short human-readable description.',
-            '- Never put more than ~8 actions in one reply.',
-            '- When a request truly needs multiple ordered atomic actions, give every action a stable "planActionId" and add "dependsOn": ["earlier-id"] where a step requires an earlier result. Dependencies may reference only earlier actions in the same array. Sutra will review the dependency plan and apply it in order.',
-            '- Do not use dependency metadata when one higher-level workflow action already captures the whole request.',
-            '- For Canvas, prefer one canvas_edit_board action containing up to 24 reviewed operations. Use context.canvas.pageId and stable object ids. New add operations may declare a short clientId so later connect/group/arrange operations in the same action can reference it. Never invent ids for existing objects.',
-            '- For Slides, prefer one slides_edit_deck action containing up to 24 reviewed operations. Use context.slides.id and its stable slide/element ids. Create only text, shapes, and charts; never invent data URLs, external image URLs, or claim to fetch an image.',
-            '- The user must confirm each action; do not assume anything is applied. Sutra renders every action as an approval card the user must click — so PROPOSE, never declare. Say "I can mark that as taken — approve the card below" or "Want me to…?", NOT "I\'ve marked…" / "I\'ll mark…". Never claim a change happened; you cannot apply anything yourself.',
-            '- If the user just asked a question, do NOT propose actions. Only propose when the action is clearly useful.',
-            '- If context.canvas is present, it is a bounded summary of the active Canvas page. Use Canvas actions only for that active Canvas, and expect explicit user confirmation.',
-            '- For dates, prefer ISO YYYY-MM-DD. Times are HH:MM 24h.',
-            '- Prefer the higher-level workflow actions when the user wants a plan: import_assignments (one action with an "assignments" array), create_study_plan / create_exam_plan / create_assignment_plan (these produce LINKED objects), plan_day / plan_week / triage_deadlines. Use a single workflow action instead of many atomic ones when it captures the intent.',
-            '- When parsing pasted assignment text or a screenshot, return ONE import_assignments action whose "assignments" array has objects with: title, course, dueDate (YYYY-MM-DD), dueTime, type, priority, difficulty, sourceText, confidence (0-1).',
-            '- For note rewrites, heading renames, block moves, deduplication, and splits, use the corresponding anchored note action. Copy activeNote.id, activeNote.versionId, and activeNote.contentHash into noteId, versionId, and baseHash; anchor each hunk with exact before text plus start/end offsets. Never guess offsets for a note that is not fully present in context.',
-            '- The "derived" object in the context already contains locally-computed risk signals (overdue, overloaded days, review debt, low-confidence AP subjects, unscheduled priorities, nextBestAction). Use it; do not recompute it.',
-            '- To complete, reopen, archive, or reschedule EXISTING tasks/homework, use update_task_status / reschedule_tasks with the exact "id" values from context items (derived.overdue, derived.dueSoon, tasks, homework). When the user says "those"/"these", they mean the items you just listed — include their ids. Never create duplicates, and never delete or archive as a substitute for completing.',
-            '- Testing Hub EXAMS (context.testingHub — AP subjects, SAT, ACT, etc.) are NOT tasks. To mark an exam as taken/finished/done, or to reopen it, use update_exam_status with the examName (or examId). NEVER use update_task_status for an exam, and NEVER substitute an unrelated homework assignment — if the exam name does not match a task, that is expected; use update_exam_status. Exams have no due-date reschedule; only taken state and study status (planning/studying/reviewing/ready).',
-            '- NEVER compute grade percentages, GPAs, or required scores yourself. Propose the read-only grade actions (run_grade_what_if, solve_target_grade, rank_missing_work_by_grade_impact, explain_grade_risk) — Sutra computes them locally and shows the result.',
-            '',
-            'Product accuracy & memory rules (important):',
-            '- NEVER invent Sutra features, screens, settings, actions, or memories. If unsure whether something exists, say so or ask — do not guess.',
-            '- Only describe features present in context.productKnowledge (when provided) or the Actions Bank. Do not claim a capability that is not there.',
-            '- context.memory (when present) holds the user\'s saved long-term memories that Sutra retrieved as relevant. Use them to personalize; do NOT repeat them verbatim unless asked.',
-            '- NEVER write or change memory on your own. To save a memory, propose a create_memory action (the user confirms). Never infer or store sensitive memories (passwords, keys, financial, medical, precise location, locked-note content).',
-            '- When a target, date, or intent is ambiguous, ask one short clarifying question instead of guessing.',
-            '- Use Sutra\'s deterministic local systems for grade math and schedule-conflict detection — never do that math yourself.',
-            '',
-            '════════ ACTIONS BANK — everything you are able to propose; use ONLY these types ════════',
+            'Propose changes only when requested, using a single fenced flow-actions block containing a JSON array of at most eight actions. Each action needs type and a short label. Use ONLY the schemas below. The user must review and Apply; never claim a proposal changed anything.',
+            'Copy existing IDs, versionId and contentHash from evidence (contentHash becomes baseHash). Never guess them. For note edits, quote exact raw HTML from activeNote.patchContent in each hunk.before; omit start/end rather than counting characters. Sutra resolves unique quotes locally. Plain-text excerpts are not HTML anchors. Preserve existing markup in replacement; for a whole-note rewrite quote the complete untruncated patchContent. Ask for missing source instead of inventing it.',
+            'When asked to revise a supplied note and put it back, propose edit_note_patch for that exact note, with reviewed hunks. Do not claim it is saved before Apply. Recent chat turns are conversation evidence; never substitute unrelated workspace notes when asked what this conversation discussed.',
+            'Prefer a higher-level workflow action to many atomic edits. For ordered dependent actions, give stable planActionId and dependsOn referencing only earlier actions in the same reply.',
+            'Canvas/Slides operations require the active board/deck and stable object IDs. Create only supported text/shapes/charts; never invent image URLs or data URLs. Keep at most 24 operations in one board/deck action.',
+            'Dates use YYYY-MM-DD, times HH:MM. Import assignments as one import_assignments action. Deterministic grade math and schedule conflicts must use Sutra engines, not guessed calculations.',
+            'Use create_task for ordinary to-dos, reminders, and upcoming classroom tests. A test reminder is not a cram session. When asked to add multiple distinct tasks, propose one action per task. Resolve dates from the supplied current date or ask a short clarification if unclear.',
+            'ACTIONS AVAILABLE FOR THIS REQUEST:',
             bankText,
-            '════════════════════════════════════════════════════════════════════════════════════',
-            '',
-            'When you write prose, prefer short markdown bullets over long paragraphs.',
-            'Formatting Sutra understands: standard Markdown — **bold**, *italics*, `inline code`, fenced ``` code blocks, bullet and numbered lists, # headings, > blockquotes, [links](url), and tables.',
-            'For math/symbols, Sutra renders LaTeX between single dollars for inline (e.g. $x^2$, $a \\rightarrow b$, $\\frac{3}{4}$) and double dollars for display ($$ ... $$). Write math that way, OR use plain Unicode symbols (→, ×, ÷, ≤, ≥, ≠, ±, °, π, √). Do NOT escape the dollar signs (no \\$), do NOT wrap a whole sentence in dollars, and keep the LaTeX valid so it renders. Never emit a lone "$\\rightarrow$"-style token inside otherwise-plain prose without valid surrounding LaTeX.',
-            'When the user asks about "this note" or "this view", use the context block below.',
-            'Citing your sources: when an answer draws on a specific item that is present in the context — especially context.retrievedNotes, activeNote, a task, homework assignment, or exam — cite it inline as [short label](sutra://KIND/ID). KIND is one of page, task, homework, exam. For retrievedNotes use KIND page and the EXACT noteId. Use only ids present in context; NEVER invent an id or cite absent evidence. Prefer the quoted span and heading supplied by retrievedNotes, call out stale or conflicting evidence, and clearly say when notesEvidenceStatus is missing or limited. Cite the 1–3 sources the answer most depends on. Do not put citations inside flow-actions or cite a brand-new item.',
+            'These current schemas define your available actions. An earlier assistant message claiming an action was unavailable is not authoritative. Propose the supported action once the user has clarified its details; Apply is still required.',
+            'Use supplied evidence only; missing or partial context is not an empty workspace. Explain permission limits or ask to narrow if contextBudget.reduced. Cite workspace records using their exact citationUrl as [label](citationUrl); never convert a key into a URL or invent a kind. Cite note excerpts as [label](sutra://page/NOTE_ID).',
+            'Only describe product capabilities supported by productKnowledge or these schemas. Saved memory is context, never permission to save new or sensitive memory. Locked content keeps its separate consent requirements.',
+            'Keep prose concise. Standard Markdown and LaTeX are supported.',
+            ...buildPersonalizationLines()
+        ].join('\n') : [
+            'You are Sutra Assistant, a private, local-first student workspace assistant.',
+            ...HARD_AGENT_RULES,
+            'Answer this question without action proposals. No action schemas are supplied for this request.',
+            'Use only supplied evidence for workspace facts. Missing evidence is not proof the workspace is empty. Explain access limits; ask to narrow if contextBudget.reduced.',
+            'Cite workspace records using their exact citationUrl as [label](citationUrl); never convert a key into a URL or invent a kind. Cite note excerpts as [label](sutra://page/NOTE_ID). Never invent IDs, dates, scores, or capabilities.',
+            'Use relevant productKnowledge and memory only when supplied. Do not claim workspace grounding for a generic answer.',
+            'Keep the answer concise. Standard Markdown and LaTeX are supported.',
             ...buildPersonalizationLines()
         ].join('\n');
 
@@ -1363,12 +1426,24 @@
                 academicIntegrity: contextForModel.tutoringMode.academicIntegrity
             };
         }
-        const contextJson = (() => { try { return JSON.stringify(contextForModel, null, 2); } catch (e) { return '{}'; } })();
+        // Receipt bookkeeping stays local; the provider only needs permission
+        // limits and actual selected evidence, not duplicate read/selection logs.
+        delete contextForModel.contextSelectionReasons;
+        if (contextForModel.contextBudget) contextForModel.contextBudget = {
+            reduced: contextForModel.contextBudget.reduced,
+            omittedSourceCount: contextForModel.contextBudget.omittedSourceCount
+        };
+        if (contextForModel.accessReport) contextForModel.accessReport = {
+            mode: contextForModel.accessReport.mode,
+            areasRead: contextForModel.accessReport.areasRead,
+            deniedAreas: contextForModel.accessReport.deniedAreas
+        };
+        const contextJson = (() => { try { return JSON.stringify(contextForModel); } catch (e) { return '{}'; } })();
         const safety = window.SutraAssistantSafety;
         const untrustedContext = safety && typeof safety.wrapUntrusted === 'function' ? safety.wrapUntrusted('workspace-context', contextJson) : contextJson;
         const dynamicText = [
             '',
-            'REMINDER before you answer: you cannot apply anything — PROPOSE with a flow-actions block and never say you did it; use ONLY the context below and never invent data; use update_exam_status for Testing Hub exams (not tasks); ask if unsure.',
+            bank.totalActions ? 'Proposals require review; never claim they were applied. Use only supplied evidence and action schemas.' : 'Answer the question using supplied evidence when relevant; do not propose changes or invent workspace facts.',
             tutoringInstruction ? 'TRUSTED TUTORING CONTRACT: ' + tutoringInstruction : '',
             integrityInstruction ? 'TRUSTED ACADEMIC-INTEGRITY BOUNDARY: ' + integrityInstruction : '',
             '',
@@ -1521,8 +1596,13 @@
     // happens. Turn such an exam-status claim into a REAL, confirm-gated
     // proposal — but ONLY when the named exam actually exists in the Testing
     // Hub (so we never fabricate or misfire onto a task).
-    function inferExamStatusFromReply(text) {
+    function inferExamStatusFromReply(text, options) {
         try {
+            const userText = String(options && options.userText || '');
+            // Reading an exam date or quoting task notes is not a request to
+            // mark an exam taken, even if the reply contains "record"/"edited".
+            if (userText && !(/\b(?:mark|set|update|record|reopen|undo|un-?mark)\b/i.test(userText)
+                && /\b(?:taken|done|complete(?:d)?|finish(?:ed)?|reopen|un-?mark)\b/i.test(userText))) return [];
             if (typeof window === 'undefined' || typeof window.getTestingHubAssistantSummary !== 'function') return [];
             const lc = String(text || '').toLowerCase();
             // A mutation claim aimed at an exam/test.
@@ -1651,7 +1731,7 @@
     function inferActionsFromReply(replyText, options) {
         const text = String(replyText || '');
         if (!text.trim() || text.length > 4000) return [];
-        const examInferred = inferExamStatusFromReply(text);
+        const examInferred = inferExamStatusFromReply(text, options);
         if (examInferred.length) return examInferred;
         const lc = text.toLowerCase();
 
@@ -2041,7 +2121,23 @@
         const patchSystem = window.SutraNotePatchSystem;
         if (!patchSystem) return { ok: false, error: 'Note patch system unavailable' };
         try {
-            const proposal = patchSystem.create({ note: page, noteId: action.noteId, versionId: action.versionId, baseHash: action.baseHash, blockId: action.blockId, hunks: action.hunks });
+            const content = String(page.content || page.body || '');
+            const version = String(page.versionId || page.version || (Array.isArray(page.versions) ? page.versions.length : ''));
+            const sameBase = (!action.baseHash || String(action.baseHash) === patchSystem.hash(content))
+                && (!action.versionId || !version || String(action.versionId) === version);
+            const hunks = action.hunks.map(raw => {
+                // Models are unreliable at counting serialized HTML offsets.
+                // Bind a literal, unique quote before the first review only.
+                // Never relocate a stale proposal or guess among repeated text.
+                if (!sameBase || !raw || typeof raw.before !== 'string' || !raw.before.length) return raw;
+                if (Number.isInteger(raw.start) && Number.isInteger(raw.end) && content.slice(raw.start, raw.end) === raw.before) return raw;
+                const start = content.indexOf(raw.before);
+                if (start < 0) throw new Error('The quoted source does not match this note. Regenerate the proposal using the current note.');
+                if (content.indexOf(raw.before, start + 1) !== -1) throw new Error('The quoted source occurs more than once. Regenerate with a larger, unique passage.');
+                return Object.assign({}, raw, { start, end: start + raw.before.length });
+            });
+            const proposal = patchSystem.create({ note: page, noteId: action.noteId, versionId: action.versionId, baseHash: action.baseHash, blockId: action.blockId, hunks });
+            action.hunks = proposal.hunks;
             action.baseHash = proposal.baseHash;
             action.versionId = proposal.versionId;
         } catch (error) {
@@ -2062,6 +2158,9 @@
         if (!known) return { ok: false, error: `Unknown action type: ${action.type}` };
 
         switch (action.type) {
+            case 'review_study_preferences':
+                if (!validateStudySetupPreferences(action.preferences)) return { ok: false, error: 'Invalid study preference draft' };
+                break;
             case 'insert_text':
             case 'replace_selection':
                 if (!action.text || typeof action.text !== 'string') return { ok: false, error: 'Missing text' };
@@ -2370,16 +2469,29 @@
 
     function applyCreateTask(action) {
         const b = bridge();
-        const tasks = b && Array.isArray(b.tasks) ? b.tasks : null;
-        if (!Array.isArray(tasks)) return { ok: false, message: 'Tasks not available.' };
-        // IMPORTANT: match the canonical Atelier task shape (see app.js task
-        // creation at line ~16329). Missing `isActive`/`scheduleType`/etc. makes
-        // the task invisible in Today's filters, Daily Thread counts, and the
-        // Deadline Radar — even though it shows up in the All Tasks drawer.
-        const newTask = {
+        const legacy = b && Array.isArray(b.tasks) ? b.tasks.filter(task => task.origin === 'flow'
+            && task.title === action.title && (task.dueDate || '') === (action.dueDate || '')
+            && (task.dueTime || '') === (action.dueTime || '') && (task.notes || '') === (action.notes || '')) : [];
+        if (legacy.length === 1) return { ok: true, existing: true, message: 'This reminder is saved in the older planner. Move it to To-do below.', payload: { taskId: legacy[0].id, createdObjectIds: [{ kind: 'task', id: legacy[0].id }] } };
+        if (legacy.length > 1) return { ok: false, message: 'Several matching reminders are saved in the planner. Review those before adding another.' };
+        const saved = homeworkSnapshot().tasks.filter(task => task.kind === 'task' && task.origin === 'flow' && !task.done
+            && task.title === action.title && (task.dueDate || '') === (action.dueDate || '')
+            && (task.dueTime || '') === (action.dueTime || '') && (task.notes || '') === (action.notes || ''));
+        if (saved.length === 1) return { ok: true, existing: true, message: 'This reminder is already in To-do.', payload: { taskId: saved[0].id, createdObjectIds: [{ kind: 'homework', id: saved[0].id }] } };
+        if (saved.length > 1) return { ok: false, message: 'Several matching reminders are already in To-do. Review those before adding another.' };
+        return saveAssistantTodo(action);
+    }
+
+    function saveAssistantTodo(action, legacyTask) {
+        const store = window.SutraHomeworkStore;
+        if (!store || typeof store.transact !== 'function') return { ok: false, message: 'To-do is not available. Nothing was added.' };
+        const newTask = Object.assign({}, legacyTask || {}, {
             id: makeId('t'),
             title: String(action.title).slice(0, 200),
             notes: action.notes || '',
+            kind: 'task',
+            courseId: '',
+            done: false,
             completed: false,
             isActive: true,
             scheduleType: 'once',
@@ -2393,18 +2505,33 @@
             referenceUrl: null,
             createdAt: new Date().toISOString(),
             origin: 'flow'
-        };
-        tasks.unshift(newTask);
-        // Keep taskOrder in sync if it exists on the bridge.
+        });
+        if (legacyTask) Object.assign(newTask, legacyTask, { kind: 'task', courseId: '', done: !!legacyTask.completed, completed: !!legacyTask.completed });
         try {
-            if (typeof window.taskOrder !== 'undefined' && Array.isArray(window.taskOrder)) {
-                window.taskOrder.unshift(newTask.id);
-            }
-        } catch (e) { /* non-critical */ }
-        if (b) { b.persistAppData(); b.renderTaskViews(); }
-        else { safeCall(window.persistAppData); safeCall(window.renderTaskViews); }
-        if (action.linkPageId) safeCall(addPageLinks, action.linkPageId, { taskIds: [newTask.id] });
-        return { ok: true, message: 'Task added.', payload: { taskId: newTask.id, createdObjectIds: [{ kind: 'task', id: newTask.id }] } };
+            store.transact(workspace => {
+                const existing = workspace.tasks.find(task => String(task.id) === String(newTask.id));
+                if (existing) {
+                    const normalizedFields = new Set(['id', 'kind', 'courseId', 'done', 'completed', 'title', 'text', 'dueDate', 'dueTime', 'due', 'priority', 'difficulty', 'notes', 'createdAt', 'updatedAt', 'recurrence']);
+                    const metadataMatches = Object.keys(legacyTask || {}).filter(key => !normalizedFields.has(key))
+                        .every(key => JSON.stringify(existing[key]) === JSON.stringify(newTask[key]));
+                    const matches = metadataMatches && existing.kind === 'task' && existing.origin === 'flow' && existing.title === newTask.title
+                        && (existing.dueDate || '') === newTask.dueDate && (existing.dueTime || '') === newTask.dueTime
+                        && (existing.notes || '') === newTask.notes && existing.done === newTask.done;
+                    if (!matches) throw new Error('A different or edited To-do item already uses this id. Nothing was replaced.');
+                    return;
+                }
+                workspace.tasks.unshift(newTask);
+            }, { reason: 'assistant-create-todo', id: newTask.id });
+            if (!homeworkSnapshot().tasks.some(task => String(task.id) === String(newTask.id))) throw new Error('To-do did not accept the task.');
+            notifyHomeworkChanged();
+            const b = bridge();
+            if (b) b.renderTaskViews(); else safeCall(window.renderTaskViews);
+            if (action.linkPageId) safeCall(addPageLinks, action.linkPageId, { homeworkIds: [newTask.id] });
+            return { ok: true, message: 'Added to To-do.', payload: { taskId: newTask.id, createdObjectIds: [{ kind: 'homework', id: newTask.id }] } };
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'flow-assistant.saveAssistantTodo' }, 'error');
+            return { ok: false, message: error.message || 'Could not add the task to To-do.' };
+        }
     }
 
     function applyCreateHomework(action) {
@@ -2931,7 +3058,7 @@
                 const sum = window.getTestingHubAssistantSummary && window.getTestingHubAssistantSummary();
                 const id0 = String(action.examId || '');
                 const match = sum && sum.exams ? sum.exams.find(e => e.id === id0 || String(e.name || '').toLowerCase() === String(action.examName || '').toLowerCase()) : null;
-                return match ? { id: match.id, taken: !!match.taken, studyStatus: match.studyStatus || '' } : null;
+                return match ? { id: match.id, taken: !!match.taken, takenAt: match.takenAt || null, studyStatus: match.studyStatus || '' } : null;
             } catch (e) { return null; }
         })();
         const res = window.setTestingHubExamStatus(ref, {
@@ -2951,7 +3078,7 @@
             message: `**${res.examName}** ${what} in the Testing Hub.`,
             payload: {
                 affected: [{ store: 'testingHub', id: res.examId, title: res.examName }],
-                undoPayload: prevTaken ? { kind: 'exam_status', item: prevTaken } : null,
+                undoPayload: (res.previousState || prevTaken) ? { kind: 'exam_status', item: res.previousState || prevTaken } : null,
                 createdObjectIds: []
             }
         };
@@ -3466,10 +3593,12 @@
         return { ok: true, message: 'Opened the Memory manager.' };
     }
 
-    function applyAction(rawAction) {
+    function applyAction(rawAction, meta) {
         const valid = validateAction(rawAction);
         if (!valid.ok) return { ok: false, message: valid.error };
         const action = normalizeActionFields(rawAction);
+        const permissionError = assistantActionPermissionError(action, meta, false);
+        if (permissionError) return { ok: false, code: 'permission_denied', message: permissionError };
         switch (action.type) {
             case 'insert_text': return applyInsertText(action);
             case 'replace_selection': return applyReplaceSelection(action);
@@ -3548,6 +3677,11 @@
             case 'delete_memory': return applyDeleteMemory(action);
             case 'clear_expired_memories': return applyClearMemories(action, 'expired');
             case 'clear_temporary_memories': return applyClearMemories(action, 'temporary');
+            case 'review_study_preferences': {
+                const b = bridge();
+                if (!validateStudySetupPreferences(action.preferences) || !b || typeof b.reviewStudentPreferences !== 'function') return { ok: false, message: 'Study settings review is unavailable.' };
+                return b.reviewStudentPreferences(action.preferences);
+            }
             case 'open_memory_manager': return applyOpenMemoryManager(action);
             // import_assignments has no atomic applier — it is applied row-by-row
             // through the dedicated review table (see renderImportReview).
@@ -3653,6 +3787,7 @@
             case 'delete_memory': return `Forget ${Array.isArray(action.ids) && action.ids.length > 1 ? action.ids.length + ' memories' : 'a memory'}`;
             case 'clear_expired_memories': return 'Forget all expired memories';
             case 'clear_temporary_memories': return 'Forget all temporary memories';
+            case 'review_study_preferences': return 'Review study preferences in Settings';
             case 'open_memory_manager': return 'Open the Memory manager';
             default: return `Unknown: ${action.type}`;
         }
@@ -3688,6 +3823,7 @@
             case 'delete_memory': return 'Forget';
             case 'disable_memory': return 'Disable';
             case 'enable_memory': return 'Enable';
+            case 'review_study_preferences': return 'Review in Settings';
             case 'open_memory_manager': return 'Open manager';
             default: return 'Apply';
         }
@@ -4017,9 +4153,46 @@
     // created object (a new note opens itself); otherwise falls back to the
     // action's domain view via the capability registry. Returns null for
     // actions with no meaningful destination (navigation, memory, assistant).
+    async function moveLegacyAssistantTodo(id) {
+        const b = bridge();
+        const task = b && Array.isArray(b.tasks) ? b.tasks.find(row => String(row.id) === String(id)) : null;
+        if (!task || task.origin !== 'flow') { showToast('That saved planner task is no longer available.'); return false; }
+        const before = JSON.stringify(task);
+        try {
+            const permissionError = assistantActionPermissionError({ type: 'create_task', title: task.title }, { reviewed: true }, false);
+            if (permissionError) throw new Error(permissionError);
+            const store = window.SutraHomeworkStore;
+            if (!store || typeof store.whenPersisted !== 'function') throw new Error('To-do persistence is not available. The planner task was kept.');
+            const saved = saveAssistantTodo(task, task);
+            if (!saved.ok) throw new Error(saved.message);
+            if (await store.whenPersisted() === false) throw new Error('To-do save is not confirmed. The planner task was kept.');
+            const index = b.tasks.findIndex(row => row === task);
+            if (index < 0 || JSON.stringify(task) !== before) throw new Error('The planner task changed during the move. It was kept for review.');
+            b.tasks.splice(index, 1);
+            try {
+                if (await b.persistAppData() === false) throw new Error('The planner update could not be saved.');
+            } catch (error) { b.tasks.splice(index, 0, task); throw error; }
+            b.renderTaskViews();
+            notifyHomeworkChanged();
+            callApp('setActiveView', 'homework');
+            showToast('Moved the saved reminder to To-do.');
+            return true;
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'flow-assistant.moveLegacyAssistantTodo', id }, 'error');
+            showToast(error.message || 'The reminder could not be moved.');
+            return false;
+        }
+    }
+
     function receiptLinkForAction(action, result) {
         try {
             const created = (result && result.payload && result.payload.createdObjectIds) || [];
+            const oldTask = created.find(object => object && object.kind === 'task' && object.id);
+            if (oldTask && action && action.type === 'create_task') {
+                const b = bridge();
+                const legacy = b && Array.isArray(b.tasks) ? b.tasks.find(row => String(row.id) === String(oldTask.id)) : null;
+                if (legacy && legacy.origin === 'flow') return { label: 'Move to To-do', go: () => moveLegacyAssistantTodo(oldTask.id) };
+            }
             const page = created.find(o => o && o.kind === 'page' && o.id);
             if (page) {
                 if (!resolveLiveAssistantTarget('page', page.id)) return null;
@@ -4035,7 +4208,7 @@
             const reg = (typeof window !== 'undefined') ? window.SutraCapabilityRegistry : null;
             const meta = reg && typeof reg.get === 'function' ? reg.get(type) : null;
             const DOMAIN_VIEWS = {
-                tasks: { label: 'Open Home', view: 'today' },
+                tasks: { label: 'Open To-do', view: 'homework' },
                 homework: { label: 'Open To-do', view: 'homework' },
                 timeline: { label: 'Open Timeline', view: 'timeline' },
                 review: { label: 'Open Review', view: 'review' },
@@ -4063,9 +4236,12 @@
         receipt.className = 'flow-action-receipt';
         const created = (result && result.payload && result.payload.createdObjectIds) || [];
         const bits = [];
-        if (created.length) {
+        if (created.length && !result.existing) {
             const byKind = created.reduce((acc, o) => {
-                if (o && o.kind) acc[o.kind] = (acc[o.kind] || 0) + 1;
+                if (o && o.kind) {
+                    const kind = o.kind === 'homework' && homeworkSnapshot().tasks.some(task => String(task.id) === String(o.id) && task.kind === 'task') ? 'task' : o.kind;
+                    acc[kind] = (acc[kind] || 0) + 1;
+                }
                 return acc;
             }, {});
             bits.push('Created ' + Object.keys(byKind).map(k => `${byKind[k]} ${k}${byKind[k] === 1 ? '' : 's'}`).join(', '));
@@ -4283,6 +4459,7 @@
             const actionValidation = validateAction(action);
             const valid = planStructure.ok ? actionValidation : { ok: false, error: planStructure.issues[0] || 'Invalid workspace plan.' };
             const risk = classifyRisk(action);
+            const permissionError = valid.ok ? assistantActionPermissionError(action, {}, true) : '';
             const previewTargetSnapshot = liveActionValidation(action).snapshot;
             card.setAttribute('data-risk', risk);
             card.setAttribute('data-action-type', action.type);
@@ -4291,7 +4468,7 @@
             // READ-ONLY actions (local grade math etc.) run immediately and
             // render their deterministic result — no approval needed, no
             // mutation occurs.
-            if (risk === 'read_only' && !planStructure.explicit) {
+            if (risk === 'read_only' && action.type !== 'review_study_preferences' && !planStructure.explicit) {
                 const header = document.createElement('div');
                 header.className = 'flow-action-card-head';
                 header.innerHTML = `<span class="flow-action-risk flow-risk-read_only" title="Read-only — computed locally">local</span>`
@@ -4381,6 +4558,58 @@
                 card.appendChild(err);
             }
 
+            if (permissionError) {
+                const permissionNote = document.createElement('div');
+                permissionNote.className = 'flow-action-permission-note';
+                permissionNote.setAttribute('role', 'status');
+                const permissionMessage = document.createElement('span');
+                permissionMessage.textContent = `Currently blocked: ${permissionError} You can enable reviewed changes here; nothing applies until you choose Apply.`;
+                permissionNote.appendChild(permissionMessage);
+                const enable = document.createElement('button');
+                enable.type = 'button';
+                enable.className = 'flow-action-select-btn';
+                enable.dataset.assistantPermissionEnable = 'true';
+                enable.textContent = 'Use Everyday Assistant';
+                enable.addEventListener('click', async () => {
+                    if (assistantPermissionSavePending) return;
+                    const approved = typeof window.showCustomConfirmDialog === 'function' && await window.showCustomConfirmDialog({
+                        title: 'Use Everyday Assistant?',
+                        message: 'Allow relevant workspace reading and reviewed changes, with recent conversation context. Existing area blocks, locked-page protection and sensitive-content settings stay in place. This does not apply the proposed change or connect a provider.',
+                        confirmText: 'Enable Everyday', cancelText: 'Keep current permissions'
+                    });
+                    if (!approved) return;
+                    enable.disabled = true;
+                    permissionNote.setAttribute('aria-busy', 'true');
+                    permissionMessage.textContent = 'Saving Assistant access…';
+                    let result;
+                    try {
+                        result = await saveAssistantPermissionSetting(() => window.SutraAssistantPermissions.applyPreset('everyday'));
+                    } catch (error) {
+                        result = { ok: false, phase: 'save', error };
+                    }
+                    if (result.ok) {
+                        permissionNote.setAttribute('aria-busy', 'false');
+                        permissionMessage.textContent = 'Assistant access change saved locally. Review this proposal and choose Apply when ready.';
+                    } else if (result.phase === 'apply') {
+                        permissionNote.setAttribute('aria-busy', 'false');
+                        enable.disabled = false;
+                        permissionMessage.textContent = result.error && result.error.message || 'Could not change Assistant setup.';
+                        showToast(result.error && result.error.message || 'Could not change Assistant setup.');
+                    } else if (result.phase === 'busy') {
+                        permissionNote.setAttribute('aria-busy', 'false');
+                        enable.disabled = false;
+                        permissionMessage.textContent = 'Another Assistant access change is still saving. Try again when it finishes.';
+                    } else {
+                        renderAssistantPermissionCardSaveFailure(permissionNote);
+                    }
+                });
+                const setupRow = document.createElement('div');
+                setupRow.className = 'flow-action-row';
+                setupRow.appendChild(enable);
+                permissionNote.appendChild(setupRow);
+                card.appendChild(permissionNote);
+            }
+
             const actionsRow = document.createElement('div');
             actionsRow.className = 'flow-action-row';
 
@@ -4429,7 +4658,9 @@
                     card.dataset.confirmed = 'true';
                 }
                 applyBtn.disabled = true;
-                const result = applyActionLogged(action, Object.assign({ batchId }, opts && opts.meta || {}));
+                const result = applyActionLogged(action, Object.assign({}, opts && opts.meta || {}, {
+                    batchId, reviewed: true, destructiveApproved: card.dataset.confirmed === 'true'
+                }));
                 if (result.ok) {
                     // Receipt = what happened + deep link + inline undo. This is
                     // the closure of the propose → approve → apply loop.
@@ -4443,10 +4674,9 @@
                     noteBatchProgress(1);
                 } else {
                     if (planStructure.explicit) planStates.set(planStep.id, 'failed');
-                    const status = document.createElement('div');
-                    status.className = 'flow-action-error';
-                    status.textContent = `✗ ${result.message}`;
-                    card.appendChild(status);
+                    let status = card.querySelector('.flow-action-apply-error');
+                    if (!status) { status = document.createElement('div'); status.className = 'flow-action-error flow-action-apply-error'; card.appendChild(status); }
+                    status.textContent = result.message;
                     applyBtn.disabled = false;
                     const conflict = result.payload && result.payload.conflict;
                     if (isAnchoredNoteAction(action) && conflict && conflict.code === 'rebase_required' && conflict.proposal) {
@@ -4835,8 +5065,20 @@
     // --------------------------------------------------------------
     // Public Ask-Flow helper (used by view buttons / command palette)
     // --------------------------------------------------------------
+    let pendingHelpProviderPrompt = '';
     function askFlow(prompt, opts) {
         const options = opts || {};
+        if (options.nodeId) pendingHelpProviderPrompt = String(prompt || '').trim();
+        // A Help handoff stays in the full chat that displayed its card.
+        const fullInput = document.getElementById('asstInput');
+        const controller = window.SutraAssistantConversationController;
+        if (options.messagesHost && options.messagesHost.id === 'asstMessages' && fullInput && controller && typeof controller.send === 'function') {
+            fullInput.value = String(prompt || '');
+            fullInput.dispatchEvent(new Event('input', { bubbles: true }));
+            fullInput.focus();
+            if (options.send) controller.send('full');
+            return;
+        }
         const panel = document.getElementById('chatbotPanel');
         const input = document.getElementById('chatInput');
         if (!input || !panel) return;
@@ -4886,10 +5128,16 @@
         if (privacy && typeof privacy.canRead === 'function' && !privacy.canRead('notes', Object.assign({}, accessOptions, {
             approvedAreas: (options.approvedAreas || []).concat(assistantAccessIds.length ? ['notes'] : [])
         }))) {
-            return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', excludedCount: 0 };
+            return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', scope: { area: 'notes' }, excludedCount: 0 };
         }
         const b = bridge();
-        const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
+        const allPages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
+        const wantsHelp = /\b(?:help\s*(?:&|and)\s*docs|documentation|sutra\s+(?:help|features|settings))\b|\b(?:how|where)\b.{0,50}\bsutra\b/i.test(String(userText || ''));
+        // A verified one-request ticket identifies an explicit page, not a
+        // request to search similarly named notes throughout the workspace.
+        const pages = allPages.filter(page => page
+            && (!assistantAccessIds.length || assistantAccessIds.includes(String(page.id)))
+            && (wantsHelp || !(page.systemRole === 'help-docs' || page.builtInId === 'help-docs' || page.id === 'help_page' || (page.isSystemPage && String(page.title || '').toLowerCase() === 'help & docs'))));
         // The editor's unlock set is intentionally not used here. A page PIN
         // entered to edit a note must not silently authorize Assistant access.
         const unlockedIds = new Set(assistantAccessIds);
@@ -4907,51 +5155,499 @@
             };
         }
         const active = getActiveNoteSummary(accessOptions);
-        const scope = options.scope && typeof options.scope === 'object'
-            ? options.scope
+        const suppliedScope = options.scope || options.conversationScope;
+        let scope = suppliedScope && typeof suppliedScope === 'object'
+            ? suppliedScope
             : { type: 'all' };
-        return core.search(notesKnowledgeCache.index, userText, {
+        // Notes Knowledge uses `note`, while other Assistant paths also accept
+        // `page`. Preserve exclusions and other scope fields when translating;
+        // a missing identity remains an empty note scope rather than searching all.
+        if (scope.type === 'page') {
+            scope = Object.assign({}, scope, { type: 'note', noteId: scope.noteId || scope.pageId || scope.id || '' });
+        }
+        const searchOptions = {
             scope,
             currentNoteId: active && active.id || '',
             limit: options.limit || 8,
+            quoteLength: 700,
             staleAfterDays: 180,
             excludedSourceIds: Array.isArray(scope.excludedSourceIds) ? scope.excludedSourceIds : [],
             excludedNoteIds: Array.isArray(scope.excludedNoteIds) ? scope.excludedNoteIds : []
+        };
+        let result = core.search(notesKnowledgeCache.index, userText, searchOptions);
+        // "Read this note" need not contain terms from the note's body/title.
+        // Only an already verified, page-scoped ticket permits this bounded
+        // fallback. Conversation/source exclusions still apply to both searches.
+        if (assistantAccessIds.length && !result.sources.length) {
+            result = core.search(notesKnowledgeCache.index, '', Object.assign({}, searchOptions, { allowEmptyQuery: true }));
+            result.query = String(userText || '');
+        }
+        const seen = new Set();
+        const perNote = new Map();
+        result.sources = result.sources.filter(source => {
+            const key = source.noteId + ':' + source.quote;
+            const count = perNote.get(source.noteId) || 0;
+            if (!source.id || (source.score < 6 && !assistantAccessIds.includes(String(source.noteId))) || seen.has(key) || seen.has('id:' + source.id) || count >= 2) return false;
+            seen.add(key); seen.add('id:' + source.id); perNote.set(source.noteId, count + 1); return true;
+        }).slice(0, 4);
+        result.evidenceStatus = result.sources.length ? 'supported' : 'missing';
+        return result;
+    }
+
+    // Search the canonical registry locally, then send a small set of relevant
+    // records. No second workspace store or wholesale export goes to a model.
+    function selectRelevantWorkspaceContext(userText, options = {}) {
+        const registry = window.SutraWorkspaceEntityRegistry;
+        const privacy = window.SutraAssistantPrivacy;
+        if (!registry || !privacy || typeof registry.collectSearchable !== 'function' || typeof privacy.canRead !== 'function') return null;
+        const mapping = {
+            task: ['planning', 'tasks'], homework: ['planning', 'homework'],
+            assignment_milestone: ['planning', 'workspacePlanning'], timeline_block: ['planning', 'workspacePlanning'],
+            course: ['courses', 'workspaceCourses'], course_file: ['courses', 'workspaceCourses'], grade_record: ['courses', 'workspaceCourses'],
+            review_deck: ['learning', 'workspaceLearning'], review_card: ['learning', 'workspaceLearning'],
+            academic_record: ['learning', 'workspaceLearning'], study_record: ['learning', 'workspaceLearning'],
+            testing_exam: ['learning', 'workspaceLearning'], testing_mistake: ['learning', 'workspaceLearning'],
+            college_record: ['college', 'workspaceCollege'], life_record: ['life', 'workspaceLife'], habit: ['life', 'workspaceLife'],
+            business_record: ['business', 'workspaceBusiness'], custom_tab: ['workspace', 'workspaceOverview'],
+            portfolio_entry: ['workspace', 'workspaceOverview'], focus_template: ['workspace', 'workspaceOverview']
+        };
+        let query = String(userText || '').toLowerCase();
+        // Resolve a conversational follow-up only when the user enabled history.
+        // Reuse the preceding question, never the provider's possibly invented IDs.
+        if (/\b(?:that|this|its|their|those)\b/i.test(query) && getChatMemoryMode() === 'stateful') {
+            const previous = (Array.isArray(options.conversation) ? options.conversation : []).slice().reverse()
+                .find(turn => turn && turn.role === 'user' && String(turn.content || '').trim() !== String(userText || '').trim());
+            if (previous) query += ' ' + String(previous.content || '').slice(0, 1000).toLowerCase();
+        }
+        const classListRequest = /\b(?:classes?|courses?)\b/.test(query)
+            && ((/\b(?:my|mine|our|we|i(?:['’]?m)?|taking|enrolled|registered)\b/.test(query)
+                    && /\b(?:list|show|which|what|all|take|taking|enrolled|registered|have)\b/.test(query))
+                || (/\b(?:list|show)\b/.test(query) && /\b(?:all|every)\b/.test(query)));
+        const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your saved notes note details reference url one short sentence cite same its'.split(' '));
+        const todo = /\b(?:to[ -]?dos?|task(?:s| list)?|homework|assignments?)\b/i.test(query);
+        if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo', 'todos', 'dos', 'u', 'all', 'summarize', 'summarise', 'summary', 'overview', 'check'].forEach(term => stop.add(term));
+        if (classListRequest) ['class', 'classes', 'course', 'courses', 'all', 'every', 'im', 'taking', 'enrolled', 'registered', 'list', 'show', 'which', 'what', 'have', 'mine', 'our', 'we'].forEach(term => stop.add(term));
+        const terms = (query.match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !stop.has(term)).slice(0, 32);
+        const taskList = todo && terms.length === 0;
+        const taskDetailsOnly = todo && /\b(?:saved notes|reference url|task notes|assignment notes)\b/.test(query)
+            && !/\b(?:sat|act|exams?|calendar|grades?|college)\b/.test(query);
+        const planning = /\b(?:plan|schedule|due|overdue|today|tomorrow|week|priorit|next step|what should i do)\b/i.test(query);
+        const completed = /\b(?:completed|finished|done|archived)\b/i.test(query);
+        const permissions = privacy.getPermissions();
+        const allowedTypes = Object.keys(mapping).filter(type => privacy.canRead(mapping[type][0], options));
+        if (!allowedTypes.length) return {};
+        const scope = options.scope || options.conversationScope || {};
+        const excluded = new Set([].concat(scope.excludedSourceIds || [], scope.excludedNoteIds || []).map(String));
+        let records;
+        try { records = registry.collectSearchable({}, { types: allowedTypes, includePrivate: permissions.allowPrivateDocuments === true }); }
+        catch (error) { return null; }
+        const courseTypes = new Map();
+        if (classListRequest && privacy.canRead('courses', options) && window.courseHub && typeof window.courseHub.getCourses === 'function') {
+            try {
+                const hubCourses = window.courseHub.getCourses({ filter: 'active' }) || [];
+                (Array.isArray(hubCourses) ? hubCourses : []).forEach(course => {
+                    if (course && course.id && course.type) courseTypes.set(String(course.id), String(course.type).trim().toLowerCase());
+                });
+            } catch (error) { /* registry records remain the bounded fallback */ }
+        }
+        const nonClassCourseType = /^(?:activity|misc|self[ _-]?study)$/i;
+        const ranked = records.map(entity => {
+            const target = mapping[entity.type];
+            if (!target || !privacy.canRead(target[0], options) || excluded.has(String(entity.key)) || excluded.has(String(entity.id))) return null;
+            if (entity.privacy && entity.privacy.locked) return null;
+            const meta = entity.metadata || {};
+            if (classListRequest) {
+                if (entity.type !== 'course' || /^(?:archived|completed|done)$/i.test(entity.status || '')) return null;
+                const courseType = courseTypes.get(String(entity.id)) || String(meta.courseType || meta.type || meta.kind || '').trim().toLowerCase();
+                if (nonClassCourseType.test(courseType)) return null;
+            }
+            const category = [meta.collection, meta.domain].join(' ');
+            if (!permissions.allowFinancial && /cost|financial|invoice|finance|spend|expense|income|budget|scholarship|tuition/i.test(category)) return null;
+            if (/wellness|checkins|journalentries|fitness|calories|sleeptracker|journals/i.test(category)) return null;
+            if (!permissions.allowPrivateDocuments && /journals|documents/i.test(category)) return null;
+            const isTask = entity.type === 'task' || entity.type === 'homework';
+            if (taskDetailsOnly && !isTask) return null;
+            if (isTask && !completed && /^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
+            if (isTask && completed && !/^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
+            const title = String(entity.title || '').toLowerCase();
+            const text = [entity.text || '', entity.status || '', ...(entity.keywords || [])].join(' ').toLowerCase();
+            let score = classListRequest ? 100 : terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
+            if (taskList && isTask) score += 40;
+            if (planning && target[0] === 'planning') score += 15;
+            if (todo && isTask && score > 0) score += 10;
+            if (score === 0) return null;
+            const match = terms.map(term => text.indexOf(term)).filter(index => index >= 0).sort((a, b) => a - b)[0] || 0;
+            const courseType = classListRequest
+                ? courseTypes.get(String(entity.id)) || String(meta.courseType || meta.type || meta.kind || '').trim().toLowerCase()
+                : '';
+            return { entity, target, score, courseType, excerpt: truncate(String(entity.text || '').slice(Math.max(0, match - 160)), 900) };
+        }).filter(Boolean).sort((a, b) => classListRequest
+            ? String(a.entity.title || '').localeCompare(String(b.entity.title || '')) || String(a.entity.key).localeCompare(String(b.entity.key))
+            : b.score - a.score || String(a.entity.dates && a.entity.dates.due || '9999').localeCompare(String(b.entity.dates && b.entity.dates.due || '9999')) || String(a.entity.key).localeCompare(String(b.entity.key)));
+        const selected = taskDetailsOnly && ranked.length ? ranked.filter(row => row.score >= ranked[0].score * 0.75) : ranked;
+        const result = {};
+        const selectionLimit = taskList || classListRequest ? 40 : 16;
+        selected.slice(0, selectionLimit).forEach(({ entity, target, score, courseType, excerpt }) => {
+            if (!result[target[1]]) result[target[1]] = [];
+            result[target[1]].push({ id: entity.id, key: entity.key, type: entity.type, title: entity.title,
+                courseType: classListRequest ? courseType : undefined,
+                excerpt: entity.type === 'task' || entity.type === 'homework' ? undefined : excerpt,
+                notes: entity.type === 'task' || entity.type === 'homework' ? String(entity.metadata && entity.metadata.taskNotes || '') : undefined,
+                notesTruncated: entity.type === 'task' || entity.type === 'homework' ? Number(entity.metadata && entity.metadata.taskNotesLength || 0) > 1000 : undefined,
+                dueDate: entity.dates && entity.dates.due || '', status: entity.status,
+                referenceUrl: (entity.type === 'task' || entity.type === 'homework') ? String(entity.metadata && entity.metadata.referenceUrl || '') : undefined,
+                citationUrl: 'sutra://entity/' + encodeURIComponent(entity.key),
+                courseId: entity.courseId || '', relevance: score });
         });
+        result.workspaceRetrieval = { matchedCount: selected.length, selectedCount: Math.min(selected.length, selectionLimit), limit: selectionLimit, taskDetailsOnly, classListOnly: classListRequest };
+        return result;
+    }
+
+    function applyRelevantWorkspaceContext(ctx, userText, options = {}) {
+        if (ctx.depth === 'minimal' || (ctx.depth === 'currentView' && ctx.view !== 'assistantview')) return ctx;
+        const relevant = selectRelevantWorkspaceContext(userText, options);
+        if (!relevant) return ctx;
+        if (ctx.depth === 'currentView' && ctx.view === 'assistantview') ctx.depth = 'workspace';
+        const derived = ctx.derived;
+        ['tasks', 'homework', 'timelineUpcoming', 'timelineToday', 'timeline', 'deadlines', 'review', 'apStudy', 'college', 'life', 'business', 'cram', 'courses', 'allDue', 'testingHub', 'derived', 'customTab'].forEach(key => { delete ctx[key]; });
+        ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview', 'workspaceRetrieval'].forEach(key => { delete ctx[key]; });
+        Object.assign(ctx, relevant);
+        if (/\b(?:plan|schedule|due|overdue|priorities|next step|what should i do)\b/i.test(userText) && derived) ctx.derived = derived;
+        const scope = options.scope || options.conversationScope || {};
+        const visibleNote = ctx.view === 'notes';
+        const scopedNote = scope.type === 'note' || scope.type === 'page';
+        // An open Notes surface is a concrete target even when the student says
+        // “my supplement” or “revise it”. Keep it ahead of incidental matches;
+        // the final privacy filter still enforces Notes/locked-page access.
+        if (!visibleNote && !scopedNote && !/\b(?:this|current|open|active)\s+(?:note|page|canvas|slides?)\b/i.test(userText) && !ctx.selection) {
+            delete ctx.activeNote; delete ctx.canvas; delete ctx.slides;
+        }
+        return ctx;
+    }
+
+
+    function shouldInvestigateWorkspace(userText, options = {}) {
+        if (options.disableInvestigation || currentLockedPageAccessTicket(options) || getAttachments().length) return false;
+        const depth = normalizeDepth(options.depth);
+        if (depth === 'minimal' || (depth === 'currentView' && getActiveViewName() !== 'assistantview')) return false;
+        const scope = options.scope || options.conversationScope || {};
+        if (scope.type && !['all', 'workspace', 'note', 'page', 'course'].includes(scope.type)) return false;
+        const text = String(userText || '');
+        if (/\b(?:this|current|open|active)\s+(?:note|page|canvas|slide)|\b(?:selected|highlighted)\s+text\b/i.test(text)) return false;
+        return /\b(?:my|our|workspace)\b/i.test(text)
+            && /\b(?:find|search|investigate|compare)\b|\blook\s+up\b/i.test(text)
+            && /\b(?:notes?|pages?|tasks?|to[ -]?dos?|homework|assignments?|worksheets?|courses?|classes|grades?|exams?|tests?|midterms?|finals?|schedule|calendar|records?|workspace|materials?|documents?|projects?)\b/i.test(text);
+    }
+
+    // Search and every subsequent read share this deny-by-default policy. No
+    // tickets or editor unlock state enter an investigation.
+    function investigationArea(type) {
+        const areas = {
+            note: 'notes', task: 'planning', homework: 'planning', assignment_milestone: 'planning', timeline_block: 'planning',
+            course: 'courses', course_file: 'courses', grade_record: 'courses', review_deck: 'learning', review_card: 'learning',
+            academic_record: 'learning', study_record: 'learning', testing_exam: 'learning', testing_mistake: 'learning',
+            college_record: 'college', life_record: 'life', habit: 'life', business_record: 'business',
+            custom_tab: 'workspace', portfolio_entry: 'workspace', focus_template: 'workspace'
+        };
+        return areas[type] || '';
+    }
+
+    function investigationRecordAllowed(entity, options = {}) {
+        const privacy = window.SutraAssistantPrivacy;
+        if (!entity || !privacy || typeof privacy.canRead !== 'function' || typeof privacy.getPermissions !== 'function') return false;
+        const area = investigationArea(entity.type);
+        if (!area || !privacy.canRead(area) || !entity.privacy || entity.privacy.locked || entity.privacy.searchable === false) return false;
+        const permissions = privacy.getPermissions();
+        if (entity.privacy.private && !permissions.allowPrivateDocuments) return false;
+        const meta = entity.metadata || {};
+        const category = [meta.collection, meta.domain].join(' ');
+        if (/wellness|checkins|journalentries|fitness|calories|sleeptracker|journals/i.test(category)) return false;
+        if (!permissions.allowPrivateDocuments && /documents/i.test(category)) return false;
+        if (!permissions.allowFinancial && /cost|financial|invoice|finance|spend|expense|income|budget|scholarship|tuition/i.test(category)) return false;
+        const scope = options.scope || options.conversationScope || {};
+        const excluded = [].concat(scope.excludedSourceIds || [], scope.excludedNoteIds || []).map(String);
+        if (excluded.includes(String(entity.key)) || excluded.includes(String(entity.id))) return false;
+        if ((scope.type === 'note' || scope.type === 'page') && (entity.type !== 'note' || String(entity.id) !== String(scope.noteId || scope.pageId || scope.id))) return false;
+        if (scope.type === 'course' && String(entity.courseId || (entity.type === 'course' ? entity.id : '')) !== String(scope.courseId)) return false;
+        if (entity.type === 'note') {
+            const b = bridge({ diagnose: false });
+            const page = b && Array.isArray(b.pages) && b.pages.find(row => row && String(row.id) === String(entity.id));
+            if (!page || pageIsLocked(page) || page.isLocked === true) return false;
+            if (page.systemRole === 'help-docs' || page.builtInId === 'help-docs' || page.id === 'help_page' || page.isSystemPage) return false;
+            if (excluded.some(id => id.startsWith(String(entity.id) + ':') || id.startsWith('note:' + String(entity.id) + ':'))) return false;
+        }
+        return true;
+    }
+
+    function searchInvestigationRecords(query, options = {}) {
+        const registry = window.SutraWorkspaceEntityRegistry;
+        const privacy = window.SutraAssistantPrivacy;
+        if (!registry || !privacy || typeof registry.collectSearchable !== 'function' || typeof privacy.canRead !== 'function') return { matches: [], notice: 'Workspace search is unavailable.' };
+        const types = registry.listAdapters().map(row => row.id).filter(type => investigationArea(type) && privacy.canRead(investigationArea(type)));
+        if (!types.length) return { matches: [], notice: 'Workspace access does not permit this search. Ask the student to change access if wanted.' };
+        const terms = (String(query || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !/^(?:my|the|and|for|find|search|please|notes?|tasks?|workspace|compare)$/.test(term)).slice(0, 24);
+        if (!terms.length) return { matches: [], notice: 'Use specific topic or title terms to narrow the search.' };
+        const rows = registry.collectSearchable({}, { types, includePrivate: privacy.getPermissions().allowPrivateDocuments === true });
+        const ranked = rows.filter(row => investigationRecordAllowed(row, options)).map(row => {
+            const title = String(row.title || '').toLowerCase();
+            const text = String(row.text || '').toLowerCase();
+            const score = terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
+            return { row, score };
+        }).filter(row => row.score > 0).sort((a, b) => b.score - a.score || String(a.row.key).localeCompare(String(b.row.key)));
+        const safety = window.SutraAssistantSafety;
+        if (!safety || typeof safety.safeObject !== 'function') return { matches: [], notice: 'Workspace privacy filtering is unavailable.' };
+        const matches = ranked.slice(0, 4).map(({ row }) => ({ key: row.key, kind: row.type, title: String(row.title || '').slice(0, 300), courseId: row.courseId || '', updatedAt: row.dates && row.dates.updated || '', dueDate: row.dates && row.dates.due || '', startAt: row.type === 'timeline_block' && row.dates && row.dates.start || '', endAt: row.type === 'timeline_block' && row.dates && row.dates.end || '', status: row.status || '', citationUrl: row.type === 'note' ? 'sutra://page/' + encodeURIComponent(row.id) : 'sutra://entity/' + encodeURIComponent(row.key) })).map(row => { const safe = safety.safeObject(row); return safe && safe.key === row.key ? safe : null; }).filter(Boolean);
+        // A comparison intentionally asks for multiple distinct sources. Repeated
+        // names still require the student to identify the intended records.
+        const duplicateTitle = matches.some((row, index) => matches.some((other, next) => index !== next && row.title.toLowerCase() === other.title.toLowerCase()));
+        const compare = /\b(?:compare|versus|vs|differences?|contradict|across|both)\b/i.test(options.userText || '');
+        return { matches, ambiguous: duplicateTitle || (!compare && ranked.length > 1 && ranked[1].score >= ranked[0].score * 0.8),
+            notice: ranked.length > 4 ? 'Showing four matches; additional matches were omitted. Narrow the query for complete coverage.' : (matches.length ? 'Search returns metadata only. Read selected keys for content.' : 'No permitted matching records were found; this does not prove none exist.') };
+    }
+
+    function readInvestigationRecords(keys, options = {}) {
+        const registry = window.SutraWorkspaceEntityRegistry;
+        const privacy = window.SutraAssistantPrivacy;
+        const safety = window.SutraAssistantSafety, assistantCore = window.SutraAssistantCore;
+        if (!registry || typeof registry.find !== 'function' || !privacy || typeof privacy.canRead !== 'function' || !safety || typeof safety.safeObject !== 'function' || !assistantCore || typeof assistantCore.normalizeSource !== 'function') return [];
+        return (Array.isArray(keys) ? keys : []).slice(0, 4).map(key => {
+            const type = String(key).split(':')[0], area = investigationArea(type);
+            if (!area || !privacy.canRead(area)) return null;
+            const row = registry.find(String(key), {}, { includePrivate: privacy.getPermissions().allowPrivateDocuments === true });
+            if (!investigationRecordAllowed(row, options)) return null;
+            const text = String(row.text || '');
+            const citationUrl = row.type === 'note' ? 'sutra://page/' + encodeURIComponent(row.id) : 'sutra://entity/' + encodeURIComponent(row.key);
+            const evidence = { key: row.key, id: row.id, type: row.type, title: row.title, courseId: row.courseId || '',
+                dates: row.dates, status: row.status, excerpt: text.slice(0, 1200), truncated: text.length > 1200, citationUrl };
+            if (row.type === 'task' || row.type === 'homework') {
+                evidence.notes = String(row.metadata && row.metadata.taskNotes || '').slice(0, 1000);
+                evidence.notesTruncated = Number(row.metadata && row.metadata.taskNotesLength || 0) > 1000;
+                evidence.referenceUrl = safety.safeUrl(String(row.metadata && row.metadata.referenceUrl || '').slice(0, 1000));
+            }
+            const safeEvidence = safety.safeObject(evidence);
+            if (!safeEvidence || safeEvidence.key !== row.key || safeEvidence.id !== row.id) return null;
+            const source = assistantCore.normalizeSource(safety.safeObject(row.type === 'note'
+                ? { id: row.key, noteId: row.id, kind: 'note', title: row.title, quote: evidence.excerpt, href: citationUrl, updatedAt: row.dates && row.dates.updated, confidence: 'high', reasonCodes: ['investigation_read'] }
+                : { id: row.id, key: row.key, kind: row.type, title: row.title, href: citationUrl, confidence: 'high', reasonCodes: ['investigation_read'] }));
+            return source ? { evidence: safeEvidence, source, area } : null;
+        }).filter(Boolean);
+    }
+
+    let activeWorkspaceInvestigation = null;
+    function cancelWorkspaceInvestigation() {
+        if (activeWorkspaceInvestigation) activeWorkspaceInvestigation.abort();
+    }
+
+    function chooseInvestigationSources(matches, signal, options = {}) {
+        return new Promise(resolve => {
+            const host = options.messagesHost || document.getElementById(getActiveViewName() === 'assistantview' ? 'asstMessages' : 'chatbotMessages');
+            if (!host || signal.aborted) return resolve(null);
+            const previousFocus = document.activeElement;
+            const box = document.createElement('fieldset'); box.className = 'assistant-source-choice';
+            box.setAttribute('data-sutra-component', 'assistant-source-choice');
+            const legend = document.createElement('legend'); legend.textContent = 'Which matching sources should I read?'; box.appendChild(legend);
+            const hint = document.createElement('p'); hint.textContent = 'Choose one, or choose several to compare. Content is read only after your choice.'; box.appendChild(hint);
+            const list = document.createElement('div'); list.className = 'assistant-source-options'; box.appendChild(list);
+            const kinds = { homework: 'Assignment', task: 'Task', timeline_block: 'Scheduled block', note: 'Note', course: 'Course', course_file: 'Course file', testing_exam: 'Exam', grade_record: 'Grade record' };
+            const controls = matches.map(row => {
+                const label = document.createElement('label'), input = document.createElement('input');
+                label.className = 'assistant-source-option'; input.type = 'checkbox'; input.value = row.key;
+                const copy = document.createElement('span'); copy.className = 'assistant-source-option-copy';
+                const title = document.createElement('span'); title.className = 'assistant-source-option-title'; title.textContent = row.title || 'Untitled source';
+                const meta = document.createElement('span'); meta.className = 'assistant-source-option-meta';
+                const bits = [kinds[row.kind] || String(row.kind || 'Workspace record').replace(/_/g, ' ')];
+                if (/^\d{4}-\d{2}-\d{2}$/.test(row.dueDate || '')) {
+                    const date = new Date(row.dueDate + 'T12:00:00');
+                    if (!Number.isNaN(date.getTime())) bits.push(date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+                }
+                const start = String(row.startAt || '').match(/\d{2}:\d{2}/), end = String(row.endAt || '').match(/\d{2}:\d{2}/);
+                if (start) bits.push(start[0] + (end ? '–' + end[0] : ''));
+                meta.textContent = bits.join(' · '); copy.append(title, meta); label.append(input, copy); list.appendChild(label);
+                return input;
+            });
+            const footer = document.createElement('div'); footer.className = 'assistant-source-choice-footer';
+            const count = document.createElement('span'); count.className = 'assistant-source-choice-count'; count.setAttribute('role', 'status'); count.textContent = 'No sources selected';
+            const buttons = document.createElement('div'); buttons.className = 'assistant-source-choice-buttons';
+            const submit = document.createElement('button'); submit.className = 'assistant-source-choice-submit'; submit.type = 'button'; submit.textContent = 'Read selected sources'; submit.disabled = true;
+            const cancel = document.createElement('button'); cancel.className = 'assistant-source-choice-cancel'; cancel.type = 'button'; cancel.textContent = 'Cancel lookup';
+            buttons.append(cancel, submit); footer.append(count, buttons); box.appendChild(footer); host.appendChild(box);
+            const privacy = window.SutraAssistantPrivacy;
+            const permissionSnapshot = JSON.stringify(privacy.getPermissions());
+            let done = false;
+            const finish = keys => { if (done) return; done = true; clearInterval(watch); signal.removeEventListener('abort', abort); const restoreFocus = box.contains(document.activeElement); box.remove(); if (restoreFocus && previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') previousFocus.focus(); resolve(keys); };
+            const abort = () => finish(null);
+            const watch = setInterval(() => { if (!box.isConnected || JSON.stringify(privacy.getPermissions()) !== permissionSnapshot || normalizeDepth() === 'minimal') finish(null); }, 300);
+            signal.addEventListener('abort', abort, { once: true });
+            controls.forEach(input => input.addEventListener('change', () => { const selected = controls.filter(control => control.checked).length; submit.disabled = selected === 0; count.textContent = selected ? selected + (selected === 1 ? ' source selected' : ' sources selected') : 'No sources selected'; }));
+            submit.addEventListener('click', () => {
+                if (signal.aborted || JSON.stringify(privacy.getPermissions()) !== permissionSnapshot) return finish(null);
+                finish(controls.filter(input => input.checked).map(input => input.value));
+            });
+            cancel.addEventListener('click', abort); controls[0].focus();
+        });
+    }
+
+    async function performWorkspaceInvestigation(requestOptions, options = {}) {
+        const enrichment = options.enrichment;
+        const runner = window.SutraAssistantCore;
+        const safety = window.SutraAssistantSafety;
+        if (!enrichment || !enrichment.workspaceInvestigation || !runner || typeof runner.runWorkspaceInvestigation !== 'function' || !safety || typeof safety.estimateTokens !== 'function') return options.request(requestOptions);
+        cancelWorkspaceInvestigation();
+        const controller = new AbortController(); activeWorkspaceInvestigation = controller;
+        const currentConversation = window.SutraAssistantConversationController && window.SutraAssistantConversationController.getCurrent();
+        const accessOptions = { scope: options.scope || {}, userText: options.userText || '' };
+        const refreshScope = () => {
+            const live = window.SutraAssistantConversationController && window.SutraAssistantConversationController.getCurrent();
+            if (currentConversation && (!live || live.id !== currentConversation.id)) { controller.abort(); return; }
+            accessOptions.scope = live && live.scope || options.scope || {};
+        };
+        let sentAreas = new Set(), sentHistory = [], omittedCount = 0;
+        const messagesHost = options.messagesHost || document.getElementById(getActiveViewName() === 'assistantview' ? 'asstMessages' : 'chatbotMessages');
+        let progressElement = null, progressText = null;
+        if (typeof options.onProgress !== 'function' && messagesHost && messagesHost.isConnected && !(options.isCancelled && options.isCancelled())) {
+            progressElement = document.createElement('p');
+            progressElement.className = 'assistant-investigation-progress';
+            progressElement.setAttribute('role', 'status');
+            progressElement.setAttribute('aria-live', 'polite');
+            progressElement.setAttribute('aria-atomic', 'true');
+            progressElement.setAttribute('data-sutra-component', 'assistant-investigation-progress');
+            progressElement.textContent = 'Workspace lookup: up to 3 provider calls; only selected permitted records are sent. ';
+            progressText = document.createElement('span'); progressElement.appendChild(progressText);
+            messagesHost.appendChild(progressElement);
+        }
+        const updateProgress = text => {
+            if (controller.signal.aborted || (options.isCancelled && options.isCancelled())) return;
+            if (typeof options.onProgress === 'function') options.onProgress(text);
+            else if (progressText && progressElement.isConnected) progressText.textContent = text;
+        };
+        try {
+            return await runner.runWorkspaceInvestigation({
+                signal: controller.signal, isCancelled: options.isCancelled, request: options.request, estimateTokens: safety.estimateTokens,
+                normalizeSource: source => runner.normalizeSource(safety.safeObject(source)),
+                onProgress: updateProgress,
+                search: query => { refreshScope(); return controller.signal.aborted ? { matches: [] } : searchInvestigationRecords(query, accessOptions); },
+                read: keys => { refreshScope(); return controller.signal.aborted ? [] : readInvestigationRecords(keys, accessOptions); },
+                choose: (matches, signal) => chooseInvestigationSources(matches, signal, options),
+                prepareTurn: state => {
+                    refreshScope();
+                    // Re-resolve canonical records and permission before every send,
+                    // including after the student has answered a clarification.
+                    const records = readInvestigationRecords(state.records.map(row => row.evidence.key), accessOptions);
+                    const matches = state.matches.map(row => {
+                        const area = investigationArea(row.kind), privacy = window.SutraAssistantPrivacy;
+                        if (!privacy || !privacy.canRead(area)) return null;
+                        const live = window.SutraWorkspaceEntityRegistry.find(row.key);
+                        return investigationRecordAllowed(live, accessOptions) ? Object.assign({}, row, { title: live.title, courseId: live.courseId || '', updatedAt: live.dates && live.dates.updated || '', dueDate: live.dates && live.dates.due || '', status: live.status || '' }) : null;
+                    }).filter(Boolean).map(row => { const safe = safety.safeObject(row); return safe && safe.key === row.key ? safe : null; }).filter(Boolean);
+                    const ctx = filterAssistantContext({ view: enrichment.context.view, depth: enrichment.context.depth, summary: 'Workspace evidence is available only through bounded lookup.', now: new Date().toISOString() });
+                    const parts = buildSystemPromptParts(ctx, options.userText);
+                    const categories = Array.from(new Set(['message'].concat(records.map(row => row.area), matches.map(row => investigationArea(row.kind)))));
+                    return { request: Object.assign({}, requestOptions, { systemPrompt: parts.static + '\n' + parts.dynamic,
+                        systemPromptParts: null, allowedCategories: categories, transmittedCategories: categories }), records, matches, sources: [], context: ctx };
+                },
+                onSent: (sources, prepared, records, reduced) => {
+                    records.forEach(row => sentAreas.add(row.area));
+                    (prepared.matches || []).forEach(row => sentAreas.add(investigationArea(row.kind)));
+                    enrichment.sources = sources;
+                    enrichment.context = Object.assign({}, prepared.context, { accessReport: Object.assign({}, prepared.context.accessReport, { areasRead: Array.from(sentAreas) }) });
+                    if ((prepared.requestMessages || []).length > sentHistory.length) sentHistory = prepared.requestMessages;
+                    enrichment.requestMessages = sentHistory;
+                    if (reduced) {
+                        omittedCount = Math.max(omittedCount, Math.max(0, Number(prepared.omittedCount) || 0));
+                        const omittedSourceCount = omittedCount;
+                        enrichment.context.contextBudget = { reduced: true, canNarrow: true, omittedSourceCount };
+                        enrichment.contextBudget = { reduced: true, canNarrow: true, omitted: Array.from({ length: omittedSourceCount }, () => ({ kind: 'context' })), reductionReasons: ['Whole records or older turns were omitted to fit the 6,000 estimated token request budget.'] };
+                    }
+                    enrichment.retrieval = { sources, query: options.userText, evidenceStatus: reduced ? 'limited' : (sources.length ? 'supported' : 'missing'), scope: options.scope };
+                }
+            });
+        } finally {
+            if (progressElement) progressElement.remove();
+            if (activeWorkspaceInvestigation === controller) activeWorkspaceInvestigation = null;
+        }
+    }
+
+    function isConversationHistoryQuestion(text) {
+        return /\b(?:this|our|the)\s+(?:chat|conversation)\b.{0,55}\b(?:about|discuss|talk|said|saying|history|summari[sz])|\b(?:summari[sz]e|recap|remember)\b.{0,45}\b(?:this|our|the)\s+(?:chat|conversation)\b/i.test(String(text || ''));
+    }
+
+    function resolveRequestScope(options) {
+        const scope = options.scope || options.conversationScope || {};
+        if (scope.type === 'note' || getChatMemoryMode() !== 'stateful') return scope;
+        // Older chats saved chip labels without IDs. Recover only an exact,
+        // unique canonical note; never use a model-generated source identity.
+        const turn = [...(options.conversation || [])].reverse().find(row => row && row.role === 'user' && row.contextTags && row.contextTags.length);
+        const labels = new Set((turn && turn.contextTags || []).filter(tag => tag.icon === 'fa-file-lines').map(tag => tag.label));
+        const b = bridge(), pages = b && Array.isArray(b.pages) ? b.pages : [];
+        const matches = pages.filter(page => page && labels.has(page.title) && !page.isLocked && !page.locked);
+        return matches.length === 1 ? { ...scope, type: 'note', noteId: String(matches[0].id) } : scope;
     }
 
     function buildRequestEnrichment(userText, providerType, options = {}) {
         if (getPref('assistant.enabled', true) === false) return null;
+        const historyQuestion = isConversationHistoryQuestion(userText);
+        options = { ...options, conversationScope: resolveRequestScope(options) };
+        if (historyQuestion) options = { ...options, depth: 'minimal', includeSelection: false, disableInvestigation: true };
         lastUserPrompt = String(userText || '');
+        if (shouldInvestigateWorkspace(userText, options)) {
+            const baseline = buildRequestEnrichment(userText, providerType, Object.assign({}, options, { depth: 'minimal', includeSelection: false, disableInvestigation: true }));
+            baseline.workspaceInvestigation = true;
+            baseline.context.depth = normalizeDepth(options.depth);
+            baseline.context.summary = 'Workspace evidence will be searched and read on demand; ambiguous matches require your choice.';
+            const parts = buildSystemPromptParts(baseline.context, userText);
+            baseline.systemPromptParts = parts; baseline.systemPrompt = parts.static + '\n' + parts.dynamic;
+            return baseline;
+        }
         const accessTicket = currentLockedPageAccessTicket(options);
         const accessOptions = Object.assign({}, options, {
             lockedPageAccessTicket: accessTicket,
             authorizedPageIds: currentLockedPageAccessIds({ lockedPageAccessTicket: accessTicket })
         });
-        if (accessTicket) accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
-        let ctx = getFlowAssistantContext(accessOptions);
+        // Literal-output instructions do not need incidental keyword matches
+        // from the workspace. Explicit workspace references still retrieve.
+        const literalReply = /\b(?:reply|respond|say|answer)\s+(?:(?:with|using)\s+)?(?:only|exactly|just)\b/i.test(String(userText || ''))
+            && !/\b(?:my|our|this|current|active|workspace|notes?|tasks?|to[ -]?dos?|homework|assignments?|calendar|schedule|grades?|courses?|exams?|essays?|college|documents?|pages?|attachments?|files?)\b/i.test(String(userText || ''));
+        if (literalReply) accessOptions.depth = 'minimal';
+        if (accessTicket) {
+            accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
+            // The explicit page is the workspace evidence for this request.
+            // Do not pick up another open note, stale editor selection, memory,
+            // or an automatic workspace summary while obtaining that evidence.
+            accessOptions.depth = 'minimal';
+            accessOptions.includeSelection = false;
+        }
+        let ctx = applyRelevantWorkspaceContext(getFlowAssistantContext(accessOptions), userText, accessOptions);
+        if (accessTicket) ctx.summary = 'One explicitly authorized note is available for this request.';
+        const canReadSavedMemory = () => {
+            const privacy = window.SutraAssistantPrivacy;
+            try {
+                return !!(privacy && typeof privacy.canRead === 'function' && privacy.canRead('memory', accessOptions));
+            } catch (error) { return false; }
+        };
         // Product-aware context: attach a SMALL set of relevant saved memories
         // and verified product-knowledge snippets so the model stays accurate
         // and personalized without a giant static prompt. Never dump everything.
         try {
             const mem = memStore();
-            if (mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
+            if (ctx.depth !== 'minimal' && canReadSavedMemory() && mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
                 const snips = mem.buildPromptSnippets(userText, { feature: getActiveViewName() }, { limit: 5 });
                 if (snips && snips.length) {
                     ctx.memory = snips.map(s => s.text);
                     ctx.memoryUsedIds = snips.map(s => s.id);
-                    if (typeof mem.recordUsed === 'function') mem.recordUsed(ctx.memoryUsedIds);
                 }
             }
         } catch (e) { /* memory is best-effort */ }
         try {
             const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
-            if (pk && typeof pk.search === 'function') {
+            if (!accessTicket && pk && typeof pk.search === 'function') {
                 const hits = pk.search(userText, 2).filter(h => h.score >= 4);
                 if (hits.length) ctx.productKnowledge = hits.map(h => ({ topic: h.entry.title, summary: h.entry.summary, availability: h.entry.availability }));
             }
         } catch (e) { /* product knowledge is best-effort */ }
-        const noteRetrieval = retrieveNoteSources(userText, {
+        // Minimal suppresses automatic retrieval, not an explicitly consented
+        // page. That ticket still narrows retrieval to its single target.
+        const noteRetrieval = !accessTicket && (ctx.depth === 'minimal' || (ctx.workspaceRetrieval && ctx.workspaceRetrieval.taskDetailsOnly))
+            ? { sources: [], evidenceStatus: 'not_requested' } : retrieveNoteSources(userText, {
             scope: options.scope || options.conversationScope,
             approvedAreas: accessOptions.approvedAreas,
             lockedPageAccessTicket: accessTicket,
@@ -4986,19 +5682,21 @@
                 explicitTargets: options.explicitTargets || [],
                 currentScreen,
                 selectedText: ctx.selection ? [{ id: 'selection', kind: 'selection', title: 'Selected text', value: ctx.selection, priority: 92 }] : [],
-                linked: (ctx.retrievedNotes || []).map(source => ({ id: source.noteId, kind: 'note', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' })),
+                linked: (ctx.retrievedNotes || []).map(source => ({ id: source.id, kind: 'note-excerpt', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' }))
+                    .concat(['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].flatMap(key =>
+                        (ctx[key] || []).map(source => ({ id: source.key, kind: 'workspace-record', title: source.title, value: source, priority: 75, reason: 'Matches this question in ' + key.replace('workspace', '') })))),
                 course: ctx.course ? [{ id: ctx.course.id || ctx.course.name, kind: 'course', title: ctx.course.name, value: ctx.course }] : [],
                 dueWork: [].concat(ctx.tasks || [], ctx.homework || [], ctx.derived && ctx.derived.overdue || []).map(item => ({ id: item.id, kind: 'due-work', title: item.title || item.name, value: item })),
                 memories: (ctx.memory || []).map((text, index) => ({ id: memoryIds[index] || ('memory-' + index), kind: 'memory', title: 'Relevant saved memory', value: text })),
-                conversation: budgetedConversation.map((message, index) => ({ id: 'turn-' + index, kind: 'conversation', title: 'Recent conversation', value: message })),
+                conversation: budgetedConversation.map((message, index) => ({ id: 'turn-' + index, kind: 'conversation', title: 'Recent conversation', value: message, priority: 99 + index / 1000 })),
                 includeConversation: true
             });
             const attachmentTokens = getAttachments().reduce((sum, attachment) => sum + safety.estimateTokens(attachment.extractedText || '') + Math.ceil((Number(attachment.sizeBytes) || 0) / 4096), 0);
             contextBudget = safety.budgetContext(selection, {
-                maxTokens: Number(options.contextLimitTokens) || (providerType === 'gemini' ? 24000 : 16000),
-                reserveResponseTokens: Number(options.reserveResponseTokens) || 3072,
+                maxTokens: Math.min(6000, Number(options.contextLimitTokens) || 6000),
+                reserveResponseTokens: Number(options.reserveResponseTokens) || 1536,
                 attachmentTokens,
-                systemTokens: 3800
+                systemTokens: safety.estimateTokens(buildSystemPromptParts({ view: ctx.view, depth: ctx.depth }, userText, budgetedConversation).static) + safety.estimateTokens(userText) + 512
             });
             const included = new Set(contextBudget.included.map(item => item.kind + ':' + item.id));
             const includedRows = new Map(contextBudget.included.map(item => [item.kind + ':' + item.id, item]));
@@ -5018,7 +5716,10 @@
                 const row = includedRows.get('course:' + (ctx.course.id || ctx.course.name));
                 if (row) ctx.course = row.value; else delete ctx.course;
             }
-            if (Array.isArray(ctx.retrievedNotes)) ctx.retrievedNotes = ctx.retrievedNotes.map(source => includedRows.get('note:' + source.noteId)).filter(Boolean).map(row => row.value);
+            if (Array.isArray(ctx.retrievedNotes)) ctx.retrievedNotes = ctx.retrievedNotes.map(source => includedRows.get('note-excerpt:' + source.id)).filter(Boolean).map(row => row.value);
+            ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+                if (Array.isArray(ctx[key])) ctx[key] = ctx[key].map(source => includedRows.get('workspace-record:' + source.key)).filter(Boolean).map(row => row.value);
+            });
             const budgetDueList = list => (Array.isArray(list) ? list : []).map(item => includedRows.get('due-work:' + item.id)).filter(Boolean).map(row => row.value);
             if (Array.isArray(ctx.tasks)) ctx.tasks = budgetDueList(ctx.tasks);
             if (Array.isArray(ctx.homework)) ctx.homework = budgetDueList(ctx.homework);
@@ -5050,7 +5751,10 @@
         // and budget diagnostics are Sutra-owned metadata, not workspace data.
         const trustedEnrichment = {
             productKnowledge: ctx.productKnowledge,
-            contextBudget: ctx.contextBudget
+            contextBudget: ctx.contextBudget,
+            contextSelectionReasons: Array.isArray(ctx.contextSelectionReasons)
+                ? ctx.contextSelectionReasons.filter(reason => reason.kind !== 'memory' || canReadSavedMemory())
+                : ctx.contextSelectionReasons
         };
         ctx = filterAssistantContext(ctx, accessOptions);
         Object.keys(trustedEnrichment).forEach(key => {
@@ -5063,21 +5767,77 @@
         if (tutoringContract && tutoringContract.ok) ctx.tutoringMode = { id: tutoringContract.mode, label: tutoringContract.label, instruction: tutoringContract.instruction, academicIntegrity: tutoringContract.integrity };
         // caching (Anthropic/Gemini) can send the static ~70% separately
         // instead of re-transmitting it whole on every message.
-        const systemPromptParts = buildSystemPromptParts(ctx);
+        const requestMessages = budgetedConversation.concat([{ role: 'user', content: String(userText || '').trim() }]);
+        let systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
+        if (safety && typeof safety.estimateTokens === 'function') {
+            const attachmentTokens = getAttachments().reduce((sum, attachment) => sum + safety.estimateTokens(attachment.extractedText || '') + Math.ceil((Number(attachment.sizeBytes) || 0) / 4096), 0);
+            const inputLimit = Math.max(0, Math.min(6000, Number(options.contextLimitTokens) || 6000) - (Number(options.reserveResponseTokens) || 1536) - attachmentTokens);
+            const estimateRequest = () => safety.estimateTokens(systemPromptParts.static + '\n' + systemPromptParts.dynamic) + safety.estimateTokens(requestMessages);
+            const pruneOrder = ['memory', 'retrievedNotes', 'workspaceOverview', 'workspaceBusiness', 'workspaceLife', 'workspaceCollege', 'workspaceLearning', 'workspaceCourses', 'workspacePlanning', 'timelineUpcoming', 'timelineToday', 'timeline', 'deadlines', 'review', 'apStudy', 'college', 'life', 'business', 'cram', 'courses', 'allDue', 'testingHub', 'customTab', 'homework', 'tasks', 'derived', 'productKnowledge', 'course', 'canvas', 'slides', 'activeNote'];
+            let omitted = 0;
+            for (const key of pruneOrder) {
+                while (ctx[key] && estimateRequest() > inputLimit) {
+                    if (Array.isArray(ctx[key]) && ctx[key].length > 1) ctx[key].pop();
+                    else delete ctx[key];
+                    if (key === 'memory') {
+                        ctx.memoryUsedIds = (ctx.memoryUsedIds || []).slice(0, (ctx.memory || []).length);
+                        const retainedIds = new Set(ctx.memoryUsedIds);
+                        ctx.contextSelectionReasons = (ctx.contextSelectionReasons || []).filter(reason => reason.kind !== 'memory' || retainedIds.has(reason.id));
+                    }
+                    omitted += 1;
+                    systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
+                }
+            }
+            while (requestMessages.length > 1 && estimateRequest() > inputLimit) {
+                requestMessages.shift(); omitted += 1;
+                systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
+            }
+            if (omitted) {
+                ctx.contextBudget = { ...(ctx.contextBudget || {}), reduced: true, canNarrow: true, omittedSourceCount: ((ctx.contextBudget || {}).omittedSourceCount || 0) + omitted };
+                if (contextBudget) {
+                    contextBudget.reduced = true; contextBudget.canNarrow = true;
+                    for (let index = 0; index < omitted; index += 1) contextBudget.omitted.push({ kind: 'context', id: 'serialized-budget-' + index, omittedReason: 'serialized request budget' });
+                    contextBudget.reductionReasons.push(omitted + ' source(s) omitted to bound the serialized request.');
+                }
+            }
+            ctx.contextBudget = { ...(ctx.contextBudget || {}), inputLimitTokens: inputLimit, estimatedInputTokens: estimateRequest() };
+            systemPromptParts = buildSystemPromptParts(ctx, userText, requestMessages.slice(0, -1));
+        }
+        // Only authorized memories retained after both budget passes can update
+        // durable last-used metadata.
+        try {
+            if (canReadSavedMemory() && Array.isArray(ctx.memoryUsedIds) && ctx.memoryUsedIds.length) {
+                const mem = memStore();
+                if (mem && typeof mem.recordUsed === 'function') mem.recordUsed(ctx.memoryUsedIds);
+            }
+        } catch (error) { /* usage bookkeeping is best-effort */ }
         const systemPrompt = systemPromptParts.static + '\n' + systemPromptParts.dynamic;
         const cap = getVisionCapability();
         const attachments = getAttachments();
+        // Receipts describe only evidence retained after privacy and both budget
+        // passes. A read-once marker records this send, never grants future access.
+        const sources = (ctx.retrievedNotes || []).map(source => Object.assign({}, source, {
+            kind: 'note', href: 'sutra://page/' + encodeURIComponent(source.noteId),
+            readOnce: accessOptions.authorizedPageIds.includes(String(source.noteId))
+        }));
+        ['tasks', 'homework', 'workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+            (ctx[key] || []).forEach(row => {
+                if (!row.key || !row.type || !row.id) return;
+                sources.push({ id: row.id, key: row.key, kind: row.type, title: row.title,
+                    href: row.citationUrl, reasonCodes: ['query_match'], confidence: 'high' });
+            });
+        });
         if (accessTicket) consumeLockedPageAccess(accessTicket);
         return {
             systemPrompt,
             systemPromptParts,
             context: ctx,
-            sources: ctx.retrievedNotes || [],
-            retrieval: Object.assign({}, noteRetrieval, { sources: ctx.retrievedNotes || [] }),
+            sources,
+            retrieval: Object.assign({}, noteRetrieval, { sources, evidenceStatus: sources.length ? 'supported' : noteRetrieval.evidenceStatus }),
             providerType,
             visionCapability: cap,
             attachments,
-            requestMessages: budgetedConversation.concat([{ role: 'user', content: String(userText || '').trim() }]),
+            requestMessages,
             contextBudget
         };
     }
@@ -5086,6 +5846,11 @@
     // language command is recognized it is executed locally and the model call
     // is skipped. Also clears one-shot image attachments after a send.
     function handleOutgoing(userText) {
+        const providerHandoff = pendingHelpProviderPrompt && pendingHelpProviderPrompt === String(userText || '').trim();
+        pendingHelpProviderPrompt = '';
+        // Explicit Help handoff skips local routing once; the normal send path
+        // still enforces locked-page consent, context permissions and review.
+        if (providerHandoff) return null;
         const cmd = tryHandleCommand(userText, { lockedPageAccessTicket: activeLockedPageAccessTicket });
         if (cmd && cmd.handled) consumeLockedPageAccess();
         return cmd;
@@ -5674,7 +6439,7 @@
         if (!beforeSnapshot && (action.type === 'insert_text' || action.type === 'replace_selection')) {
             beforeSnapshot = snapshotActivePage();
         }
-        const result = applyAction(action);
+        const result = applyAction(action, m);
         if (result && result.ok) {
             const i = intel();
             if (i) {
@@ -5735,6 +6500,7 @@
                 if (typeof window !== 'undefined' && typeof window.setTestingHubExamStatus === 'function') {
                     window.setTestingHubExamStatus(payload.item.id, {
                         taken: !!payload.item.taken,
+                        takenAt: payload.item.takenAt || undefined,
                         studyStatus: payload.item.studyStatus || undefined
                     });
                     return 1;
@@ -5844,6 +6610,15 @@
                 const tasks = b ? b.tasks : [];
                 const idx = (tasks || []).findIndex(t => t && t.id === id);
                 if (idx >= 0) { tasks.splice(idx, 1); return true; }
+                // Receipts predating the To-do destination fix retain kind=task
+                // after an explicit move; their original Undo still owns this id.
+                const moved = homeworkSnapshot().tasks.find(task => String(task.id) === String(id) && task.kind === 'task' && task.origin === 'flow');
+                if (moved) {
+                    const result = safeHwWrite('hwTasks:v2', JSON.stringify(homeworkSnapshot().tasks.filter(task => String(task.id) !== String(id))));
+                    if (!result.ok) return false;
+                    notifyHomeworkChanged();
+                    return true;
+                }
             } else if (kind === 'timeline') {
                 const blocks = b ? b.timeBlocks : [];
                 const idx = (blocks || []).findIndex(x => x && x.id === id);
@@ -5855,7 +6630,8 @@
             } else if (kind === 'homework') {
                 const tasks = homeworkSnapshot().tasks;
                 const next = (Array.isArray(tasks) ? tasks : []).filter(t => t && t.id !== id);
-                safeHwWrite('hwTasks:v2', JSON.stringify(next));
+                const saved = safeHwWrite('hwTasks:v2', JSON.stringify(next));
+                if (!saved.ok) return false;
                 notifyHomeworkChanged();
                 return true;
             } else if (kind === 'reviewDeck') {
@@ -5956,6 +6732,10 @@
         const wrap = document.createElement('div');
         wrap.className = 'flow-import-review';
         const DEST = ['homework', 'tasks', 'timeline', 'notes', 'review', 'today'];
+        const destinationsForRow = (row) => Array.isArray(row.destinations)
+            ? row.destinations
+            : (Array.isArray(row.suggestedDestinations) && row.suggestedDestinations.length
+                ? row.suggestedDestinations : ['homework']);
 
         const head = document.createElement('div');
         head.className = 'flow-import-head';
@@ -5989,7 +6769,7 @@
                         ${row.duplicate ? `<span class="flow-imp-dupflag" title="${esc(row.duplicate.title || '')}">possible duplicate (${esc(row.duplicate.kind)})</span>` : ''}
                     </div>
                     <div class="flow-import-row-dests">
-                        ${DEST.map(d => `<label class="flow-imp-dest"><input type="checkbox" data-row="${esc(row.rowId)}" data-dest="${d}"${(row.destinations || []).includes(d) ? ' checked' : ''}/> ${d}</label>`).join('')}
+                        ${DEST.map(d => `<label class="flow-imp-dest"><input type="checkbox" data-row="${esc(row.rowId)}" data-dest="${d}"${destinationsForRow(row).includes(d) ? ' checked' : ''}/> ${d}</label>`).join('')}
                     </div>`;
                 table.appendChild(card);
             });
@@ -6017,7 +6797,7 @@
                 const row = findRow(id);
                 if (!row) return;
                 const dest = t.getAttribute('data-dest');
-                row.destinations = row.destinations || [];
+                row.destinations = destinationsForRow(row).slice();
                 if (t.checked) { if (!row.destinations.includes(dest)) row.destinations.push(dest); }
                 else row.destinations = row.destinations.filter(d => d !== dest);
             }
@@ -6049,21 +6829,50 @@
         applyAllBtn.addEventListener('click', () => {
             applyAllBtn.disabled = true;
             const skipDup = document.getElementById('flowImpSkipDup');
+            const destinations = new Set();
+            rows.forEach(row => {
+                if (row.__removed || !row.title || (row.duplicate && skipDup && skipDup.checked)) return;
+                destinationsForRow(row).forEach(dest => {
+                    if (dest === 'homework') destinations.add('create_homework');
+                    else if (dest === 'tasks' || dest === 'today') destinations.add('create_task');
+                    else if (dest === 'timeline' && row.dueDate) destinations.add('create_timeline_block');
+                    else if (dest === 'notes') destinations.add('create_page');
+                    else if (dest === 'review') destinations.add('create_review_deck');
+                });
+            });
+            const permissionError = Array.from(destinations)
+                .map(type => assistantActionPermissionError({ type }, { reviewed: true }, false))
+                .find(Boolean);
+            if (permissionError) {
+                status.textContent = permissionError;
+                applyAllBtn.disabled = false;
+                return;
+            }
+            const eligibleRows = rows.filter(row => !row.__removed && row.title
+                && !(row.duplicate && skipDup && skipDup.checked));
+            if (eligibleRows.length && eligibleRows.every(row => destinationsForRow(row).length === 0)) {
+                status.textContent = 'Choose at least one destination for an assignment before applying.';
+                applyAllBtn.disabled = false;
+                return;
+            }
             const batchId = makeId('batch');
             const created = [];
+            const failures = [];
             let applied = 0, skipped = 0;
             rows.forEach(row => {
                 if (row.__removed) return;
                 if (!row.title) { skipped += 1; return; }
                 if (row.duplicate && skipDup && skipDup.checked) { skipped += 1; return; }
-                (row.destinations || []).forEach(dest => {
+                destinationsForRow(row).forEach(dest => {
                     let res = null;
                     if (dest === 'homework') res = applyCreateHomework({ type: 'create_homework', title: row.title, courseName: row.course, dueDate: row.dueDate, difficulty: row.difficulty });
                     else if (dest === 'tasks' || dest === 'today') res = applyCreateTask({ type: 'create_task', title: row.title, dueDate: row.dueDate, priority: row.priority || 'medium' });
                     else if (dest === 'timeline' && row.dueDate) res = applyCreateTimelineBlock({ type: 'create_timeline_block', name: row.title, date: row.dueDate, start: '16:00', end: '17:00', category: 'study' });
+                    else if (dest === 'timeline') failures.push(`${row.title}: Timeline needs a due date.`);
                     else if (dest === 'notes') res = applyCreatePage({ type: 'create_page', title: row.title, body: `# ${row.title}\n\n${row.sourceText || ''}` });
                     else if (dest === 'review') res = applyCreateReviewDeck({ type: 'create_review_deck', name: row.title });
                     if (res && res.ok) { applied += 1; mergeCreated(created, res); }
+                    else if (res) failures.push(res.message || `Could not add ${row.title} to ${dest}.`);
                 });
             });
             const i2 = intel();
@@ -6077,8 +6886,10 @@
                 });
             }
             refreshAll();
-            status.textContent = `✓ Applied ${applied} write(s)${skipped ? `, skipped ${skipped}` : ''}.`;
-            showToast(`Imported ${applied} item write(s).`);
+            const failureSummary = failures.length
+                ? `, ${failures.length} failed${failures[0] ? `: ${failures[0]}` : ''}` : '';
+            status.textContent = `${failures.length ? '⚠' : '✓'} Applied ${applied} write(s)${skipped ? `, skipped ${skipped}` : ''}${failureSummary}.`;
+            showToast(`Imported ${applied} item write(s)${failures.length ? `; ${failures.length} failed` : ''}.`);
         });
 
         renderRows();
@@ -6529,10 +7340,163 @@
     // --------------------------------------------------------------
     // Returns { handled:true, message } when it recognized & executed a command,
     // otherwise { handled:false } so the caller sends the text to the model.
+    function tryReadTodoList(userText) {
+        const query = String(userText || '').trim().replace(/^(?:please\s+)?(?:(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+)?)?/i, '');
+        if (!/^(?:what(?:['’]?s| is) (?:in|on)|what are|show(?: me)?|list|summari[sz]e|check)(?: all)?(?: of)? (?:my |the )?(?:to[ -]?dos?(?: list)?|tasks|homework|assignments)[?!.]*$/i.test(query)) return null;
+        const privacy = window.SutraAssistantPrivacy;
+        if (!privacy || typeof privacy.canRead !== 'function' || !privacy.canRead('planning')) {
+            return { handled: true, message: 'To-do access is off for Assistant. In Settings → Assistant → Workspace access, choose Read workspace. If Tasks & schedule is blocked under Access by area, change it to Allow. Workspace-aware controls search scope; it does not grant permission.', source: 'local', areasRead: [], grounding: { evidenceStatus: 'permission_required', query: String(userText || ''), scope: { area: 'planning' } } };
+        }
+        const tasks = listOpenWorkspaceTasks().filter(task => !task.completed && !task.archived)
+            .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')) || a.title.localeCompare(b.title));
+        const shown = tasks.slice(0, 40);
+        const lines = [tasks.length ? '**Your to-do list** (' + tasks.length + ' open items)' : 'Your to-do list has no open items.', ''];
+        shown.forEach(task => {
+            const kind = task.store === 'homework' ? 'homework' : 'task';
+            const title = String(task.title || 'Untitled task').replace(/[\\[\]]/g, '\\$&');
+            lines.push('- [' + title + '](sutra://' + kind + '/' + encodeURIComponent(task.id) + ')' + (task.dueDate ? ' — due ' + task.dueDate : '') + (task.course ? ' · ' + task.course : ''));
+        });
+        if (shown.length < tasks.length) lines.push('', 'Showing the first ' + shown.length + ' items. Ask about a class, date, or task to narrow the list.');
+        return { handled: true, message: lines.join('\n'), source: 'local', localEngine: 'Workspace task list', claimType: 'workspace_fact', areasRead: ['planning'] };
+    }
+
+    let studyInterview = null;
+    const STUDY_SETUP_QUESTIONS = [
+        { key: 'schoolStartHour', label: 'School starts', type: 'time', prompt: 'What time does school usually start?', example: '7:30 AM', min: 0, max: 1439 / 60 },
+        { key: 'schoolEndHour', label: 'School finishes', type: 'time', prompt: 'What time does school usually finish?', example: '2:45 PM', min: 0, max: 1439 / 60 },
+        { key: 'earliestStudyHour', label: 'Study starts', type: 'time', prompt: 'What’s the earliest time you’d like to start studying?', example: '4:30 PM', min: 0, max: 1439 / 60 },
+        { key: 'latestStudyHour', label: 'Study finishes', type: 'time', prompt: 'What time would you like to finish studying?', example: '9 PM', min: 0, max: 24 },
+        { key: 'studyBlockMinutes', label: 'Focus block', type: 'minutes', prompt: 'How long can you comfortably focus before a break?', example: '45 minutes', min: 10, max: 180 },
+        { key: 'breakMinutes', label: 'Break', type: 'minutes', prompt: 'How long would you like each break to be?', example: '10 minutes', min: 0, max: 60 },
+        { key: 'bedtimeHour', label: 'Evening cutoff', type: 'time', prompt: 'What time should I stop planning work for the night?', example: '10:30 PM', min: 18, max: 26 },
+        { key: 'scheduleWeekends', label: 'Weekend study', type: 'boolean', prompt: 'Would you like me to schedule study blocks on weekends?', example: 'yes, or usually not' },
+        { key: 'preferredReviewStyle', label: 'Review style', type: 'review', prompt: 'What helps you review best: flashcards, explanations, writing answers, practice questions, or matching?', example: 'practice questions' },
+        { key: 'hardestClasses', label: 'Classes needing extra time', type: 'classes', prompt: 'Which classes would you like extra study time for?', example: 'Physics and Chemistry, or none' }
+    ];
+    function formatStudySetupValue(question, value) {
+        if (question.type === 'time') {
+            const minutes = Math.round(value * 60), hour = Math.floor(minutes / 60) % 24;
+            return (hour % 12 || 12) + ':' + String(minutes % 60).padStart(2, '0') + (hour < 12 ? ' AM' : ' PM') + (value >= 24 ? ' (next day)' : '');
+        }
+        if (question.type === 'minutes') return value + ' minutes';
+        if (question.type === 'boolean') return value ? 'Yes' : 'No';
+        if (question.type === 'review') return ({ flashcards: 'Flashcards', learn: 'Explanations', write: 'Writing answers', test: 'Practice questions', match: 'Matching' })[value];
+        return value || 'None';
+    }
+    function parseStudyInterviewAnswer(step, text) {
+        const question = STUDY_SETUP_QUESTIONS[step];
+        if (!question) return null;
+        const value = String(text || '').trim().replace(/[.!]+$/, '').toLowerCase();
+        if (/^(?:skip|not sure|i(?:'m| am) not sure|i don'?t know|no preference|use the default|keep (?:it|the default|my current settings))$/.test(value)) return {};
+        if (question.type === 'time') {
+            const clock = value.replace(/^(?:(?:school|classes|it)\s+)?(?:usually\s+)?(?:(?:starts?|ends?|finishes?|finish|start|stop|bedtime is)\s+(?:(?:at|around|by)\s+)?)?(?:(?:at|around|about|by)\s+)?/, '');
+            const match = clock.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?$/) || clock.match(/^(\d{1,2})(?::(\d{2}))?$/);
+            if (!match) return null;
+            let hour = Number(match[1]); const minute = Number(match[2] || 0), period = match[3];
+            if (minute > 59 || hour > 24 || (hour === 24 && minute !== 0)) return null;
+            if (period) { if (hour < 1 || hour > 12) return null; hour = hour % 12 + (period === 'p' ? 12 : 0); }
+            else if (hour >= 1 && hour <= 12 && !match[1].startsWith('0')) return { clarifyTime: clock };
+            let result = hour + minute / 60;
+            if (question.key === 'latestStudyHour' && result === 0) result = 24;
+            if (question.key === 'bedtimeHour' && result < 18) result += 24;
+            return result >= question.min && result <= question.max ? { [question.key]: result } : null;
+        }
+        if (question.type === 'minutes') {
+            const duration = value.replace(/^(?:about|around|roughly)\s+/, '').replace(/\s+(?:break|focus|study)(?:s| block)?$/, '');
+            const match = duration.match(/^(\d{1,3})\s*(?:minutes?|mins?|m)?$/) || duration.match(/^(\d{1,2})\s*(hours?|hrs?|h)$/);
+            const minutes = match ? Number(match[1]) * (/^h/.test(match[2] || '') ? 60 : 1) : ({ 'an hour': 60, 'one hour': 60, 'half an hour': 30, 'half hour': 30, 'a quarter of an hour': 15, no: 0, none: 0 })[duration];
+            return Number.isInteger(minutes) && minutes >= question.min && minutes <= question.max ? { [question.key]: minutes } : null;
+        }
+        if (question.type === 'boolean') {
+            if (/^(?:yes|y|yeah|yep|sure|of course|weekends are (?:fine|okay|ok))$/.test(value)) return { scheduleWeekends: true };
+            if (/^(?:no|n|nope|not really|usually not(?: on weekends)?|not usually|not on weekends|weekdays only|no weekends)$/.test(value)) return { scheduleWeekends: false };
+            return null;
+        }
+        if (question.type === 'review') {
+            const styles = { flashcards: 'flashcards', 'flash cards': 'flashcards', learn: 'learn', explanations: 'learn', 'guided learning': 'learn', write: 'write', writing: 'write', 'writing answers': 'write', test: 'test', 'practice questions': 'test', 'practice tests': 'test', quizzes: 'test', match: 'match', matching: 'match' };
+            const style = styles[value.replace(/^(?:i (?:like|prefer)|mostly)\s+/, '')];
+            return style ? { preferredReviewStyle: style } : null;
+        }
+        const classes = String(text || '').trim();
+        return classes.length && classes.length <= 200 && !/[`\r\n]/.test(classes) ? { hardestClasses: /^(?:none|no classes|nothing|all good)$/i.test(value) ? '' : classes } : null;
+    }
+    function validateStudySetupPreferences(values) {
+        if (!values || typeof values !== 'object' || Array.isArray(values)) return false;
+        const ranges = { schoolStartHour: [0,1439 / 60], schoolEndHour: [0,1439 / 60], earliestStudyHour: [0,1439 / 60], latestStudyHour: [0,24], studyBlockMinutes: [10,180], breakMinutes: [0,60], bedtimeHour: [18,26] };
+        const keys = Object.keys(values); if (!keys.length || keys.length > 10) return false;
+        return keys.every(key => ranges[key] ? Number.isFinite(values[key]) && (/Hour$/.test(key) ? Math.abs(values[key] * 60 - Math.round(values[key] * 60)) < 0.000001 : Number.isInteger(values[key])) && values[key] >= ranges[key][0] && values[key] <= ranges[key][1]
+            : key === 'scheduleWeekends' ? typeof values[key] === 'boolean'
+            : key === 'preferredReviewStyle' ? ['flashcards','learn','write','test','match'].includes(values[key])
+            : key === 'hardestClasses' && typeof values[key] === 'string' && values[key].length <= 200)
+            && !(values.schoolStartHour != null && values.schoolEndHour != null && values.schoolStartHour >= values.schoolEndHour)
+            && !(values.earliestStudyHour != null && values.latestStudyHour != null && values.earliestStudyHour >= values.latestStudyHour);
+    }
+    function isStudyInterviewStart(text) {
+        return /^(?:get to know me|help me set up my study preferences|set up my study preferences)[.!?]*$/i.test(String(text || '').trim());
+    }
+    function advanceStudyInterview(state, text) {
+        if (/^(?:cancel(?: setup)?|stop(?: setup)?)$/i.test(text)) return { status: 'cancelled', state: null };
+        const question = STUDY_SETUP_QUESTIONS[state.step];
+        const candidate = state.pendingTime && /^[ap]\.?m\.?$/i.test(text.trim()) ? state.pendingTime + ' ' + text : text;
+        const answer = parseStudyInterviewAnswer(state.step, candidate);
+        if (answer && answer.clarifyTime) return { status: 'clarify', answer, state: { ...state, pendingTime: answer.clarifyTime } };
+        if (!answer || !question) return { status: 'invalid', state };
+        const proposed = { ...state.values, ...answer };
+        const earlier = question.key === 'schoolEndHour' ? 'schoolStartHour' : question.key === 'latestStudyHour' ? 'earliestStudyHour' : null;
+        if (earlier && proposed[earlier] != null && proposed[question.key] != null && proposed[question.key] <= proposed[earlier]) return { status: 'invalid-finish', state };
+        return { status: 'accepted', answer, state: { chatId: state.chatId, step: state.step + 1, values: proposed } };
+    }
+    // The visible canonical conversation is the source of truth. Replay only
+    // local answers into a draft; never execute historical proposals or use a
+    // second persistent store. This also restores pending AM/PM clarifications.
+    function rebuildStudyInterview(messages, chatId) {
+        let state = null;
+        for (const row of Array.isArray(messages) ? messages : []) {
+            if (!row || row.role !== 'user') continue;
+            const text = String(row.content || '').trim();
+            if (isStudyInterviewStart(text)) { state = { chatId, step: 0, values: {} }; continue; }
+            if (!state) continue;
+            state = advanceStudyInterview(state, text).state;
+            if (state && state.step >= STUDY_SETUP_QUESTIONS.length) state = null;
+        }
+        return state;
+    }
+    function readStudyInterviewConversation() {
+        try {
+            const controller = window.SutraAssistantConversationController;
+            return controller && typeof controller.getCurrent === 'function' ? controller.getCurrent() : null;
+        } catch (_) { return null; }
+    }
+    function routeStudyInterview(text) {
+        const conversation = readStudyInterviewConversation();
+        const chatId = conversation && conversation.id || getCurrentChatIdSafe();
+        // Read before this turn is appended by either chat shell. Rebuild after
+        // reload, chat switching, history edits or feature-pack reinitialization.
+        if (conversation && Array.isArray(conversation.messages)) studyInterview = rebuildStudyInterview(conversation.messages, chatId);
+        const start = isStudyInterviewStart(text);
+        if (start) { studyInterview = { chatId, step: 0, values: {} }; return { handled: true, source: 'study-setup', message: 'Let’s start with your routine. You can **skip** anything or say **cancel setup**. This conversation runs locally without an AI provider; we’ll review your answers before changing any settings.\n\n' + STUDY_SETUP_QUESTIONS[0].prompt }; }
+        if (!studyInterview || studyInterview.chatId !== chatId) return null;
+        const question = STUDY_SETUP_QUESTIONS[studyInterview.step];
+        const transition = advanceStudyInterview(studyInterview, text);
+        studyInterview = transition.state;
+        if (transition.status === 'cancelled') return { handled: true, source: 'study-setup', message: 'Setup cancelled. Your study settings have not changed.' };
+        const answer = transition.answer;
+        if (transition.status === 'clarify') return { handled: true, source: 'study-setup', message: 'Do you mean **' + answer.clarifyTime + ' AM or PM**? You can reply with just AM or PM.' };
+        if (transition.status === 'invalid') return { handled: true, source: 'study-setup', message: question.type === 'time' ? 'What time do you mean? Something like **' + question.example + '** works, including minutes. You can skip this if you’re not sure.\n\n' + question.prompt : question.type === 'minutes' ? 'About how many minutes? For this setting, choose ' + question.min + '–' + question.max + ' minutes, or skip.\n\n' + question.prompt : 'For example, **' + question.example + '**. You can also say **not sure** to keep your current setting.\n\n' + question.prompt };
+        if (transition.status === 'invalid-finish') return { handled: true, source: 'study-setup', message: 'The finish needs to be after the start. ' + question.prompt };
+        if (studyInterview.step < STUDY_SETUP_QUESTIONS.length) return { handled: true, source: 'study-setup', message: (Object.keys(answer).length ? 'Got it — ' + formatStudySetupValue(question, answer[question.key]) + '.\n\n' : 'We’ll keep your current setting.\n\n') + STUDY_SETUP_QUESTIONS[studyInterview.step].prompt };
+        const values = studyInterview.values; studyInterview = null;
+        if (!Object.keys(values).length) return { handled: true, source: 'study-setup', message: 'You skipped every question. Your current study settings are unchanged.' };
+        const summary = STUDY_SETUP_QUESTIONS.filter(row => Object.prototype.hasOwnProperty.call(values, row.key)).map(row => '- **' + row.label + ':** ' + formatStudySetupValue(row, values[row.key])).join('\n');
+        return { handled: true, source: 'study-setup', message: 'Here’s what I picked up:\n\n' + summary + '\n\n**Review in Settings** opens a draft. Nothing changes until you choose **Save Changes** there. Skipped answers keep their current values.\n\n' + buildActionFence([{ type: 'review_study_preferences', preferences: values, label: 'Review my study preferences in Settings' }]) };
+    }
+
     function tryHandleCommand(rawText, options = {}) {
         const text = String(rawText || '').trim();
         if (!text) return { handled: false };
         const lc = text.toLowerCase();
+        const setup = routeStudyInterview(text);
+        if (setup) return setup;
         const viewMap = {
             today: 'today', notes: 'notes', note: 'notes', homework: 'homework', timeline: 'timeline',
             calendar: 'timeline', review: 'review', cram: 'cramhub', 'cram hub': 'cramhub',
@@ -6555,30 +7519,6 @@
         // if a keyword like "ap"/"exam" would otherwise match Product Knowledge.
         const ACTION_VERB_RE = /^(?:mark|set|check|complete|finish|reopen|un-?complete|un-?check|archive|delete|remove|schedule|reschedule|move|push|shift|snooze)\b/;
 
-        // ---- Theme generation (Sutra Assistant) ----
-        // Routes natural-language theme requests to the AI theme generator, which
-        // rides the same Intelligence harness and first-class custom-theme pipeline.
-        const themeAI = (typeof window !== 'undefined') ? window.SutraThemeAI : null;
-        if (themeAI && typeof themeAI.openWithPrompt === 'function') {
-            // Refine the theme currently being previewed/generated (in place).
-            if (typeof themeAI.isPreviewing === 'function' && themeAI.isPreviewing()
-                && /\b(accent|sidebar|background|contrast|saturation|saturated|palette|hue|theme|colou?rs?|tone|text)\b/.test(lc)
-                && /\b(make|warm|cool|soften|soft|increase|decrease|less|more|darken|lighten|brighten|reduce|boost|raise|lower|tweak|adjust|punch|mute|tone down)\b/.test(lc)) {
-                try { themeAI.refineActive(text); } catch (e) { /* non-critical */ }
-                return { handled: true, message: `On it — refining the previewed theme: "${truncate(text, 120)}". The preview updates in place; use the banner to Apply or Revert.` };
-            }
-            // Generate a brand-new theme from a description.
-            const themeMatch = m(/^(?:please\s+)?(?:make|generate|create|design|build|whip up|cook up)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?(?:custom\s+)?theme\b[:,]?\s*(.*)$/)
-                || m(/^(?:please\s+)?make\s+sutra\s+(?:feel|look)\s+(?:like\s+)?(.+)$/)
-                || m(/^(?:please\s+)?(?:make|generate|create|design|build|give me|i want|i'd like|can you (?:make|design|create))\s+(?:me\s+)?(?:a\s+|an\s+)?(.*?)\s+theme\b[.!?]?$/)
-                || m(/^theme[:,]\s*(.+)$/);
-            if (themeMatch) {
-                const brief = String(themeMatch[1] || '').trim() || text;
-                try { themeAI.openWithPrompt(brief); } catch (e) { /* non-critical */ }
-                return { handled: true, message: `Opening the theme generator and designing: "${truncate(brief, 120)}". You'll be able to preview, refine, and apply it from the Themes panel.` };
-            }
-        }
-
         // ---- Assistant Memory commands (local, deterministic) ----
         // Kept local even in AI-only mode: the chat model shouldn't freelance
         // memory writes, and these are consent-first + deterministic.
@@ -6591,6 +7531,8 @@
         if (getPref('assistant.localRouting', true) === false) {
             return { handled: false };
         }
+        const todoList = tryReadTodoList(text);
+        if (todoList) return todoList;
 
         // Permission-safe local Notes Knowledge retrieval. This intentionally
         // answers only with quoted evidence and navigation links; synthesis or
@@ -6824,7 +7766,10 @@
         // contains a keyword like "ap"/"exam" — let it reach the provider, which
         // can propose the real action. This is the belt to the prefix-strip
         // suspenders above (in case a command phrasing isn't matched exactly).
-        if (!ACTION_VERB_RE.test(cmdLc)) {
+        // Consent + PIN identifies a content request. A generic Help keyword
+        // match must not consume its one-request ticket before enrichment.
+        if (!ACTION_VERB_RE.test(cmdLc)
+            && !(options.lockedPageAccessTicket && currentLockedPageAccessTicket(options))) {
             const known = routeProductKnowledge(text, lc);
             if (known) return known;
         }
@@ -6882,14 +7827,19 @@
                 expiresInDays = n * (/week/i.test(span[2]) ? 7 : (/month/i.test(span[2]) ? 30 : 1));
                 category = 'temporary_context';
             }
-            // Note: applyCreateMemory defaults source to 'user_explicit', so we do NOT
-            // pass `source` here — it isn't part of the create_memory action field schema
-            // and the strict validator would (correctly) reject the unknown field, which
-            // would silently drop this deterministic on-device save.
-            const res = applyActionLogged({ type: 'create_memory', category, content: fact, expiresInDays: expiresInDays || undefined }, { userPrompt: text });
-            if (!res.ok) return { handled: true, message: res.message || 'I couldn\'t save that to memory.', source: 'memory' };
+            // Local memory management has its own reviewed permission. It never
+            // grants workspace reads/writes or permits silent model memory saves.
+            const action = {
+                type: 'create_memory', category, content: fact,
+                expiresInDays: expiresInDays || undefined,
+                label: `Save to Assistant Memory: ${truncate(fact, 60)}`
+            };
             const expNote = expiresInDays ? ` It will expire in about ${expiresInDays} day${expiresInDays === 1 ? '' : 's'}.` : '';
-            return { handled: true, source: 'memory', message: `Got it — saved to memory: "${truncate(fact, 90)}".${expNote} _(${String(category).replace(/_/g, ' ')})_\n\nYou can edit, add to, or forget it anytime in **Settings ▸ Assistant ▸ Manage Memory**, or say "undo that".` };
+            return {
+                handled: true,
+                source: 'memory',
+                message: `I can save this to Assistant Memory: "${truncate(fact, 90)}".${expNote} _(${String(category).replace(/_/g, ' ')})_ Review it before saving.\n\n${buildActionFence([action])}`
+            };
         }
         return null;
     }
@@ -6932,6 +7882,14 @@
     function routeProductKnowledge(rawText, lc) {
         const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
         if (!pk || typeof pk.answer !== 'function') return null;
+        // Product help answers how Sutra works, not questions about saved data.
+        // A class/course list request is about the student's own workspace even
+        // when they type "im taking" without an apostrophe or the word "my".
+        const asksForPersonalCourseList = /\b(?:classes?|courses?)\b/.test(lc)
+            && /\b(?:i(?:['’]?m)?|my|mine|our|we|taking|enrolled|registered)\b/.test(lc)
+            && /\b(?:list|show|which|what|all|take|taking|enrolled|registered|have)\b/.test(lc);
+        if (asksForPersonalCourseList) return null;
+        if (/\b(?:my|our|saved)\b/i.test(rawText) && !/\b(?:how (?:do|can|should) (?:i|we)|how to|where (?:do|can) (?:i|we)|why (?:can'?t|doesn'?t))\b/i.test(rawText)) return null;
         // Only treat clearly question-shaped or help-shaped text as product Q&A,
         // so ordinary chat still goes to the provider.
         const looksLikeQuestion = /\?$/.test(rawText.trim())
@@ -6944,7 +7902,7 @@
         const lh = (typeof window !== 'undefined') ? window.SutraLocalHelp : null;
         if (lh && typeof lh.nodeIdForKnowledge === 'function' && typeof lh.open === 'function') {
             const nodeId = lh.nodeIdForKnowledge(hit.entry.id);
-            if (nodeId && lh.open(nodeId)) return { handled: true, silent: true, source: 'local' };
+            if (nodeId && lh.open(nodeId, { originalQuestion: rawText })) return { handled: true, silent: true, source: 'local' };
         }
         // Fallback: plain local text answer (still clearly labeled local).
         return { handled: true, source: 'local', message: pk.formatEntry(hit.entry) + '\n\n_Answered locally — no API key used._' };
@@ -7079,7 +8037,10 @@
     // Context transparency modal
     // --------------------------------------------------------------
     function buildInspectableContext() {
-        const ctx = getFlowAssistantContext({});
+        const view = getActiveViewName();
+        const input = document.getElementById(view === 'assistantview' ? 'asstInput' : 'chatInput');
+        const query = String(input && input.value || lastUserPrompt || '');
+        const ctx = applyRelevantWorkspaceContext(getFlowAssistantContext({}), query);
         const cap = getVisionCapability();
         // Surface which long-term memories the assistant could use, so users can
         // inspect exactly what saved memory informs a response. Retrieval is
@@ -7123,6 +8084,9 @@
         if (ctx.activeNote) bits.push(ctx.activeNote.locked ? 'the current note\'s title only (locked — body excluded)' : `your current note "${truncate(ctx.activeNote.title, 40)}"`);
         if (ctx.selection) bits.push('1 selected-text excerpt');
         if (count(ctx.tasks)) bits.push(`${ctx.tasks.length} task summaries`);
+        ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+            if (count(ctx[key])) bits.push(`${ctx[key].length} relevant ${key.replace('workspace', '').toLowerCase()} records`);
+        });
         if (count(ctx.homework)) bits.push(`${ctx.homework.length} homework summaries`);
         if (count(ctx.timelineUpcoming) || count(ctx.timelineToday) || count(ctx.timeline)) {
             bits.push(`${count(ctx.timelineUpcoming) + count(ctx.timelineToday) + count(ctx.timeline)} timeline blocks`);
@@ -8169,13 +9133,13 @@
                     </div>
                 </section>`);
             parts.push(`
-                <section class="flow-tutoring-modes" aria-label="Tutoring modes">
-                    <h3 class="flow-qa-heading">Study with a tutoring mode</h3>
+                <details class="flow-tutoring-modes" aria-label="Tutoring modes">
+                    <summary class="flow-qa-heading">Study with a tutoring mode</summary>
                     <div class="flow-tutoring-grid">
                         ${tutoringModes.map(mode => `<button type="button" class="flow-tutoring-mode" data-flow-tutoring-mode="${esc(mode.id)}">${esc(mode.label)}</button>`).join('')}
                     </div>
                     <p class="flow-onboarding-note">Provider-backed. Sutra keeps actions reviewable and uses your selected materials and workspace access.</p>
-                </section>`);
+                </details>`);
             if (!configured && continueWithoutAi) {
                 parts.push('<p class="flow-onboarding-note">No AI provider connected — model-powered actions will ask you to add a key. <button type="button" class="flow-link-btn" data-flow-connect="groq">Connect a provider</button></p>');
             }
@@ -8195,6 +9159,8 @@
             const rec = pulse.nextBestAction ? `<div class="flow-pulse-next"><span aria-hidden="true">✨</span> ${esc(truncate(pulse.nextBestAction.label, 80))}</div>` : '';
             const actionBtn = pulse.action ? `<button type="button" class="flow-pulse-action" data-flow-pulse-prompt="${esc(pulse.action.prompt)}">${esc(pulse.action.label)}</button>` : '';
             parts.push(`
+                <details class="flow-pulse-disclosure">
+                    <summary>Workspace pulse</summary>
                 <section class="flow-pulse" aria-label="Workspace pulse">
                     <div class="flow-pulse-head">
                         <span class="flow-pulse-title"><span aria-hidden="true">〰</span> Workspace pulse</span>
@@ -8203,7 +9169,7 @@
                     ${insightRows}
                     ${rec}
                     ${actionBtn}
-                </section>`);
+                </section></details>`);
         }
 
         host.innerHTML = parts.join(''); // sutra-allow-html: parts built from esc()-escaped local signals
@@ -8362,6 +9328,8 @@
         buildConversationMessages,
         buildRequestMessages,
         buildRequestEnrichment,
+        performWorkspaceInvestigation,
+        cancelWorkspaceInvestigation,
         retrieveNoteSources,
         requestLockedPageAccessForPrompt,
         prepareLockedPageAccessForPrompt,
@@ -8429,15 +9397,40 @@
     const EXTRA_ACTION_DEFINITIONS = {};
 
     function resolveAssistantActionPermissions(meta, prospective) {
-        if (meta && Array.isArray(meta.permissions)) return meta.permissions;
-        if (window.SutraAssistantPrivacy && typeof window.SutraAssistantPrivacy.getActionPermissions === 'function') {
-            return window.SutraAssistantPrivacy.getActionPermissions({
-                approved: prospective === true || !!(meta && (meta.reviewed || meta.confirmed)),
+        try {
+            if (!window.SutraAssistantPrivacy || typeof window.SutraAssistantPrivacy.getActionPermissions !== 'function') return [];
+            const grants = window.SutraAssistantPrivacy.getActionPermissions({
+                approved: prospective === true || !!(meta && meta.reviewed),
                 destructiveApproved: !!(meta && meta.destructiveApproved),
                 pluginApproved: !!(meta && meta.pluginApproved)
             });
+            if (!Array.isArray(grants) || grants.some(grant => typeof grant !== 'string')) return [];
+            // Callers may narrow the policy, but cannot manufacture a grant.
+            return meta && Array.isArray(meta.permissions) ? grants.filter(grant => meta.permissions.includes(grant)) : grants.slice();
+        } catch (error) {
+            return [];
         }
-        return ['workspace.read', 'workspace.write', 'workspace.delete', 'plugin.execute'];
+    }
+
+    function isLocalMemoryAction(type) {
+        return ['create_memory', 'update_memory', 'enable_memory', 'disable_memory', 'delete_memory', 'clear_expired_memories', 'clear_temporary_memories'].includes(type);
+    }
+
+    function assistantActionPermissionError(action, meta, prospective) {
+        const definition = getActionDefinition(action && action.type);
+        if (!definition) return 'Assistant action is unavailable.';
+        const required = Array.isArray(definition.permissions) ? definition.permissions.slice() : [];
+        if (EXTRA_ACTION_DEFINITIONS[action.type]) required.push('plugin.execute');
+        else if (!definition.readOnly) required.push(isLocalMemoryAction(action.type) ? 'assistant.memory.write' : 'workspace.write');
+        if (definition.destructive) required.push(isLocalMemoryAction(action.type) ? 'assistant.memory.delete' : 'workspace.delete');
+        // Even read-only APIs require an available policy; a missing service
+        // must not turn a known action into an implicit grant.
+        if (!window.SutraAssistantPrivacy || typeof window.SutraAssistantPrivacy.getActionPermissions !== 'function') {
+            return 'Assistant permissions are unavailable. Reload Sutra before applying actions.';
+        }
+        const grants = resolveAssistantActionPermissions(meta, prospective);
+        return required.some(permission => !grants.includes(permission))
+            ? 'This action is not allowed by your Assistant permissions.' : '';
     }
 
     function registerTypedActionCatalog() {
@@ -8477,10 +9470,19 @@
                     items: { type: 'object', additionalProperties: false, required: ['front', 'back'], properties: { front: { type: 'string', minLength: 1, maxLength: 10000 }, back: { type: 'string', minLength: 1, maxLength: 20000 } } }
                 };
             }
+            if (entry.type === 'review_study_preferences') {
+                schema.properties.preferences = { type: 'object', additionalProperties: false, properties: {
+                    schoolStartHour: { type: 'number', minimum: 0, maximum: 1439 / 60 }, schoolEndHour: { type: 'number', minimum: 0, maximum: 1439 / 60 },
+                    earliestStudyHour: { type: 'number', minimum: 0, maximum: 1439 / 60 }, latestStudyHour: { type: 'number', minimum: 0, maximum: 24 },
+                    studyBlockMinutes: { type: 'number', minimum: 10, maximum: 180 }, breakMinutes: { type: 'number', minimum: 0, maximum: 60 },
+                    bedtimeHour: { type: 'number', minimum: 18, maximum: 26 }, scheduleWeekends: { type: 'boolean' },
+                    preferredReviewStyle: { type: 'string', enum: ['flashcards', 'learn', 'write', 'test', 'match'] }, hardestClasses: { type: 'string', maxLength: 200 }
+                } };
+            }
             const permissions = [];
             if (cap && cap.scope !== 'none') permissions.push('workspace.read');
-            if (!(cap && cap.readOnly) && entry.risk !== 'read_only') permissions.push('workspace.write');
-            if (cap && cap.destructive) permissions.push('workspace.delete');
+            if (!(cap && cap.readOnly) && entry.risk !== 'read_only') permissions.push(isLocalMemoryAction(entry.type) ? 'assistant.memory.write' : 'workspace.write');
+            if (cap && cap.destructive) permissions.push(isLocalMemoryAction(entry.type) ? 'assistant.memory.delete' : 'workspace.delete');
             system.register({
                 type: entry.type,
                 description: entry.desc,
@@ -8490,7 +9492,7 @@
                 affectedEntities: [cap && cap.domain || 'assistant'],
                 preview: (action) => ({ label: describeAction(action), html: buildPreviewHtml(action, classifyRisk(action)) }),
                 persistence: { required: !(cap && cap.readOnly) && entry.risk !== 'read_only', strategy: 'workspace' },
-                confirmation: (cap && cap.destructive) ? 'destructive' : (entry.risk === 'read_only' ? 'never' : (entry.risk === 'high' ? 'always' : 'writes')),
+                confirmation: (cap && cap.destructive) ? 'destructive' : (entry.type === 'review_study_preferences' ? 'always' : (entry.risk === 'read_only' ? 'never' : (entry.risk === 'high' ? 'always' : 'writes'))),
                 destructive: !!(cap && cap.destructive),
                 readOnly: !!(cap && cap.readOnly) || entry.risk === 'read_only',
                 limits: { maxBytes: 256000 },
@@ -8527,7 +9529,7 @@
             domain: cap ? cap.domain : null,
             domainLabel: cap ? cap.domainLabel : null,
             requiredScope: cap ? cap.scope : 'none',
-            readOnly: cap ? cap.readOnly : (entry.risk === 'read_only'),
+            readOnly: !!(cap && cap.readOnly) || entry.risk === 'read_only',
             reversible: cap ? cap.reversible : UNDOABLE_TYPES.has(entry.type),
             destructive: cap ? cap.destructive : false,
             schema: typed ? typed.schema : null,
@@ -8594,6 +9596,8 @@
         applyAction(action, meta) {
             const extra = EXTRA_ACTION_DEFINITIONS[action && action.type];
             if (extra) {
+                const permissionError = assistantActionPermissionError(action, meta, false);
+                if (permissionError) return { ok: false, code: 'permission_denied', message: permissionError };
                 try { return extra.apply(action) || { ok: false, message: 'No result.' }; }
                 catch (e) { return { ok: false, message: e && e.message || 'Action failed.' }; }
             }
@@ -8724,12 +9728,248 @@
         }
     }
 
+    const assistantPermissionAreas = { planning: 'Tasks & schedule', notes: 'Notes', courses: 'Courses', learning: 'Study & grades', college: 'College', life: 'Life', business: 'Business', workspace: 'Other workspace content', memory: 'Saved Assistant memory' };
+    let assistantPermissionSavePending = false;
+    let assistantPermissionSaveState = 'idle';
+    let assistantPermissionSaveMessage = '';
+
+    async function persistAssistantPermissionMutation(apply, flush) {
+        try {
+            if (typeof apply === 'function') apply();
+        } catch (error) {
+            return { ok: false, phase: 'apply', error };
+        }
+        try {
+            if (typeof flush !== 'function') throw new Error('Workspace save confirmation is unavailable.');
+            await flush();
+            return { ok: true };
+        } catch (error) {
+            return { ok: false, phase: 'save', error };
+        }
+    }
+
+    function createAssistantPermissionRetryButton(onComplete) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'cc-btn cc-btn-ghost cc-btn-small';
+        button.textContent = 'Retry save';
+        button.addEventListener('click', async () => {
+            if (assistantPermissionSavePending) return;
+            button.disabled = true;
+            const parent = button.parentElement;
+            const isCardNote = parent && parent.classList.contains('flow-action-permission-note');
+            let savingMessage = null;
+            if (isCardNote) {
+                parent.setAttribute('aria-busy', 'true');
+                savingMessage = document.createElement('span');
+                savingMessage.textContent = 'Saving Assistant access…';
+                parent.insertBefore(savingMessage, button);
+            }
+            let result;
+            try {
+                result = await saveAssistantPermissionSetting(() => {}, 'retry');
+            } catch (error) {
+                result = { ok: false, phase: 'save', error };
+            }
+            if (savingMessage && savingMessage.parentNode) savingMessage.remove();
+            if (isCardNote) parent.setAttribute('aria-busy', 'false');
+            if (typeof onComplete === 'function') onComplete(result);
+        });
+        return button;
+    }
+
+    function renderAssistantPermissionCardSaveFailure(permissionNote) {
+        permissionNote.replaceChildren();
+        permissionNote.setAttribute('aria-busy', 'false');
+        const message = document.createElement('span');
+        message.textContent = 'Could not confirm saving Assistant access. The selected permissions remain active in this session; retry before leaving this page.';
+        permissionNote.appendChild(message);
+        permissionNote.appendChild(createAssistantPermissionRetryButton((retryResult) => {
+            if (retryResult.ok) {
+                permissionNote.textContent = 'Assistant access change saved locally. This proposal still needs its own Apply action.';
+            } else if (retryResult.phase === 'apply') {
+                permissionNote.textContent = retryResult.error && retryResult.error.message || 'Could not retry the Assistant access save.';
+            } else {
+                renderAssistantPermissionCardSaveFailure(permissionNote);
+            }
+        }));
+    }
+
+    async function saveAssistantPermissionSetting(apply, reason) {
+        if (assistantPermissionSavePending) return { ok: false, phase: 'busy' };
+        const previousSaveState = assistantPermissionSaveState;
+        const previousSaveMessage = assistantPermissionSaveMessage;
+        assistantPermissionSavePending = true;
+        assistantPermissionSaveState = 'saving';
+        assistantPermissionSaveMessage = '';
+        refreshAssistantPermissionControls();
+
+        let result;
+        try {
+            result = await persistAssistantPermissionMutation(() => {
+                if (typeof apply === 'function') apply();
+                refreshAssistantPermissionControls();
+            }, () => {
+                const owner = bridge({ diagnose: false });
+                if (!owner || typeof owner.flushAppSaveNow !== 'function') {
+                    throw new Error('Workspace save confirmation is unavailable.');
+                }
+                return owner.flushAppSaveNow(reason === 'retry' ? 'retry' : 'assistant-permission-settings');
+            });
+            if (result.ok) {
+                assistantPermissionSaveState = 'saved';
+                assistantPermissionSaveMessage = 'Assistant access change saved locally.';
+            } else if (result.phase === 'apply') {
+                if (previousSaveState === 'failed') {
+                    assistantPermissionSaveState = previousSaveState;
+                    assistantPermissionSaveMessage = previousSaveMessage;
+                } else {
+                    assistantPermissionSaveState = 'blocked';
+                    assistantPermissionSaveMessage = result.error && result.error.message || 'Could not apply Assistant access.';
+                }
+            } else {
+                assistantPermissionSaveState = 'failed';
+                assistantPermissionSaveMessage = 'Could not confirm saving this Assistant access change. The selected permissions remain active in this session; retry before leaving this page.';
+                try {
+                    if (typeof window.SutraReportError === 'function') {
+                        window.SutraReportError(result.error || new Error('Assistant permission save was not confirmed.'), {
+                            where: 'flow-assistant.permission-settings', phase: 'durability-acknowledgement'
+                        }, 'error');
+                    }
+                } catch (reportingError) { /* Keep the visible retry status even if reporting is unavailable. */ }
+            }
+            return result;
+        } finally {
+            assistantPermissionSavePending = false;
+            refreshAssistantPermissionControls();
+        }
+    }
+
+    function renderAssistantPermissionStatus(status, baseMessage) {
+        const stateMessage = assistantPermissionSavePending
+            ? 'Saving Assistant access…'
+            : assistantPermissionSaveState === 'saved' || assistantPermissionSaveState === 'failed' || assistantPermissionSaveState === 'blocked'
+                ? assistantPermissionSaveMessage
+                : '';
+        status.replaceChildren();
+        status.setAttribute('aria-busy', assistantPermissionSavePending ? 'true' : 'false');
+        const text = document.createElement('span');
+        text.textContent = [stateMessage, baseMessage].filter(Boolean).join(' ');
+        status.appendChild(text);
+        if (assistantPermissionSaveState === 'failed' && !assistantPermissionSavePending) {
+            status.appendChild(createAssistantPermissionRetryButton(() => {}));
+        }
+    }
+    function refreshAssistantPermissionControls() {
+        const mode = document.getElementById('assistantWorkspaceAccess');
+        const container = document.getElementById('assistantWorkspaceAreas');
+        const status = document.getElementById('assistantWorkspaceAccessStatus');
+        const preset = document.getElementById('assistantAccessPreset');
+        if (!mode || !container || !status) return;
+        const privacy = window.SutraAssistantPrivacy;
+        const controls = window.SutraAssistantPermissions;
+        const owner = bridge({ diagnose: false });
+        const ready = assistantInitialized && privacy && typeof privacy.getPermissions === 'function' && typeof privacy.canRead === 'function'
+            && controls && typeof controls.setMode === 'function' && typeof controls.setArea === 'function'
+            && owner && typeof owner.flushAppSaveNow === 'function';
+        const assistantEnabled = getPref('assistant.enabled', true) !== false;
+        mode.disabled = !ready || !assistantEnabled || assistantPermissionSavePending;
+        if (preset) preset.disabled = !ready || !assistantEnabled || assistantPermissionSavePending || typeof controls.applyPreset !== 'function';
+        document.querySelectorAll('[data-assistant-permission-enable]').forEach(button => {
+            button.disabled = !ready || !assistantEnabled || assistantPermissionSavePending;
+        });
+        if (!ready) {
+            container.querySelectorAll('select').forEach(select => { select.disabled = true; });
+            renderAssistantPermissionStatus(status, assistantEnabled
+                ? 'Workspace access is unavailable. Reload Sutra to restore its permission controls.'
+                : 'Enable Sutra Assistant to manage workspace access.');
+            return;
+        }
+        const permissions = privacy.getPermissions();
+        mode.value = permissions.mode;
+        if (preset) preset.value = privacy.identifyPreset(permissions, getPref('assistant', {}));
+        if (!container.children.length) {
+            Object.entries(assistantPermissionAreas).forEach(([area, name]) => {
+                const row = document.createElement('label');
+                row.className = 'cc-row';
+                row.setAttribute('data-setting-item', '');
+                const text = document.createElement('span');
+                text.className = 'cc-row-text';
+                text.textContent = name;
+                const control = document.createElement('span');
+                control.className = 'cc-row-control';
+                const select = document.createElement('select');
+                select.className = 'modal-input cc-select';
+                select.dataset.nativeSelect = 'true';
+                select.dataset.assistantPermissionArea = area;
+                select.setAttribute('aria-label', name + ' access');
+                [['ask', 'Use access mode'], ['approved', 'Allow'], ['denied', 'Block']].forEach(([value, label]) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    select.appendChild(option);
+                });
+                control.appendChild(select);
+                row.append(text, control);
+                container.appendChild(row);
+            });
+        }
+        container.querySelectorAll('[data-assistant-permission-area]').forEach(select => {
+            select.disabled = !assistantEnabled || assistantPermissionSavePending;
+            select.value = permissions.areas[select.dataset.assistantPermissionArea] || 'ask';
+        });
+        if (!assistantEnabled) {
+            renderAssistantPermissionStatus(status, 'Enable Sutra Assistant to manage workspace access.');
+            return;
+        }
+        const baseStatus = permissions.mode === 'off'
+            ? 'Workspace access is off. Workspace-aware changes search scope, not permission.'
+            : !privacy.canRead('planning')
+                ? 'Tasks & schedule is not allowed. Choose Allow for that area below to read your to-dos.'
+                : 'Assistant can read your tasks and other allowed areas. Only relevant excerpts are shared with your selected provider; locked and sensitive content stays protected.';
+        renderAssistantPermissionStatus(status, baseStatus);
+    }
+    const handleAssistantPermissionChange = async (event) => {
+        const target = event.target;
+        if (!target || !target.matches('[data-assistant-preset], [data-assistant-permission-mode], [data-assistant-permission-area]')) return;
+        if (assistantPermissionSavePending) { refreshAssistantPermissionControls(); return; }
+        if (getPref('assistant.enabled', true) === false) { refreshAssistantPermissionControls(); return; }
+        const controls = window.SutraAssistantPermissions;
+        if (target.hasAttribute('data-assistant-preset') && target.value === 'advanced') {
+            if (assistantPermissionSaveState !== 'failed') {
+                assistantPermissionSaveState = 'idle';
+                assistantPermissionSaveMessage = '';
+            }
+            const status = document.getElementById('assistantWorkspaceAccessStatus');
+            if (status) renderAssistantPermissionStatus(status, 'Advanced keeps your current permissions. Customize workspace access, areas, conversation and confirmation below.');
+            return;
+        }
+        const selectedValue = target.value;
+        const apply = target.hasAttribute('data-assistant-preset')
+            ? () => controls.applyPreset(selectedValue)
+            : target.hasAttribute('data-assistant-permission-mode')
+                ? () => controls.setMode(selectedValue)
+                : Object.prototype.hasOwnProperty.call(assistantPermissionAreas, target.dataset.assistantPermissionArea)
+                    ? () => controls.setArea(target.dataset.assistantPermissionArea, selectedValue)
+                    : null;
+        if (!apply) return;
+        const result = await saveAssistantPermissionSetting(apply);
+        if (!result.ok && result.phase === 'apply') {
+            try {
+                if (typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(result.error || new Error('Assistant permission change was rejected.'), { where: 'flow-assistant.permission-settings' }, 'error');
+                }
+            } catch (reportingError) { /* Keep the visible blocked status. */ }
+        }
+    };
     let assistantInitialized = false;
-    const onFlowBridgeReady = () => { try { migrateLegacyTaskShapes(); } catch (e) { /* non-critical */ } };
+    const onFlowBridgeReady = () => { try { migrateLegacyTaskShapes(); refreshAssistantPermissionControls(); } catch (e) { /* non-critical */ } };
     const handleSelectionChange = () => updateContextChip();
     const handleAssistantDocumentClick = (e) => {
         const target = e.target;
         if (!target) return;
+        if (target.closest && target.closest('[data-settings-nav="assistant"]')) refreshAssistantPermissionControls();
+        if (target.closest && target.closest('#settingsApplyBtnTop, #settingsApplyBtn, #settingsRevertBtnTop, #settingsRevertBtn')) requestAnimationFrame(refreshAssistantPermissionControls);
         const askBtn = target.closest && target.closest('[data-flow-ask]');
         if (askBtn) {
             e.preventDefault();
@@ -8752,6 +9992,7 @@
             renderQuickActions();
             injectViewFlowRows();
             setupAsstSidebarResizer();
+            refreshAssistantPermissionControls();
             // Run the one-time task-shape migration when the bridge is actually
             // ready — either it is already installed (run now), or app.js will
             // fire 'sutra:flow-bridge-ready' when it finishes installing
@@ -8765,6 +10006,8 @@
             // Refresh chip/selection on common interaction events.
             document.addEventListener('selectionchange', handleSelectionChange);
             document.addEventListener('click', handleAssistantDocumentClick, true);
+            document.addEventListener('change', handleAssistantPermissionChange);
+            window.addEventListener('noteflow:view-changed', refreshAssistantPermissionControls);
         } catch (e) {
             assistantInitialized = false;
             console.warn('Sutra Assistant init failed:', e);
@@ -8775,6 +10018,11 @@
         window.removeEventListener('sutra:flow-bridge-ready', onFlowBridgeReady);
         document.removeEventListener('selectionchange', handleSelectionChange);
         document.removeEventListener('click', handleAssistantDocumentClick, true);
+        document.removeEventListener('change', handleAssistantPermissionChange);
+        window.removeEventListener('noteflow:view-changed', refreshAssistantPermissionControls);
+        document.querySelectorAll('[data-assistant-preset], [data-assistant-permission-mode], [data-assistant-permission-area], [data-assistant-permission-enable]').forEach(control => { control.disabled = true; });
+        const accessStatus = document.getElementById('assistantWorkspaceAccessStatus');
+        if (accessStatus) renderAssistantPermissionStatus(accessStatus, 'Enable Sutra Assistant to manage workspace access.');
         document.querySelectorAll('.flow-activity-overlay,.flow-review-overlay,.flow-context-overlay').forEach(node => node.remove());
         const panel = document.getElementById('chatbotPanel');
         if (panel) panel.classList.remove('open');

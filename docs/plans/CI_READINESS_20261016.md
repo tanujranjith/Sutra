@@ -1,0 +1,357 @@
+# Local QA and CI readiness — October 16, 2026
+
+Branch: `codex/student-workflow-batch`. The initial inspection and preparation
+below preceded push authorization. On October 16 the user authorized uploading
+this branch for GitHub CI after preflight review. No merge, production promotion,
+or remote configuration change is authorized. Prepared coverage is not a claim
+that pending automated tests have passed.
+
+## Current recorded status — October 17
+
+Run [38997646618](https://github.com/tanujranjith/Sutra/actions/runs/38997646618)
+at `d95489e` completed with **16 successful jobs and one failed job**. Static,
+unit, build, artifact, Chromium, Chrome, Firefox, responsive, and the other WebKit
+lanes passed. WebKit shard 5 failed the closing-connection autosave case in
+`persistence-and-folder.spec.mjs` with `WorkspaceConflictError`; its job recorded
+113 passes and 12 existing engine skips. This is not an all-green matrix.
+
+Local commit `66bd37f` repairs the closing-connection fixture: it awaits
+`waitForAppReady`, including canonical hydration and a confirmed save, before
+copying the root and installing the fake IndexedDB factory. Previously onboarding
+could queue a save against the fixture's stale copy and correctly trigger the
+production conflict guard. The parent reviewed the fixture, readiness helper,
+hydration/debounce behavior, and unchanged retry assertions. No production
+conflict protection was weakened, and no delay or skip was added.
+
+That fixture repair, later local PIN fixes, and documentation changes have not
+been uploaded or tested by CI. The user's current instruction is **no push or merge**. The dated progress
+and prepared-check tables below are historical checkpoints, not pending-run or
+current-release certification.
+
+## Initial CI execution
+
+- The branch was pushed at `b28b216`; GitHub confirmed `main` remained at
+  `80569e1`. Vercel reported a successful protected branch preview build.
+- Initial encoding and intelligence-harness gates exposed intentional encoding
+  examples and stale prompt wording. Narrow checker/expectation corrections were
+  reviewed and committed at `ded63c8` and `8a3e6e4`.
+- All static checks passed in CI at `8a3e6e4`. Node 24 did not discover unit tests
+  from the old directory argument; `9b8e839` uses an explicit quoted test glob.
+- CI run `38917983086` executed 867 unit tests: 846 passed, 21 failed, none skipped.
+  Repairs cover async extraction fixtures, canonical Sync identities/source
+  inventory samples, calculator dependency setup, XML-escaping expectations,
+  recovery-adapter discovery, missing icon mappings, and nested credential labels
+  in diagnostic error stacks. Those repairs require another CI run.
+- One security-fix subagent inadvertently ran a synthetic reporter reproduction
+  and an intermediate syntax check locally. Further local execution was stopped;
+  no unit or browser suite was run on the user's PC. Required asset/CSP/cache
+  generation remains within the earlier local-integrity exception.
+
+## Browser failure repairs
+
+Run `38919181517` at `ff02520` passed the static, unit, build, and artifact
+gates, but Chromium reported 46 failures, 674 passes, one flaky test, and three
+skips. Repairs on this branch preserve the original safety assertions:
+
+- Assistant fixtures configure providers through `SutraProviderMeta`, rather
+  than changing hidden legacy controls. Approved actions are explicitly enabled
+  in the test that reviews and applies them; standard-model fixtures exercise
+  the `max_tokens` compatibility retry without changing reasoning-model rules.
+- Saved-memory permission is checked before retrieval, denied memory selection
+  metadata is removed, and usage is recorded only for authorized memories that
+  survive both prompt budgets. Unit and browser regressions cover denial.
+- Classic plain-text paste creates an immediate undo history entry; Shift+Z
+  redo handles the uppercase browser key value.
+- Help & Docs uses namespaced live Modern Editor anchors and canonical stored
+  anchors, with explicit read-only accessibility state. Painted page gaps are
+  aligned after the editor's gap widgets enter the DOM.
+- Settings and academic fixtures use the current disclosures, category labels,
+  and pack opt-in. Backup rollback tests retain detailed failure assertions while
+  expecting the deliberately safe public status message.
+- The retained legacy theme modal is tested through its explicit API. The Themes
+  card's approved Assistant `/theme` entry has separate end-to-end coverage.
+
+All test data and provider responses are synthetic. No unit or browser suite was
+run locally for these repairs. Required runtime integrity checks (including the
+temporary static-server guard), the staged core hook, and owned asset/CSP/cache
+generators ran locally. The browser result for the final revision remains pending
+until its GitHub CI run completes. No main merge or production promotion occurred.
+
+Run `38939631344` at `51c0393` passed all non-browser gates and reported 719
+Chromium passes, two failures, and three skips. The remaining failures were the
+stale Themes-card/modal expectation (corrected in `7a512ff`) and long-paragraph
+pagination: painted gaps aligned, but 32 text rectangles still intersected them.
+The next CI revision checks that pagination regression before the full editor
+shard; the original no-intersection, boundary, and persistence assertions remain.
+
+## Full compatibility follow-up
+
+The user authorized checklist 45: full browser/device CI, repair of discovered
+failures, small branch commits, and no merge. The initial full run is
+`38980869674` at `ceed5e3`; the earlier normal Chromium run `38945216157` passed
+all static/unit/build/artifact gates and all three Chromium shards.
+
+CI annotations identified Node 20 action runtimes and an upcoming change to the
+`ubuntu-latest` image. Direct action pins were independently checked against
+official immutable manifests and updated to Node 24 versions; runners use
+`ubuntu-24.04`. Desktop Chrome and Firefox retain three one-worker shards each;
+WebKit now has six one-worker shards for full coverage with shorter wall time.
+Responsive projects remain in one complete
+lane. Browser caches remain shared per engine, and failure artifact names now
+include the shard to avoid upload collisions. The workflow guard checks that
+desktop shards and responsive projects are neither lost nor duplicated.
+
+A CI-only supplementary reporter prints bounded assertion details when a test
+fails, rather than waiting for the end of a long compatibility job. The normal
+Playwright summary and retained failure artifacts remain available. No unit or
+browser suite, dependency install, browser download, or deploy build ran locally.
+No production workflow was dispatched and no main merge was performed.
+
+The user also requested a hosting subagent. Read-only Vercel inspection found a
+Ready preview for repository `tanujranjith/Sutra`, branch
+`codex/student-workflow-batch`, and commit `ceed5e3`, at
+`sutra-git-codex-student-workflow-batch-tanuj-ranjith-s-projects.vercel.app`.
+The deployment detail identifies the immutable host
+`sutra-cojvrpqrv-tanuj-ranjith-s-projects.vercel.app`. The parent independently
+verified the source commit after the subagent verified landing-page availability.
+No hosting setting or protection was changed. The precise normal public URL is
+still being clarified; a working preview is not proof of production promotion.
+
+Full run `38982196006` at `f68673a` passed static/unit/build/artifact gates and
+all three normal Chromium shards. The expanded matrix exposed a WebKit Drive
+restore prompt that remains disabled, a narrow WebKit Settings control obscured
+by floating UI, and two Firefox synthetic clipboard-event failures. Investigation
+and repair validation remain in progress; this run is not a full compatibility
+pass. A separate Firefox browser-page setup timeout passed its retry and is
+recorded as infrastructure flakiness rather than a failed application assertion.
+
+The Drive investigation also found that locking left a previously scheduled save
+timer active. Commit `35e92de` cancels that timer and its queued-upload flag while
+preserving dirty local changes. Its required local runtime integrity gate and
+staged hook passed; browser regression execution remains on GitHub. Password
+prompt diagnostics report only field lengths and dialog state, never passphrases.
+WebKit Drive checks now run before the long shard for earlier failure evidence.
+The Firefox fixture now attaches its prepared DataTransfer to the synthetic
+event explicitly; formatting and reload checks remain unchanged. Settings layout
+tests isolate live service-worker state, and a separate mocked-update regression
+checks visible-banner disclosure reachability through the actual phone scroller.
+The parent corrected an initial bottom-navigation/header assumption before
+accepting that regression. Focused Settings and paste checks also precede their
+long compatibility shards. These changes still await GitHub execution.
+The completed Firefox second shard additionally exposed the same synthetic-paste
+issue in pagination and a first-selection timeout in the writing-review fixture.
+The pagination transfer is now explicit. Writing review checks visible and
+serialized text before focused keyboard selection, retaining the full-selection
+requirement and reporting its actual value. Both checks precede Firefox's long
+second shard on the next run.
+WebKit also reproduced the writing-selection timeout and failed a header geometry
+predicate. Header assertions now preserve their thresholds while reporting exact
+viewport, control/text rectangles, font status, and original source stacks. Their
+production causes remain unproven. The reviewed repair batch supersedes the old
+run's remaining WebKit jobs with the complete six-shard matrix; completed results
+and observed failures from the old run remain recorded above. No compatibility
+failure has been hidden by a new skip or relaxed assertion.
+
+Follow-up run `38986929179` at `7f314ec` passed static/unit/build/artifact gates.
+Its targeted Firefox paste (both editors), writing review, and pagination checks
+passed, as did WebKit writing review, header geometry, and the new Drive-lock
+regression. The Drive restore check exposed an author CSS grid rule overriding
+the confirmation label's `hidden` attribute in WebKit and Chromium. Commit
+`e4ac3d2` adds the owning password-field hidden backstop and updates generated
+cache references; no password or encryption validation was relaxed.
+
+The dedicated visible-update-banner Settings test still failed its reachability
+predicates. It now waits for ordinary layout to settle and reports actual scroll
+owners, limits, and rectangles on failure, preserving all three predicates.
+Settings source forces vertical scroll behavior to auto; smooth scrolling is not
+a proven cause. A browser artifact-download request stalled and reset its control
+session; no matching artifact was found in Downloads, and that route was stopped.
+Remaining transient page/setup or visibility failures that passed retry are
+tracked separately from repeated application/fixture failures.
+
+Full run `38988735851` at `5d59d76` passed static/unit/build/artifact gates.
+Both early WebKit Drive regressions passed: locking retained the pending local
+edit without reopening a password prompt, and restore rejected a wrong password
+before restoring with the correct one. These observed passes validate the hidden
+field and lock-timer repairs without establishing every earlier failure's cause.
+
+The same run reproduced Settings notice overlap after the layout-settling wait.
+At 320 by 568, the actual main-content scroller stopped at its maximum of 543px;
+the first appearance disclosure remained at y=308–370 behind the visible update
+notice at y=308–412. The requested scroll was larger than the available range.
+This establishes missing bottom scroll clearance, rather than smooth scrolling,
+as the reproduced defect. The reviewed mobile CSS repair reserves the notice's
+existing responsive height cap as additional bottom scroll space only while the
+notice is visible, preserving navigation padding and safe-area clearance.
+The notice checks are included in all four responsive projects. Both changes
+await CI validation; no local browser suite was run.
+
+Run `38990115649` at `474b6cc` passed static/unit/build/artifact gates and both
+early WebKit Drive checks, but the visible-notice reachability test still failed
+with unchanged scroll geometry. Source review found the older
+`styles/legacy/ui-refresh.css` important zero main-content bottom-padding rule
+overriding the reserve. The scoped Settings reserve now explicitly overrides
+that rule, and failure diagnostics also report computed padding, body classes,
+and the responsive height cap. The reachability assertions remain unchanged.
+
+Run `38990835735` at `5c0c63d` passed the non-browser gates, but WebKit's notice
+reachability check still failed with computed main-content padding near 460px
+and unchanged scroll range. The reserve is now applied to the flowing Settings
+page's existing mobile footer-padding contract, rather than its overflow owner.
+It still derives from the notice height cap and only exists while the notice is
+shown. Diagnostics include the Settings page's computed padding. This revision
+awaits CI; no reachability assertion or visible-notice requirement was removed.
+
+Run `38991533617` at `cc62d20` passed static/unit/build/artifact gates. Its
+early WebKit checks passed for both Drive cases, Settings containment at 320px,
+and visible-update-notice reachability (6.6s). The parent independently checked
+the actual log and job API. Mobile Chromium also passed the notice reachability
+case. The full compatibility run is still in progress; seven jobs are confirmed
+green, including normal Chromium shards 1 and 3, Chrome shard 3, and WebKit
+shards 3, 5, and 6.
+
+WebKit shard 3's background Drive-pull test had one password-field equality
+failure that passed retry. Source review found no post-open value reset or
+re-entrant prompt in that path; its cause remains unproven. This is recorded as
+a transient, rather than an established application defect or a hidden failure.
+
+Vercel's commit status reports the `cc62d20` branch deployment completed
+successfully at deployment `2LFJbsY83niphT1JfsNuuByp5VG5`. A documented
+authenticated CLI HEAD request returned no usable whitelisted header output,
+despite exit zero. Live app security headers therefore remain unverified; no
+protection setting, credential, or production deployment was changed. No trace
+artifact was downloaded. The final broad-run result will be recorded separately.
+
+Later in the same run, all three standard Chromium shards, desktop Chrome shards
+1 and 3, Firefox shards 1 and 3, WebKit shards 1, 3, 5 and 6, and the responsive
+lane finished green. WebKit shard 4 reported two repeated failures: command
+launcher center-point ownership at startup width 1644 (other geometry fits), and
+the full Assistant writing-review test waiting on a disabled Send button.
+The parent independently read both assertion logs; no trace download was needed.
+
+The header and Notes fixtures now use the public UI-ready gate, and the header
+waits on its unchanged hit-target predicate with element-stack diagnostics.
+Writing review explicitly clicks and fills the composer, checks retained text,
+and checks Send availability before the existing real click. Flush already waits
+for data hydration; the stricter gate also confirms rendered UI and routing and
+removes startup inertness. These changes do not establish the failures' causes
+or weaken the original assertions. Both cases now precede the full WebKit fourth
+shard, and their repair validation remains pending. No production code changed
+in this fixture follow-up.
+
+Run `38991533617` completed with 16 successful jobs and one failed job (WebKit
+shard 4). All Chrome, Chromium, Firefox, responsive and other WebKit jobs passed.
+The failed job contained exactly the two repeated interaction failures above.
+WebKit shard 3 finished with 124 passed and one retry-passed Drive case; Firefox
+shard 2 also had a retry-passed browser-page setup timeout. The test-only repair
+revision will be validated in CI before claiming the full matrix is green.
+
+The immutable branch app finished loading to Today with onboarding and no console
+errors or warnings. An anonymous HEAD received a Vercel-protection redirect, so
+live application headers remain unverified. The installed CLI can inspect the
+project with the bundled Node runtime's Windows CA trust; no certificate check
+was disabled. No hosting restoration or production promotion was performed.
+
+## Vercel inspection
+
+### October 17 follow-up
+
+Full run `38994678784` at `94c8bc4` finished with 16 successful jobs and one
+failed WebKit fourth shard. The earlier header and full Assistant interaction
+failures passed both early checks and the full shard. The remaining repeated
+failure was `notes-search-wave-b.spec.mjs` math rendering: a one-shot check after
+200 ms observed no KaTeX markup. The helper returns void while scheduling lazy
+asset loading; awaiting it did not await rendering. The fixture now waits for
+actual KaTeX output and also verifies preserved LaTeX and non-editability. No
+production code changed. Its new CI validation is pending. Two other WebKit
+cases (comments containment and passage writing) passed on retry and remain
+reported as timing caveats.
+
+The user requested a hosting-restoration investigation. Read-only inspection
+confirmed the current branch preview is Ready at SHA `94c8bc4`, and the Git-main
+deployment exists at `80569e1`. The public `sutra-two.vercel.app` alias instead
+points at a separate manual production deployment whose root describes a Sutra
+product family (Windows browser, dynamic island, consulting and apparel).
+Its root returns 200 HTML; `/Sutra.html` returns 404 text/plain. This may be the
+other Sutra site the user asked to preserve. The exact normal app URL was
+requested before any alias change. No deployment, promotion, linking, protection
+or domain change was performed. Protected app headers remain unverified.
+
+Subsequent parent verification linked only ignored local CLI project metadata to
+the already confirmed existing project, then used the installed CLI's authenticated
+`curl` path. Both the Git-main deployment and preview
+`sutra-k9yxw495p-tanuj-ranjith-s-projects.vercel.app` at `d95489e` returned HTTP 200
+with HTML, CSP, `nosniff`, `no-referrer`, Permissions Policy, COOP, CORP and HSTS.
+No protection or remote hosting setting changed. The CLI's redundant `.gitignore`
+addition was removed; existing ignore rules already cover its local metadata.
+This supersedes the earlier live-header limitation for these two app deployments.
+
+Full run `38997646618` at `d95489e` completed as summarized above. Its build/static/unit/artifact
+job passed, and the parent read successful WebKit early checks for the header
+(26.0 s), full Assistant writing review (23.6 s), and repaired math fixture
+(10.3 s). The WebKit fifth-shard persistence failure prevents a full compatibility
+pass. No main merge occurred.
+
+Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:
+
+- Connected Git repository: `tanujranjith/Sutra`.
+- Production branch tracking: `main` (`sutra-two.vercel.app`).
+- Preview branch tracking: enabled for all unassigned Git branches.
+- Ignored Build Step: Automatic; no production-only or skip-all rule selected.
+- Build Node version: 24.x.
+- Deployment Protection: Require Log In enabled, Standard Protection selected.
+- Preview environment: no project environment variables displayed.
+- No deploy hooks or deployment checks configured in the inspected project.
+
+Consequently, pushing this branch would normally trigger both GitHub CI and a
+Vercel preview build. It would not update this project's production branch.
+Preview authentication remains enabled. No settings were changed. If the user
+wants CI without a preview, obtain approval for a separate preview-tracking or
+branch-specific deployment-rule change before making it.
+
+The CLI inspection failed on certificate trust; it was not bypassed. Inspection
+completed through Chrome. No credential values or environment files were read.
+
+## Prepared checks
+
+| Checklist | Coverage reviewed/prepared | Remaining gate |
+|---|---|---|
+| 19 | Existing `tests/unit/student-security-boundaries.test.mjs`: fake modern provider keys, nested credential aliases, encoded query/text labels, report/export sinks, returned-copy isolation, ordinary diagnostic preservation. No duplicate test added. | Execute in CI. |
+| 39 | Existing retirement/migration tests cover opaque data and Assistant/search exclusion. Enhanced `everything-workspace.mjs` feeds actual diff/merge and two-device/snapshot/reload Sync tests; enhanced encrypted-backup cases assert sleep/wellness preservation after restore/reload and no plaintext leakage. Unknown nested `0`/`false` values are included. | Execute the enhanced backup/Sync and exclusion regressions in CI. |
+| 41 | New `tests/e2e/restore-write-failure.spec.mjs`: attachment-write failure produces incomplete-restore warnings and missing-blob metadata; workspace-write failure preserves the old durable root. Both preserve recovered content in memory and do not report import success. | Execute in CI. |
+| 42 | New `tests/unit/sync-safety-qa.test.mjs`: rejected authentication or corrupted ciphertext preserves workspace, acknowledged baseline/cursor, queued local edit and earlier conflict data; no remote apply/push/acknowledgement. Existing crypto, conflict-store-failure, conflict-storm and session-binding regressions retained. | Execute in CI; live service fixtures remain separate. |
+
+All new tests use synthetic data and existing production seams. The restore
+fault injection is confined to the CI browser fixture and restored after the
+attempt. It awaits the canonical restore promise rather than an arbitrary delay.
+No production source or safety hooks were changed. Luna findings and new test
+diffs were independently reviewed and corrected before acceptance.
+Portability assertions inspect actual transferred/restored Life records before
+projection canonicalization, so a projection dropping the same field from both
+comparison inputs cannot hide the loss.
+
+Existing CI discovers the new unit and Chromium tests automatically. No new
+workflow, real provider key, paid model call, or remote database is required for
+these synthetic cases. No automated suite was run locally.
+
+## Manual Chrome follow-up
+
+Used the disposable `http://127.0.0.1:5196` QA workspace only:
+
+- Life exposes goals, habits, spending, skills, calculator and books.
+- Widget picker contains no wellness, mood, gratitude, breathing, calorie,
+  fitness, sleep, water or eye-break controls.
+- Settings searches for wellness, sleep, mood and calorie return zero matches.
+- Command searches expose no retired health actions. Ordinary fuzzy matches
+  and descriptive Help & Docs results are not health-tracking controls.
+- Global workspace searches for wellness and gratitude return zero results
+  in this QA fixture; legacy record exclusion also has synthetic unit coverage.
+- Create's All-template list contains no Daily Journal or health templates.
+- Life Pack was temporarily enabled and restored to Off. One empty
+  `QA Retirement Discovery` tab remains for review; no health records were added.
+- Chrome zoom shortcuts did not alter the measured 1751px viewport or pixel
+  ratio of 1. Actual 67%/150% browser zoom remains unverified; viewport resizing
+  is not a substitute.
+
+Provider spending in this follow-up: zero. User-entered PIN/passphrase, actual
+Windows notification, backup destination and second-device checks remain open.

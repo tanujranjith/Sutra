@@ -170,7 +170,7 @@ test('life: cockpit, goal drawer milestones, and budgets persist', async ({ page
     };
   });
   expect(result.cockpitCards).toBeGreaterThanOrEqual(3);
-  expect(result.checkinPresent).toBe(true);
+  expect(result.checkinPresent).toBe(false);
   expect(result.retiredEnergyControls).toBe(0);
   expect(result.wellnessMentionsEnergy).toBe(false);
   expect(result.sleepTableMentionsEnergy).toBe(false);

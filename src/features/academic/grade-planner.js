@@ -100,6 +100,29 @@
         };
     }
 
+    // Semester Setup supplies names and weights, not planner IDs. Keep existing
+    // identities so applying a syllabus cannot silently unassign saved scores.
+    function reconcileCategories(existing, incoming, entries) {
+        var old = (existing || []).map(normalizeCategory).filter(Boolean);
+        var used = new Set();
+        var key = function (name) { return String(name || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+        var next = (incoming || []).map(function (raw) {
+            var category = normalizeCategory(raw);
+            if (!category) return null;
+            var matches = old.filter(function (item) {
+                return !used.has(item.id) && (raw.id ? item.id === String(raw.id) : key(item.name) === key(category.name));
+            });
+            if (matches.length === 1) category.id = matches[0].id;
+            used.add(category.id);
+            return category;
+        }).filter(Boolean);
+        // Unmatched or ambiguous categories that own scores need manual review;
+        // retaining them is safer than deleting their identity or guessing.
+        var referenced = new Set((entries || []).map(function (entry) { return String(entry.categoryId || ''); }));
+        var retained = old.filter(function (category) { return referenced.has(category.id) && !used.has(category.id); });
+        return { categories: next.concat(retained), retained: retained.length };
+    }
+
     function normalizeCourseGrades(raw) {
         var source = raw && typeof raw === 'object' ? raw : {};
         var categories = Array.isArray(source.categories)
@@ -526,6 +549,7 @@
         getDefaultGradePlanner: getDefaultGradePlanner,
         normalizeGradePlanner: normalizeGradePlanner,
         normalizeCourseGrades: normalizeCourseGrades,
+        reconcileCategories: reconcileCategories,
         computeCourseGrade: computeCourseGrade,
         scoreNeededForTarget: scoreNeededForTarget,
         whatIfScore: whatIfScore,
@@ -1004,11 +1028,15 @@
         setCategoriesForCourse: function (courseId, categories) {
             var planner = getPlanner();
             var data = getCourseData(planner, courseId);
-            var normalized = (categories || []).map(normalizeCategory).filter(Boolean);
-            if (normalized.length) data.categories = normalized;
+            var reconciled = reconcileCategories(data.categories, categories, data.entries);
+            if (reconciled.categories.length) data.categories = reconciled.categories;
             planner.courses[String(courseId)] = data;
             setPlanner(planner);
             syncSummaryToCourse(courseId, data);
+            if (reconciled.retained && typeof global.showToast === 'function') {
+                global.showToast('Kept grading categories with saved scores. Review them in Course Hub → Grades.');
+            }
+            return reconciled;
         }
     };
 

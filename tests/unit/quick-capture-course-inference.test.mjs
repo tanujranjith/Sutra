@@ -75,6 +75,21 @@ test('Quick Capture does not match a short course name inside a longer word', ()
   assert.equal(result.courseName, '');
 });
 
+test('distinct classes and activities require a choice while nested class names retain specificity', () => {
+  const parse = buildQuickCaptureParser([
+    { id: 'chem', name: 'QA Chemistry', type: 'class' },
+    { id: 'robotics', name: 'QA Robotics', type: 'misc' }
+  ]);
+  const result = parse('homework for QA Chemistry and QA Robotics: prepare demo');
+  assert.equal(result.courseId, '');
+  assert.deepEqual(Array.from(result.courseCandidates, row => row.id).sort(), ['chem', 'robotics']);
+  const specific = buildQuickCaptureParser([{ id: 'bio', name: 'Biology' }, { id: 'ap-bio', name: 'AP Biology' }]);
+  assert.equal(specific('AP Biology worksheet due Friday').courseId, 'ap-bio');
+  assert.equal(specific('Biology and AP Biology joint worksheet due Friday').courseCandidates.length, 2);
+  const shorthand = buildQuickCaptureParser([{ id: 'chem1', name: 'Chemistry I' }, { id: 'chem2', name: 'Chemistry II' }]);
+  assert.equal(shorthand('chem homework').courseCandidates.length, 2);
+});
+
 test('Quick Capture keeps a manually selected class when inference finds another course', () => {
   const courses = [
     { id: 'activity-ceg', name: 'CEG', type: 'misc' },

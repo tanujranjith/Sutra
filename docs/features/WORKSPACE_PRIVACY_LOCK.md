@@ -21,6 +21,10 @@ The raw PIN is never persisted. Sutra refuses to enable or update the lock unles
 - Inactivity options include 1, 2, 5, 10, 15, 20, 30, 45, 60, 90 minutes; 2, 3, 4, 8, or 12 hours; 1 day; Never for the current session; and a Custom duration from 1 to 1,440 minutes.
 - Lock now and configuration changes broadcast to other open Sutra tabs. Unlock does not broadcast.
 - Changing the PIN or timeout and disabling the lock require the current PIN.
+- Setup displays only the new-PIN and confirmation fields. Timeout changes and
+  disabling display only the current-PIN field; changing the PIN displays all
+  three. Hidden fields and actions remain hidden when themes style their layout.
+- PIN checks run one at a time in each tab. The first three incorrect attempts can be retried immediately; further incorrect attempts add an exponential wait beginning at 1 second and capped at 30 seconds. A successful check clears that tab's wait.
 - The underlying application is `inert` and `aria-hidden` while locked, with keyboard focus contained on the unlock screen.
 
-Disabling the privacy lock does not remove or encrypt workspace data. Students who need portable cryptographic protection should use password-encrypted `.sutra` backups.
+The retry wait is held only in memory in the current tab. It does not coordinate across tabs and resets after a refresh, so it is a best-effort deterrent against repeated guessing through Sutra's interface. It cannot prevent someone with access to the browser profile from changing local state or reading workspace data. Disabling the privacy lock does not remove or encrypt workspace data. Students who need portable cryptographic protection should use password-encrypted `.sutra` backups.

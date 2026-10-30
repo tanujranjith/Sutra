@@ -3,12 +3,11 @@
 
   if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
-  const MAX_ACTIVE_EFFECTS = 3;
+  const MAX_ACTIVE_EFFECTS = 1;
   const CAPTURE_LIFETIME_MS = 2100;
-  const SWEEP_MS = 1100;
-  const FALL_MS = 850;
-  const COLLAPSE_MS = 180;
-  const LIFETIME_MS = SWEEP_MS + FALL_MS + COLLAPSE_MS;
+  const SWEEP_MS = 700;
+  const FALL_MS = 550;
+  const LIFETIME_MS = SWEEP_MS + FALL_MS;
   const activeEffects = new Map();
   const pendingSnapshots = new Map();
 
@@ -196,7 +195,7 @@
   function rasterizeRow(source, rect) {
     const canvas = document.createElement('canvas');
     // Bound pixel work without silently skipping wide or tall Home cards.
-    const scale = Math.min(1, Math.sqrt(650000 / (rect.width * rect.height)));
+    const scale = Math.min(1, Math.sqrt(240000 / (rect.width * rect.height)));
     canvas.width = Math.ceil(rect.width * scale);
     canvas.height = Math.ceil(rect.height * scale);
     const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -212,7 +211,7 @@
       context.fillRect(0, 0, canvas.width, canvas.height);
     });
     context.scale(canvas.width / rect.width, canvas.height / rect.height);
-    const nodes = [source, ...source.querySelectorAll('*')].slice(0, 180);
+    const nodes = [source, ...source.querySelectorAll('*')].slice(0, 100);
     nodes.forEach(node => {
       if (!node.closest('.hw-task-menu, .task-overflow-menu')) paintBox(context, node, rect);
     });
@@ -222,7 +221,7 @@
     let measurements = 0;
     context.textAlign = 'left';
     context.textBaseline = 'alphabetic';
-    while ((textNode = walker.nextNode()) && measurements < 160) {
+    while ((textNode = walker.nextNode()) && measurements < 60) {
       const parent = textNode.parentElement;
       if (!parent || parent.closest('.hw-task-menu, .task-overflow-menu')) continue;
       const style = window.getComputedStyle(parent);
@@ -351,14 +350,14 @@
         dx: (Math.random() - 0.45) * 58, fall: 48 + Math.random() * 112,
         color: `rgb(${color.join(',')})`, alpha: surface ? 0.78 : 0.98 });
     }
-    const surfaceCount = Math.min(650, Math.max(220, Math.round(width * height / 110)));
+    const surfaceCount = Math.min(70, Math.max(30, Math.round(width * height / 800)));
     for (let index = 0; index < surfaceCount; index++) {
       const x = (index + Math.random()) / surfaceCount * (width - 1);
       const y = Math.random() * (height - 1);
       grain(x, y, (Math.floor(y) * width + Math.floor(x)) * 4, true);
     }
     // Actual ink/badges keep their own color as they break into dust.
-    const ink = new Uint32Array(750);
+    const ink = new Uint32Array(90);
     let inkSeen = 0;
     const stride = Math.max(2, Math.ceil(Math.sqrt(width * height / 9000)));
     for (let y = 0; y < height; y += stride) {
@@ -448,7 +447,7 @@
     canvas.className = 'sutra-task-completion-effect__canvas';
     const width = snapshot.rect.width + 80;
     const height = snapshot.rect.height + 170;
-    const scale = Math.min(1, Math.sqrt(900000 / (width * height)));
+    const scale = Math.min(1, Math.sqrt(320000 / (width * height)));
     canvas.width = Math.ceil(width * scale);
     canvas.height = Math.ceil(height * scale);
     canvas.style.width = `${width}px`;
@@ -491,7 +490,7 @@
       const elapsed = now - started;
       if (elapsed >= LIFETIME_MS) return removeEffect(effect);
       try {
-        restoreEffectGaps();
+        if (state.gap && !state.gap.isConnected) restoreEffectGaps();
         // A list rerender may adjust an ancestor's scroll offset. Keep the
         // snapshot in its content slot instead of cancelling before it paints.
         let shiftX = 0;
@@ -501,36 +500,32 @@
           shiftX += node.scrollLeft - left;
           shiftY += node.scrollTop - top;
         });
-        canvas.style.left = `${snapshot.rect.left - 40 - shiftX}px`;
-        canvas.style.top = `${snapshot.rect.top - shiftY}px`;
+        const shift = `translate(${-shiftX}px, ${-shiftY}px)`;
+        if (canvas.style.transform !== shift) canvas.style.transform = shift;
         context.clearRect(0, 0, snapshot.rect.width + 80, snapshot.rect.height + 170);
         context.globalAlpha = 1;
         const edge = Math.min(1, elapsed / SWEEP_MS) * snapshot.rect.width;
         const scaleX = snapshot.canvas.width / snapshot.rect.width;
         const scaleY = snapshot.canvas.height / snapshot.rect.height;
-        // Staggered strips give the advancing edge a crumbling outline.
-        for (let y = 0; elapsed < SWEEP_MS && y < snapshot.rect.height; y += 4) {
-          const x = Math.min(snapshot.rect.width, Math.max(0, edge + Math.sin(y * 1.7) * 5));
-          const width = snapshot.rect.width - x;
-          const height = Math.min(4, snapshot.rect.height - y);
-          if (width > 0) context.drawImage(snapshot.canvas, x * scaleX, y * scaleY, width * scaleX, height * scaleY,
-            x + 40, y, width, height);
+        // One cropped blit replaces dozens of strip draws every frame.
+        // Dust provides the crumbling edge without repeatedly resampling the row.
+        if (elapsed < SWEEP_MS && edge < snapshot.rect.width) {
+          const remaining = snapshot.rect.width - edge;
+          context.drawImage(snapshot.canvas, edge * scaleX, 0, remaining * scaleX, snapshot.canvas.height,
+            edge + 40, 0, remaining, snapshot.rect.height);
         }
         dust.forEach(piece => {
           const age = (elapsed - piece.born) / FALL_MS;
           if (age < 0 || age >= 1) return;
-          context.globalAlpha = piece.alpha * Math.pow(1 - age, 1.4);
+          context.globalAlpha = piece.alpha * (1 - age) * (1 - age);
           context.fillStyle = piece.color;
           const x = piece.x + 40 + piece.dx * age;
           const y = piece.y + piece.fall * age * age;
           context.fillRect(x, y, piece.size * (1 - age * 0.45), piece.size * (1 - age * 0.45));
         });
         context.globalAlpha = 1;
-        if (state.gap && state.gap.isConnected) {
-          const collapse = Math.max(0, (elapsed - SWEEP_MS - FALL_MS) / COLLAPSE_MS);
-          const eased = collapse * collapse * (3 - 2 * collapse);
-          state.gap.firstElementChild.style.height = `${snapshot.layoutHeight * (1 - eased)}px`;
-        }
+        // Remove the held slot once at the end; animating table height here
+        // repeatedly laid out every remaining task row on each frame.
         state.frame = window.requestAnimationFrame(frame);
       } catch (error) { removeEffect(effect); reportVisualError(error); }
     }
