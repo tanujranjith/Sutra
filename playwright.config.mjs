@@ -53,7 +53,13 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'chrome', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'webkit',
+      // Repeated full-app starts vary across hosted WebKit runners. Allow the
+      // complete workflow while retaining the independent assertion deadlines.
+      timeout: process.env.CI ? 120_000 : 60_000,
+      use: { ...devices['Desktop Safari'] }
+    },
     { name: 'mobile-chromium', testMatch: responsiveTestMatch, use: { ...devices['Pixel 7'] } },
     { name: 'mobile-webkit', testMatch: responsiveTestMatch, use: { ...devices['iPhone 13'] } },
     {

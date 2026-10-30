@@ -30,6 +30,17 @@ desktop test 1–10 times (default 1); responsive smoke coverage stays single-pa
 The repeat setting is validated and applies only to diagnostic runs. Full release
 runs keep their normal test count and assertions.
 
+Desktop WebKit uses a 120-second default whole-test budget in CI, including deployment
+verification, to accommodate repeated full-app startup and reloads. Local runs,
+other browser projects, and mobile WebKit keep their existing budgets. The
+default assertion timeout remains 10 seconds; no assertions are skipped.
+Individual test and describe overrides and `test.slow()` modifiers still apply.
+The multi-viewport Split View geometry workflow has a 180-second CI desktop
+WebKit override, while retaining its existing 120-second budget elsewhere.
+These are functional-test limits, not startup-performance targets; investigate
+sustained startup slowdowns separately and inspect failed-attempt traces before
+classifying a timeout or retry.
+
 CI retains failed-attempt traces, screenshots, and error context for seven days,
 including when a retry passes. Separate Playwright invocations use separate output
 directories so preflight diagnostics survive the full shard run. Passing tests do
