@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 /*
  * full-app-audit.spec.mjs — comprehensive end-to-end fluidity + micro-interaction
@@ -50,6 +51,7 @@ function isCriticalConsole(text) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch (e) {}
     const overlay = document.getElementById('studentOnboardingOverlay');
