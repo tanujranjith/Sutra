@@ -1400,6 +1400,10 @@ test('attachment authentication and hash failures pause before acknowledgement a
     assert.equal(pushCalls, 0, 'integrity failure stops before push');
     assert.equal(touchCalls, 0, 'integrity failure stops before cursor acknowledgement');
     assert.equal(snapshotCalls, 0, 'integrity failure stops before compaction');
+    assert.deepEqual(await engine.compactNow(), { ok: false, reason: 'paused' },
+      'manual compaction cannot bypass a paused integrity state');
+    assert.equal(snapshotCalls, 0, 'paused compaction starts no snapshot request');
+    engine.resume();
     await assert.rejects(
       () => engine.compactNow(),
       (error) => error.name === 'SyncVaultUnlockError' && error.stage === 'attachment'
