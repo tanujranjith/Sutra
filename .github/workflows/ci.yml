@@ -121,7 +121,7 @@ jobs:
           fi
           if [ "${{ matrix.shard }}" = "3" ]; then
             # Surface cross-tab backup conflicts before the full shard output.
-            npx playwright test tests/e2e/sutra-cloud-providers.spec.mjs --grep 'scheduled backups upload ciphertext once across two tabs and stop when disabled' --workers=1 --project=chromium
+            npx playwright test tests/e2e/sutra-cloud-providers.spec.mjs --grep 'scheduled backup skips a stale tab, uploads from the current tab, and stops when disabled' --workers=1 --project=chromium
           fi
           npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload failure and retry diagnostics
